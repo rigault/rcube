@@ -1,0 +1,5 @@
+DESC:            AIS GPS parameters.
+MID_COUNTRY:     midcodes.csv
+NMEA:            /dev/ttyACM0 13
+NMEA:            /dev/ttyUSB0 15
+SPECIAL:         1
