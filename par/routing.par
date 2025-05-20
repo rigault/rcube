@@ -1,4 +1,4 @@
-DESC:            Routing parameters. See also docpar.txt for documentation
+DESC:            Routing parameters. See also docpar.txt for doc.
 WD:              /home/rr/routing/
 POLAR:           pol/Ultim.csv
 WAVE_POL:        wavepol/polwave.csv
