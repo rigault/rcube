@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang = "fr">
+<head>
+   <title>Rcube</title>
+   <meta charset="UTF-8">
+   <link rel="icon" type="image/ico" href="favicon.ico">
+   <link rel="stylesheet" type="text/css" href="r3.css">
+   <link rel="stylesheet" type="text/css" href="r3par.css">
+   <link rel="stylesheet" type="text/css" href="stamina.css">
+   <link rel="stylesheet" type="text/css" href="launch.css">
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+   <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"></script>
+   <script src="https://api.windy.com/assets/map-forecast/libBoot.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+   <!-- Utilise la version la plus récente de Plotly.js -->
+   <script src="https://cdn.plot.ly/plotly-2.11.0.min.js"></script>
+   <!-- <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>-->
+   <script src="filedump.js"></script>
+   <script src="r3grib.js"></script>
+   <script src="r3polar.js"></script>
+   <script src="r3waypoints.js"></script>
+   <script src="r3displaycomp.js"></script>
+   <script src="r3besttime.js"></script>
+   <script src="r3routereport.js"></script>
+   <script src="util.js"></script>
+   <script src="r3util.js"></script>
+   <script src="r3param.js"></script>
+   <script src="r3par.js"></script>
+   <script src="feedback.js"></script>
+   <script src="stamina.js"></script>
+   <script src="launch.js"></script>
+   <script src="aisgps.js"></script>
+   <script src="ports.js"></script>
+   <script src="r3.js?v=0.2"></script>
+</head>
+<body>
+<div class="container">
+   <header>
+      <img src="favicon.ico" alt="favicon">
+      <div class="dropdown">
+         <button class="menu">Grib</button>
+         <div class="dropdown-content">
+            <button class="menu-link" onclick="chooseGrib ('grib', gribLimits.name);">Grib  </button>
+            <button class="menu-link" onclick="chooseGrib ('currentgrib', '');">Current</button>
+         </div>
+      </div>
+      <div class="dropdown">
+         <button class="menu">Polar</button>
+         <div class="dropdown-content">
+            <button class="menu-link" onclick="choosePolar ('pol', polarName);">Polar</button>
+            <button class="menu-link" onclick="choosePolar ('wavepol', polWaveName);">Wave</button>
+         </div>
+      </div>
+      <div class="dropdown">
+         <button class="menu">Route</button>
+         <div class="dropdown-content">
+            <button class="menu-link" onclick="launchRouting ();">Launch</button>
+            <button class="menu-link" onclick="showRouteReport (route);">Route Report</button>
+            <button class="menu-link" onclick="dumpRoute (route);">Route Dump</button>
+            <button class="menu-link" onclick="dispBestTimeHistogram (bestTimeResult,routeParam.startTime,routeParam.timeInterval);">Best Time Report </button>
+            <button class="menu-link" onclick="dispAllCompetitors (compResult);">Benchmark Report</button>
+         </div>
+      </div>
+      <div class="dropdown">
+         <button class="menu">Tech</button>
+         <div class="dropdown-content">
+            <button class="menu-link" onclick="displayWayPoints(competitors, myWayPoints);">Way Points</button>
+            <button class="menu-link" onclick="changeParam (routeParam);">Change</button>
+            <button class="menu-link" onclick="manageCompetitors (competitors);">Manage Competitors</button>
+            <button class="menu-link" onclick="stamina ();">Stamina</button>
+         </div>
+      </div>
+      <div class="dropdown">
+         <button class="menu">Help</button>
+         <div class="dropdown-content">
+            <a href="doc/r3help.html" target="_blank">Help</a>
+            <button class="menu-link" onclick="helpInfo ();">About...</button>
+            <button class="menu-link" onclick="feedback (apiUrl);">Feedback</button>
+         </div>
+      </div>
+      <div class="dropdown">
+         <button class="menu">Links</button>
+         <div class="dropdown-content">
+            <button class="menu-link" onclick="openTide (0, competitors[0].lat, competitors[0].lon);">SHOM</button>
+            <button class="menu-link" onclick="openTide (1, competitors[0].lat, competitors[0].lon);">Marée Info</button>
+            <button class="menu-link" onclick="openMeteoFrance ();">Météo France Map</button>
+            <button class="menu-link" onclick="openWindy (competitors[0].lat, competitors[0].lon);">Windy</button>
+            <button class="menu-link" onclick="showNoaaMapGif ();">NOAA Map</button>
+            <button class="menu-link" onclick="openGoogleMaps(competitors[0].lat, competitors[0].lon)">GoogleMap</button>
+            <button class="menu-link" onclick="showOpenStreetMap(competitors[0].lat, competitors[0].lon)">OpenStreet</button>
+            <button class="menu-link" onclick="showOpenSeaMap(competitors[0].lat, competitors[0].lon)">OpenSeaMap</button>
+         </div>
+      </div>
+      <div class="dropdown" id="devMenu" style="display: none;">
+         <button class="menu">Developper</button>
+         <div class="dropdown-content">
+            <button class="menu-link" onclick="dumpIsoc (route);">Dump Isochrones</button>
+            <button class="menu-link" onclick="dumpIsoDesc (route);">Dump IsoDesc</button>
+            <button class="menu-link" onclick="parDump();">Par Dump</button>
+            <button class="menu-link" onclick="chooseFile ();">File Dump</button>
+            <button class="menu-link" onclick="aisDump(aisData);">AIS Dump</button>
+            <button class="menu-link" onclick="replay ();">Replay</button>
+            <a href="doc/r3ServerTechDoc.html" target="_blank">Server side Tech Doc</a>
+            <a href="doc/r3ClientTechDoc.html" target="_blank">Client side Tech Doc</a>
+         </div>
+      </div>
+   </header>
+
+   <div id="windy">
+   </div>
+   <div id="spinnerOverlay" class="spinner-overlay">
+      <div class="spinner"></div>
+   </div>
+   <div id="tools" style="display: none;">
+      <button class="btn" onclick="goBegin();"><i class="fas fa-step-backward"></i></button>
+      <button class="btn" onclick="backWard();"><i class="fas fa-backward"></i></button>
+      <button class="btn" onclick="forWard();"><i class="fas fa-forward"></i></button>
+      <button class="btn" onclick="clearRoutes();"><i class="fas fa-times"></i></button>
+
+      <span id="infoTime"></span>
+   <span class="isocContainer">
+      <label>
+         Isoc <input type="checkbox" id="isocCheckbox" class="isocCheckbox" checked>
+      </label>
+      <label for="slider">Period</label>
+      <input type="range" id="slider" min="1" max="20" value="1" oninput="updateValue(this.value);">
+      <span id="sliderValue">1</span>
+   </span>
+
+   <script>
+      function updateValue(val) {
+         document.getElementById("sliderValue").textContent = val;
+         const isIsocChecked = document.getElementById("isocCheckbox").checked;
+         moduloIsoc = isIsocChecked ? val : 0;
+         if (route != null) {
+            updateWindyMap(route);
+            updateAllBoats ();
+         }
+      }
+
+      document.getElementById("isocCheckbox").addEventListener("change", function() {
+         const sliderVal = document.getElementById("slider").value;
+         updateValue(sliderVal);
+      });
+   </script>
+   </div>
+   <footer class="footer">
+      <span id = "infoRoute">Info</span>
+      <span id = "coords"></span>
+      <script>updateStatusBar ();</script>
+   </footer>
+</div>
+
+<script>
+   /* listen CTRL D to display developper menu */
+   document.addEventListener("keydown", (e) => {
+      if (e.ctrlKey && e.key === "d") {
+         e.preventDefault(); // éviter le marque-page sur certains navigateurs
+         const menu = document.getElementById("devMenu");
+         if (menu) {
+            menu.style.display = (menu.style.display === "none") ? "inline-block" : "none";
+         }
+      }
+   });
+
+   function showNoaaMapGif() {
+      Swal.fire({
+         title: 'Carte Générale NOAA',
+         html: `
+            <img src="https://tgftp.nws.noaa.gov/fax/PYAA01.gif" alt="Carte NOAA"
+               style="transform: rotate(90deg); max-width: 90vh; max-height: 90vh;">
+            `,
+         width: 'auto',
+         showCloseButton: true,
+         showConfirmButton: false,
+      });
+   }
+
+   function openTide(what, lat, lon) {
+      let {idPort, namePort} = findNearestPort (lat, lon);
+      const shomUrl = (what === 0) ? `https://maree.shom.fr/harbor/${namePort}`: `http://maree.info/${idPort}`;
+      window.open(shomUrl, '_blank');
+   }
+
+   function openWithSwal (title, url) {
+      Swal.fire({
+         title: `${title}`,
+         html: `
+            <iframe
+            src="${url}"
+            style="width: 100%; height: 70vh; border: none;"
+            allowfullscreen
+            ></iframe>
+         `,
+         width: '90%',
+         showCloseButton: true,
+         showConfirmButton: false,
+         background: '#f0f0f0',
+      });
+   }
+
+   function showOpenStreetMap(lat, lon) {
+      const zoom = 10; // ajustable
+      const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lon-0.02},${lat-0.02},${lon+0.02},${lat+0.02}&layer=mapnik&marker=${lat},${lon}`;
+      openWithSwal ('OpenStreetMap', url);
+   }
+
+   function showOpenSeaMap(lat, lon) {
+      const zoom = 10;
+      const url = `https://map.openseamap.org/?lat=${lat}&lon=${lon}&zoom=${zoom}`;
+      openWithSwal ('OpenSeaMap', url);
+   }
+
+   function openMeteoFrance () {
+      const url = "https://meteofrance.com/isofronts";
+      window.open(url, '_blank');
+   }
+
+   function openWindy (lat, lon) {
+      const url = `https://www.windy.com/${lat}/${lon}`;
+      window.open(url, '_blank');
+   }
+
+   function openGoogleMaps(lat, lon) {
+      const url = `https://www.google.com/maps/place/${lat},${lon}`;
+      window.open(url, '_blank');
+   }
+
+</script>
+</body>
+</html>

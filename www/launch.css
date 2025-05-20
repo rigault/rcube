@@ -1,0 +1,65 @@
+/* swal-routing.css */
+
+.swal-wide {
+   width: 500px !important;
+   padding: 0 25px;
+   overflow-x: hidden;
+}
+
+.swal-grid {
+   display: grid;
+   grid-template-columns: 160px 1fr;
+   gap: 10px 15px;
+   align-items: center;
+   text-align: left;
+   margin: 0 auto;
+}
+
+.swal-grid input, .swal-grid select {
+   max-width: 220px;
+   width: 100%;
+   padding: 5px;
+   box-sizing: border-box;
+   justify-self: start;
+}
+
+/* Style commun pour tous les input */
+.swal-grid input[type="checkbox"] {
+   accent-color: #999;
+   transform: scale(1.2);
+   margin: 0;
+   padding: 0;
+   justify-self: start;
+}
+
+/* Spécial checkbox : container identique à un champ input */
+.swal-grid > div:has(input[type="checkbox"]) {
+   display: flex;
+   align-items: center;
+   justify-self: start;
+}
+
+/* Titre "Options" */
+.swal-grid h3 {
+   grid-column: 1 / -1;
+   margin-top: 15px;
+   margin-bottom: 5px;
+   font-size: 1.1em;
+   border-top: 1px solid #ccc;
+   padding-top: 10px;
+}
+
+.swal-footer {
+   display: flex;
+   #justify-content: space-between;
+   gap: 10px;
+   margin-top: 20px;
+}
+
+.swal-footer button {
+   min-width: 80px;
+   padding: 6px 12px;
+   font-size: 0.9em;
+   cursor: pointer;
+}
+

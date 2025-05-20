@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: r3displaycomp.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: r3displaycomp.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/* jshint esversion: 6 */
+
+/**
+ * Updates the boat selection logic after competitors are added/removed.
+ * Adjusts routeParam.iBoat accordingly to ensure a valid selection.
+ */
+function updateBoatSelect() {
+   const boatNames = competitors.map(c => c.name);
+
+   if (boatNames.length === 0) {
+      routeParam.iBoat = 0;
+      return;
+   }
+   if (boatNames.length === 1) {
+      routeParam.iBoat = 1;
+      return;
+   }
+   const maxBoatIndex = competitors.length;
+   if (routeParam.iBoat > maxBoatIndex) {
+      routeParam.iBoat = 1;
+   }
+}
+
+/**
+ * Displays a modal to manage a list of competitors, allowing editing, adding, and removing entries.
+ * @param {Array} competitors - An array of competitors, where each entry is [name, lat, lon, colorIndex].
+ */
+async function manageCompetitors(competitors) {
+   let palette = "&lt;div style='display: flex; align-items: center; gap: 10px; margin-left: 20px'>";
+   colorMap.forEach((color, index) => {
+      palette += `&lt;span style="display: flex; align-items: center; gap: 5px;">
+                    &lt;div style="width: 10px; height: 10px; border-radius: 50%; background-color: ${color}; border: 1px solid #333;">&lt;/div>
+                    ${index}
+                  &lt;/span>`;
+   });
+   palette += "&lt;/div>";
+
+   let html = `&lt;table style='width:100%; text-align:left; table-layout: auto;'>
+               &lt;tr>&lt;th style='width:25%'>Name&lt;/th>&lt;th style='width:10%'>Color&lt;/th>&lt;th style='width:55%'>Coordinates&lt;/th>&lt;th style='width:10%'>Action&lt;/th>&lt;/tr>`;
+   competitors.forEach((c, index) => {
+      html += `&lt;tr>
+               &lt;td>&lt;input type='text' style='width:100%' value='${c.name}' id='name${index}'>&lt;/td>
+               &lt;td>&lt;input type='number' style='width:100%' value='${c.color}' id='color${index}' min='0' max='${colorMap.length - 1}'>&lt;/td>
+               &lt;td>&lt;input type='text' style='width:100%; font-size:14px;' value='${latLonToStr(c.lat, c.lon)}' id='coord${index}'>&lt;/td>
+               &lt;td>${competitors.length > 1 ? `&lt;button type='button' onclick='removeCompetitor(${index})'>❌&lt;/button>` : ''}&lt;/td>
+            &lt;/tr>`;
+   });
+   html += `&lt;/table>`;
+   html += `&lt;input type="file" id="csvInput" accept=".csv" style="display:none">
+            &lt;button onclick="document.getElementById('csvInput').click()">Import&lt;/button>`;
+
+   html += palette;
+
+   await Swal.fire({
+      title: 'Manage Competitors',
+      width: '800px',
+      html: `&lt;div style='width: 100%; overflow-x: auto;'>${html}&lt;/div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Save',
+
+      didOpen: () => {
+         const input = document.getElementById("csvInput");
+         if (!input) {
+            console.error("❌ csvInput not found !");
+            return;
+         }
+         input.addEventListener("change", () => importCSV(input.files[0], competitors));
+      },
+
+      preConfirm: () => {
+         let updatedCompetitors = [];
+         for (let index = 0; index &lt; competitors.length; index++) {
+            let name = document.getElementById(`name${index}`).value.trim();
+            let color = parseInt(document.getElementById(`color${index}`).value);
+            let coords = document.getElementById(`coord${index}`).value.trim();
+            if (!coords.includes(' - ')) {
+               Swal.showValidationMessage('Invalid coordinate format (expected: lat - lon)');
+               return false;
+            }
+            let [latDMS, lonDMS] = coords.split(' - ');
+            let lat = dmsToDecimal(latDMS.trim());
+            let lon = dmsToDecimal(lonDMS.trim());
+            updatedCompetitors.push({
+               name,
+               lat,
+               lon,
+               color,
+               marker: competitors[index].marker || {} // conserver l'objet marker si présent
+            });
+         }
+
+         // Mise à jour du tableau d'origine (référence conservée)
+         competitors.length = 0;
+         competitors.push(...updatedCompetitors);
+         saveAppState ();
+         updateBoatSelect();
+         orthoRouteGroup.clearLayers();
+         //iComp = 0;
+         //let competitor = competitors [iComp];
+         for (let competitor of competitors) { 
+            competitor.marker.setLatLng ([competitor.lat, competitor.lon]); // Move the mark
+            drawOrtho (competitor, myWayPoints);
+            if (myWayPoints.length > 0) {
+               let heading = orthoCap([competitor.lat, competitor.lon], myWayPoints [0]);
+               competitor.marker._icon.setAttribute ('data-heading', heading);
+               updateIconStyle (competitor.marker);
+            }
+            competitor.marker.bindPopup (popup4Comp (competitor));
+         }
+         clearRoutes ();
+         // boatName = competitors [0].name;
+         if (myWayPoints.length > 0)
+            showDestination (myWayPoints [myWayPoints.length - 1][0], myWayPoints [myWayPoints.length - 1][1]); // last element
+         
+       },
+   });
+   //const input = document.getElementById ("csvInput");
+   //input?.addEventListener("change", () => importCSV(input.files[0], competitors));
+}
+
+/**
+ * Removes a competitor from the list, ensuring at least one remains.
+ * @param {number} index - The index of the competitor to remove.
+ */
+function removeCompetitor (index) {
+   if (competitors.length > 1) {
+      competitors [index].marker.remove ();
+      competitors.splice(index, 1);
+      updateBoatSelect();
+      manageCompetitors(competitors);
+   }
+}
+
+/**
+ * Imports competitor positions from a Virtual Regatta Dashboard CSV file.
+ *
+ * - Matches competitors from the given list by name (fuzzy match).
+ * - Extracts coordinates (lat/lon) and other sailing data (TWS, speed, sail, etc.).
+ * - Displays a confirmation table in a SweetAlert2 popup.
+ * - If confirmed, updates the corresponding competitors' `lat` and `lon`.
+ *
+ * @param {File} file - The CSV file selected by the user.
+ * @param {Array} competitors - The current list of competitors to update.
+ */
+function importCSV (file, competitors) {
+   if (!file) return;
+
+   const reader = new FileReader();
+   reader.onload = function (e) {
+      const lines = e.target.result.split("\n");
+      const matching = [];
+
+      for (let line of lines) {
+         if (line.includes("°") || line.includes("d")) {
+            const fields = line.split(";").map(f => f.trim());
+            const skipper = fields[1];
+            const nameKey = skipper?.toLowerCase().replace(/[^a-z0-9]/gi, "");
+            const posMatch = line.match(/(\d+)°(\d+)'([\d.]+)"([NS])\s*-\s*(\d+)°(\d+)'([\d.]+)"([EW])/);
+            if (!posMatch) continue;
+
+            let lat = + posMatch[1] + posMatch[2] / 60 + posMatch[3] / 3600;
+            let lon = + posMatch[5] + posMatch[6] / 60 + posMatch[7] / 3600;
+            if (posMatch[4] === "S") lat = -lat;
+            if (posMatch[8] === "W") lon = -lon;
+
+            const comp = competitors.find (c =>
+               nameKey.includes(c.name.toLowerCase().replace(/[^a-z0-9]/gi, ""))
+            );
+
+            if (comp) {
+               matching.push({
+                  name: comp.name, lat, lon,
+                  rank: fields[3], DTF: fields[4], DTU: fields[5],
+                  sail: fields[7], hdg: fields[11], twa: fields[12],
+                  tws: fields[13], speed: fields[14], factor: fields[15],
+                  foils: fields[16], options: fields[17], team: fields[18]
+               });
+            }
+         }
+      }
+
+      if (matching.length === 0) {
+         Swal.fire ("No competitor found", "", "info");
+         return;
+       }
+
+       let html = `&lt;table border="1" style="width:100%; font-size:12px; text-align:center;">&lt;thead>&lt;tr>
+          &lt;th>Nom&lt;/th>&lt;th>Coord&lt;/th>&lt;th>Rank&lt;/th>&lt;th>DTF&lt;/th>&lt;th>DTU&lt;/th>
+          &lt;th>Sail&lt;/th>&lt;th>HDG&lt;/th>&lt;th>TWA&lt;/th>&lt;th>TWS&lt;/th>&lt;th>Speed&lt;/th>
+          &lt;th>Factor&lt;/th>&lt;th>Foils&lt;/th>&lt;th>Option&lt;/th>&lt;th>Team&lt;/th>
+          &lt;/tr>&lt;/thead>&lt;tbody>`;
+
+       for (const c of matching) {
+         html += `&lt;tr>
+           &lt;td>${c.name}&lt;/td>&lt;td>${toDMSString (c.lat, c.lon)}&lt;/td>
+           &lt;td>${c.rank}&lt;/td>&lt;td>${c.DTF}&lt;/td>&lt;td>${c.DTU}&lt;/td>&lt;td>${c.sail}&lt;/td>
+           &lt;td>${c.hdg}&lt;/td>&lt;td>${c.twa}&lt;/td>&lt;td>${c.tws}&lt;/td>&lt;td>${c.speed}&lt;/td>
+           &lt;td>${c.factor}&lt;/td>&lt;td>${c.foils}&lt;/td>&lt;td>${c.options}&lt;/td>&lt;td>${c.team}&lt;/td>
+          &lt;/tr>`;
+       }
+       html += `&lt;/tbody>&lt;/table>`;
+
+       Swal.fire({
+          title: `${matching.length} competitors match`,
+          html,
+          width: "90%",
+          showCancelButton: true,
+          confirmButtonText: "Update"
+       }).then(result => {
+          if (result.isConfirmed) {
+             matching.forEach(m => {
+                const c = competitors.find(c => c.name === m.name);
+                if (c) {
+                   c.lat = m.lat;
+                   c.lon = m.lon;
+                }
+             });
+
+             // 🔁 relaunch  manageCompetitors()
+             manageCompetitors(competitors);
+         }
+      });
+   };
+   reader.readAsText(file);
+}
+
+/**
+ * Displays a table to compare competitors.
+ * @param {Array} - result - The table with duration info.
+ */
+function dispAllCompetitors (result) {
+   if (!result || result.length === 0) {
+      Swal.fire({
+         icon: 'warning',
+         title: 'No competitor',
+         text: 'No data available to compare',
+      });
+      return;
+   }
+   let bestTime = Math.min (...result); // Find best duration 
+   let minDuration = formatDuration (bestTime);
+   let ETA;
+   let duration;
+
+   // Meta data build
+   let metaData = `
+      &lt;p>&lt;strong>Number of competitors:&lt;/strong> ${competitors.length}&lt;/p>
+      &lt;p>&lt;strong>Start date and time:&lt;/strong> ${dateToStr(routeParam.startTime)}&lt;/p>
+      &lt;p>&lt;strong>Isochrone Time Step:&lt;/strong> ${routeParam.isoStep} sec&lt;/p>
+      &lt;p>&lt;strong>Polar:&lt;/strong> ${routeParam.polar}&lt;/p>
+      &lt;p>&lt;strong>Best Duration:&lt;/strong> ${minDuration}&lt;/p>
+      
+   `;
+
+   // Competitors comparison table
+   let table = `&lt;table class="comp-table">
+      &lt;thead>
+         &lt;tr>
+            &lt;th>Name&lt;/th>
+            &lt;th>Coord.&lt;/th>
+            &lt;th>Duration&lt;/th>
+            &lt;th>ETA&lt;/th>
+         &lt;/tr>
+      &lt;/thead>
+      &lt;tbody>
+   `;
+
+   competitors.forEach((comp, index) => {
+      if (result[index] === -1) duration = ETA = "NA";
+      else {
+         duration = formatDuration (result[index]);
+         let newDate = new Date (routeParam.startTime.getTime () + result [index] * 1000);
+         ETA = dateToStr (newDate);
+      }         
+      table += `
+         &lt;tr>
+            &lt;td>${comp.name}&lt;/td>
+            &lt;td>${latLonToStr(comp.lat, comp.lon)}&lt;/td>
+            &lt;td>${duration}&lt;/td>
+            &lt;td>${ETA}&lt;/td>
+         &lt;/tr>
+      `;
+   });
+
+   table += `&lt;/tbody>&lt;/table>`;
+
+   // Affichage avec SweetAlert2
+   Swal.fire({
+      title: 'Competitors benchmark',
+      html: metaData + table,
+      width: '80%',
+      confirmButtonText: 'Close',
+   });
+}
+
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#addMarker">addMarker</a></li><li><a href="global.html#addPOI">addPOI</a></li><li><a href="global.html#addWaypoint">addWaypoint</a></li><li><a href="global.html#aisData">aisData</a></li><li><a href="global.html#aisDump">aisDump</a></li><li><a href="global.html#aisLayer">aisLayer</a></li><li><a href="global.html#backWard">backWard</a></li><li><a href="global.html#bestVmg">bestVmg</a></li><li><a href="global.html#bestVmgBack">bestVmgBack</a></li><li><a href="global.html#buildBodyRequest">buildBodyRequest</a></li><li><a href="global.html#button4POI">button4POI</a></li><li><a href="global.html#changeParam">changeParam</a></li><li><a href="global.html#chooseFile">chooseFile</a></li><li><a href="global.html#chooseGrib">chooseGrib</a></li><li><a href="global.html#choosePolar">choosePolar</a></li><li><a href="global.html#clearRoutes">clearRoutes</a></li><li><a href="global.html#closeContextMenu">closeContextMenu</a></li><li><a href="global.html#condenseTimeStamps">condenseTimeStamps</a></li><li><a href="global.html#createProgressBar">createProgressBar</a></li><li><a href="global.html#dateToStr">dateToStr</a></li><li><a href="global.html#deleteAllPOIs">deleteAllPOIs</a></li><li><a href="global.html#deleteCompetitor">deleteCompetitor</a></li><li><a href="global.html#deleteCompetitorByName">deleteCompetitorByName</a></li><li><a href="global.html#deletePOI">deletePOI</a></li><li><a href="global.html#dispAllCompetitors">dispAllCompetitors</a></li><li><a href="global.html#dispBestTimeHistogram">dispBestTimeHistogram</a></li><li><a href="global.html#displayWayPoints">displayWayPoints</a></li><li><a href="global.html#dmsToDecimal">dmsToDecimal</a></li><li><a href="global.html#downloadTextFile">downloadTextFile</a></li><li><a href="global.html#drawGribLimits">drawGribLimits</a></li><li><a href="global.html#drawOrtho">drawOrtho</a></li><li><a href="global.html#drawPolyline">drawPolyline</a></li><li><a href="global.html#dumpFile">dumpFile</a></li><li><a href="global.html#dumpIsoDesc">dumpIsoDesc</a></li><li><a href="global.html#dumpIsoc">dumpIsoc</a></li><li><a href="global.html#dumpRoute">dumpRoute</a></li><li><a href="global.html#epochToStrDate">epochToStrDate</a></li><li><a href="global.html#escapeHtml">escapeHtml</a></li><li><a href="global.html#fPenalty">fPenalty</a></li><li><a href="global.html#fPointLoss">fPointLoss</a></li><li><a href="global.html#fTimeToRecupOnePoint">fTimeToRecupOnePoint</a></li><li><a href="global.html#feedback">feedback</a></li><li><a href="global.html#fetchAisPosition">fetchAisPosition</a></li><li><a href="global.html#fetchGpsPosition">fetchGpsPosition</a></li><li><a href="global.html#finalUpdate">finalUpdate</a></li><li><a href="global.html#findBounds">findBounds</a></li><li><a href="global.html#findMaxSpeed">findMaxSpeed</a></li><li><a href="global.html#forWard">forWard</a></li><li><a href="global.html#formatDuration">formatDuration</a></li><li><a href="global.html#formatDurationShort">formatDurationShort</a></li><li><a href="global.html#formatFileSize">formatFileSize</a></li><li><a href="global.html#formatLocalDate">formatLocalDate</a></li><li><a href="global.html#generatePolarPlotly">generatePolarPlotly</a></li><li><a href="global.html#getGreatCirclePath">getGreatCirclePath</a></li><li><a href="global.html#getLocalUtcOffsetInSeconds">getLocalUtcOffsetInSeconds</a></li><li><a href="global.html#getParam">getParam</a></li><li><a href="global.html#getSerializablePOIs">getSerializablePOIs</a></li><li><a href="global.html#getServerInit">getServerInit</a></li><li><a href="global.html#getTextColorFromLuminance">getTextColorFromLuminance</a></li><li><a href="global.html#goBegin">goBegin</a></li><li><a href="global.html#gpsMarker">gpsMarker</a></li><li><a href="global.html#gpsPolyline">gpsPolyline</a></li><li><a href="global.html#gpsTrack">gpsTrack</a></li><li><a href="global.html#gribInfo">gribInfo</a></li><li><a href="global.html#handleRequest">handleRequest</a></li><li><a href="global.html#helpInfo">helpInfo</a></li><li><a href="global.html#importCSV">importCSV</a></li><li><a href="global.html#interpolate">interpolate</a></li><li><a href="global.html#interpolateSpeeds">interpolateSpeeds</a></li><li><a href="global.html#lastStepDurationFormatted">lastStepDurationFormatted</a></li><li><a href="global.html#latLonToStr">latLonToStr</a></li><li><a href="global.html#launchRouting">launchRouting</a></li><li><a href="global.html#loadAppState">loadAppState</a></li><li><a href="global.html#loxoCap">loxoCap</a></li><li><a href="global.html#loxoDist">loxoDist</a></li><li><a href="global.html#manageCompetitors">manageCompetitors</a></li><li><a href="global.html#move">move</a></li><li><a href="global.html#newCompetitor">newCompetitor</a></li><li><a href="global.html#orthoCap">orthoCap</a></li><li><a href="global.html#orthoDist">orthoDist</a></li><li><a href="global.html#parDump">parDump</a></li><li><a href="global.html#polarInfo">polarInfo</a></li><li><a href="global.html#popup4Comp">popup4Comp</a></li><li><a href="global.html#refreshMarker">refreshMarker</a></li><li><a href="global.html#removeCompetitor">removeCompetitor</a></li><li><a href="global.html#replay">replay</a></li><li><a href="global.html#request">request</a></li><li><a href="global.html#requestAllCompetitors">requestAllCompetitors</a></li><li><a href="global.html#requestBestTime">requestBestTime</a></li><li><a href="global.html#requestOne">requestOne</a></li><li><a href="global.html#resetWaypoint">resetWaypoint</a></li><li><a href="global.html#saveAppState">saveAppState</a></li><li><a href="global.html#setBoat">setBoat</a></li><li><a href="global.html#showAIS">showAIS</a></li><li><a href="global.html#showBoatPosition">showBoatPosition</a></li><li><a href="global.html#showContextMenu">showContextMenu</a></li><li><a href="global.html#showDestination">showDestination</a></li><li><a href="global.html#showInitMessage">showInitMessage</a></li><li><a href="global.html#showPOI">showPOI</a></li><li><a href="global.html#showPolarTable">showPolarTable</a></li><li><a href="global.html#showRoute">showRoute</a></li><li><a href="global.html#showRouteReport">showRouteReport</a></li><li><a href="global.html#showWayPoint">showWayPoint</a></li><li><a href="global.html#simplify">simplify</a></li><li><a href="global.html#stamina">stamina</a></li><li><a href="global.html#statChanges">statChanges</a></li><li><a href="global.html#switchTab">switchTab</a></li><li><a href="global.html#symmetrizeData">symmetrizeData</a></li><li><a href="global.html#toDMSString">toDMSString</a></li><li><a href="global.html#updateAllBoats">updateAllBoats</a></li><li><a href="global.html#updateBindPopup">updateBindPopup</a></li><li><a href="global.html#updateBoatSelect">updateBoatSelect</a></li><li><a href="global.html#updateHeading">updateHeading</a></li><li><a href="global.html#updateIconStyle">updateIconStyle</a></li><li><a href="global.html#updateRouteDisplay">updateRouteDisplay</a></li><li><a href="global.html#updateStatusBar">updateStatusBar</a></li><li><a href="global.html#updateToolsVisibility">updateToolsVisibility</a></li><li><a href="global.html#updateWindyMap">updateWindyMap</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Tue May 13 2025 23:41:58 GMT+0200 (heure d’été d’Europe centrale)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

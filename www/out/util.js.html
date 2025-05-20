@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: util.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: util.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>const MS_TO_KN = (3600.0/1852.0);   // conversion meter/second to knots
+
+const sailLegend = {
+  NA:     { bg: "black",  luminance: 0 },
+  C0:     { bg: "green",  luminance: 85 },
+  HG:     { bg: "purple", luminance: 48 },
+  Jib:    { bg: "gray",   luminance: 128 },
+  LG:     { bg: "blue",   luminance: 29 },
+  LJ:     { bg: "yellow", luminance: 210 },
+  Spi:    { bg: "orange", luminance: 170 },
+  SS:     { bg: "red",    luminance: 76 }
+};
+
+/**
+ * Returns a suitable text color ("black" or "white") for a given background luminance.
+ * This ensures good readability based on the brightness of the background color.
+ *
+ * @param {number} luminance - A number between 0 (darkest) and 255 (brightest),luminance of the background color.
+ * @returns {string} "white" if the background is dark, "black" otherwise.
+ */
+function getTextColorFromLuminance(luminance) {
+  return luminance &lt; 128 ? 'white' : 'black';
+}
+
+/**
+ * Convert epoch time (seconds) to a local date string.
+ * @param {number} epoch - Epoch time in seconds.
+ * @returns {string} Formatted local datetime.
+ */
+function epochToStrDate (epoch) {
+  const date = new Date(epoch * 1000);
+  const pad = (n) => n.toString().padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+         `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+/**
+ * Converts a Date object to a formatted string: "YYYY-MM-DD HH:MM".
+ *
+ * @param {Date} date - The Date object to format.
+ * @returns {string} The formatted date string.
+ *
+ * @example
+ * const now = new Date();
+ * const formatted = dateToStr(now);
+ * console.log(formatted); // "2025-03-29 14:30"
+ */
+function dateToStr (date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+/**
+ * Returns the current local time offset from UTC in seconds.
+ *
+ * This function calculates the difference between the local time
+ * and Coordinated Universal Time (UTC), taking into account
+ * daylight saving time if applicable.
+ *
+ * @returns {number} The offset in seconds. Positive if local time is ahead of UTC,
+ *                   negative if behind.
+ */
+function getLocalUtcOffsetInSeconds() {
+  const now = new Date();
+  return -now.getTimezoneOffset() * 60;
+}
+
+/**
+ * Formats a duration given in seconds into a human-readable string.
+ * 
+ * @param {number} seconds - The duration in seconds.
+ * @returns {string} - The formatted duration as "Xj HH:MM:SS".
+ */
+function formatDuration (seconds) {
+   let sign = "";
+   if (seconds &lt; 0) {
+      sign = "- ";
+      seconds = -seconds;
+   } 
+   let days = Math.floor (seconds / (24 * 3600));
+   let hours = Math.floor ((seconds % (24 * 3600)) / 3600);
+   let minutes = Math.floor ((seconds % 3600) / 60);
+   let secs = Math.round (seconds % 60);
+   let withS = days >= 2 ? "s" : "";
+
+   return `${sign}${days} Day${withS} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+/**
+ * Formats a duration given in seconds into a human-readable string.
+ * 
+ * @param {number} seconds - The duration in seconds.
+ * @returns {string} - The formatted duration as "HH:MM:SS".
+ */
+function formatDurationShort (seconds) {
+   let sign = "";
+   if (seconds &lt; 0) {
+      sign = "- ";
+      seconds = -seconds;
+   } 
+   let hours = Math.floor (seconds / 3600);
+   let minutes = Math.floor ((seconds % 3600) / 60);
+   let secs = Math.round (seconds % 60);
+   return `${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+/**
+ * Converts a coordinate in DMS format to decimal degrees.
+ * @param {string} dms - The coordinate in DMS format (e.g., "46°24'33"N").
+ * @returns {number} The decimal degrees equivalent of the DMS input.
+ */
+function dmsToDecimal (dms) {
+  if (!dms) return 0;
+  const parts = dms.match(/(\d+)\u00B0(?:\s*(\d+)')?(?:\s*(\d+(?:\.\d+)?)\")?\s*([NSEW])/);
+  if (!parts) return 0;
+  let [_, d, m, s, dir] = parts;
+  let decimal = parseFloat(d);
+  if (m) decimal += parseFloat(m) / 60;
+  if (s) decimal += parseFloat(s) / 3600;
+  if (dir === 'S' || dir === 'W') decimal *= -1;
+  return decimal;
+}
+
+/**
+ * Converts latitude and longitude to a formatted string in DMS format.
+ * @param {number} lat - The latitude in decimal degrees.
+ * @param {number} lon - The longitude in decimal degrees.
+ * @returns {string} The formatted coordinate string.
+ */
+function latLonToStr(lat, lon) {
+   function toDMS(deg, isLat) {
+      const abs = Math.abs(deg);
+      const d = Math.floor(abs);
+      const m = Math.floor((abs - d) * 60);
+      const s = (abs - d - m / 60) * 3600;
+      const dir = isLat ? (deg >= 0 ? 'N' : 'S') : (deg >= 0 ? 'E' : 'W');
+
+      // Padding: degrees (3), minutes (2), seconds (5: xx.xx)
+      const degStr = String(d).padStart(3, '0');
+      const minStr = String(m).padStart(2, '0');
+      const secStr = s.toFixed(2).padStart(5, '0');
+
+      return `${degStr}°${minStr}&amp;apos;${secStr}" ${dir}`;
+   }
+
+   return `${toDMS(lat, true)} - ${toDMS(lon, false)}`;
+}
+
+
+/**
+ * Converts latitude and longitude to a formatted DMS (Degrees, Minutes, Seconds) string.
+ * This function converts decimal latitude and longitude coordinates into 
+ * a human-readable string in the DMS format, including the appropriate hemisphere indicator (N/S/E/W).
+ *
+ * @param {number} lat - Latitude in decimal degrees.
+ * @param {number} lon - Longitude in decimal degrees.
+ * @returns {string} The coordinates formatted as a DMS string (e.g., "48°51'24\"N, 2°21'03\"E").
+ */
+function toDMSString (lat, lon) {
+   function convert (coord, isLat) {
+      const absolute = Math.abs(coord);
+      const degrees = Math.floor(absolute);
+      const minutes = Math.floor((absolute - degrees) * 60);
+      const seconds = Math.floor((absolute - degrees - minutes / 60) * 3600);
+      const direction = isLat ? (coord >= 0 ? 'N' : 'S') : (coord >= 0 ? 'E' : 'W');
+
+      return `${String(degrees).padStart(2, '0')}°${String(minutes).padStart(2, '0')}'${String(seconds).padStart(2, '0')}"${direction}`.trim();
+   }
+   return `${convert(lat, true)}, ${convert(lon, false)}`.trim ();
+}
+
+
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#addMarker">addMarker</a></li><li><a href="global.html#addPOI">addPOI</a></li><li><a href="global.html#addWaypoint">addWaypoint</a></li><li><a href="global.html#aisData">aisData</a></li><li><a href="global.html#aisDump">aisDump</a></li><li><a href="global.html#aisLayer">aisLayer</a></li><li><a href="global.html#backWard">backWard</a></li><li><a href="global.html#bestVmg">bestVmg</a></li><li><a href="global.html#bestVmgBack">bestVmgBack</a></li><li><a href="global.html#buildBodyRequest">buildBodyRequest</a></li><li><a href="global.html#button4POI">button4POI</a></li><li><a href="global.html#changeParam">changeParam</a></li><li><a href="global.html#chooseFile">chooseFile</a></li><li><a href="global.html#chooseGrib">chooseGrib</a></li><li><a href="global.html#choosePolar">choosePolar</a></li><li><a href="global.html#clearRoutes">clearRoutes</a></li><li><a href="global.html#closeContextMenu">closeContextMenu</a></li><li><a href="global.html#condenseTimeStamps">condenseTimeStamps</a></li><li><a href="global.html#createProgressBar">createProgressBar</a></li><li><a href="global.html#dateToStr">dateToStr</a></li><li><a href="global.html#deleteAllPOIs">deleteAllPOIs</a></li><li><a href="global.html#deleteCompetitor">deleteCompetitor</a></li><li><a href="global.html#deleteCompetitorByName">deleteCompetitorByName</a></li><li><a href="global.html#deletePOI">deletePOI</a></li><li><a href="global.html#dispAllCompetitors">dispAllCompetitors</a></li><li><a href="global.html#dispBestTimeHistogram">dispBestTimeHistogram</a></li><li><a href="global.html#displayWayPoints">displayWayPoints</a></li><li><a href="global.html#dmsToDecimal">dmsToDecimal</a></li><li><a href="global.html#downloadTextFile">downloadTextFile</a></li><li><a href="global.html#drawGribLimits">drawGribLimits</a></li><li><a href="global.html#drawOrtho">drawOrtho</a></li><li><a href="global.html#drawPolyline">drawPolyline</a></li><li><a href="global.html#dumpFile">dumpFile</a></li><li><a href="global.html#dumpIsoDesc">dumpIsoDesc</a></li><li><a href="global.html#dumpIsoc">dumpIsoc</a></li><li><a href="global.html#dumpRoute">dumpRoute</a></li><li><a href="global.html#epochToStrDate">epochToStrDate</a></li><li><a href="global.html#escapeHtml">escapeHtml</a></li><li><a href="global.html#fPenalty">fPenalty</a></li><li><a href="global.html#fPointLoss">fPointLoss</a></li><li><a href="global.html#fTimeToRecupOnePoint">fTimeToRecupOnePoint</a></li><li><a href="global.html#feedback">feedback</a></li><li><a href="global.html#fetchAisPosition">fetchAisPosition</a></li><li><a href="global.html#fetchGpsPosition">fetchGpsPosition</a></li><li><a href="global.html#finalUpdate">finalUpdate</a></li><li><a href="global.html#findBounds">findBounds</a></li><li><a href="global.html#findMaxSpeed">findMaxSpeed</a></li><li><a href="global.html#forWard">forWard</a></li><li><a href="global.html#formatDuration">formatDuration</a></li><li><a href="global.html#formatDurationShort">formatDurationShort</a></li><li><a href="global.html#formatFileSize">formatFileSize</a></li><li><a href="global.html#formatLocalDate">formatLocalDate</a></li><li><a href="global.html#generatePolarPlotly">generatePolarPlotly</a></li><li><a href="global.html#getGreatCirclePath">getGreatCirclePath</a></li><li><a href="global.html#getLocalUtcOffsetInSeconds">getLocalUtcOffsetInSeconds</a></li><li><a href="global.html#getParam">getParam</a></li><li><a href="global.html#getSerializablePOIs">getSerializablePOIs</a></li><li><a href="global.html#getServerInit">getServerInit</a></li><li><a href="global.html#getTextColorFromLuminance">getTextColorFromLuminance</a></li><li><a href="global.html#goBegin">goBegin</a></li><li><a href="global.html#gpsMarker">gpsMarker</a></li><li><a href="global.html#gpsPolyline">gpsPolyline</a></li><li><a href="global.html#gpsTrack">gpsTrack</a></li><li><a href="global.html#gribInfo">gribInfo</a></li><li><a href="global.html#handleRequest">handleRequest</a></li><li><a href="global.html#helpInfo">helpInfo</a></li><li><a href="global.html#importCSV">importCSV</a></li><li><a href="global.html#interpolate">interpolate</a></li><li><a href="global.html#interpolateSpeeds">interpolateSpeeds</a></li><li><a href="global.html#lastStepDurationFormatted">lastStepDurationFormatted</a></li><li><a href="global.html#latLonToStr">latLonToStr</a></li><li><a href="global.html#launchRouting">launchRouting</a></li><li><a href="global.html#loadAppState">loadAppState</a></li><li><a href="global.html#loxoCap">loxoCap</a></li><li><a href="global.html#loxoDist">loxoDist</a></li><li><a href="global.html#manageCompetitors">manageCompetitors</a></li><li><a href="global.html#move">move</a></li><li><a href="global.html#newCompetitor">newCompetitor</a></li><li><a href="global.html#orthoCap">orthoCap</a></li><li><a href="global.html#orthoDist">orthoDist</a></li><li><a href="global.html#parDump">parDump</a></li><li><a href="global.html#polarInfo">polarInfo</a></li><li><a href="global.html#popup4Comp">popup4Comp</a></li><li><a href="global.html#refreshMarker">refreshMarker</a></li><li><a href="global.html#removeCompetitor">removeCompetitor</a></li><li><a href="global.html#replay">replay</a></li><li><a href="global.html#request">request</a></li><li><a href="global.html#requestAllCompetitors">requestAllCompetitors</a></li><li><a href="global.html#requestBestTime">requestBestTime</a></li><li><a href="global.html#requestOne">requestOne</a></li><li><a href="global.html#resetWaypoint">resetWaypoint</a></li><li><a href="global.html#saveAppState">saveAppState</a></li><li><a href="global.html#setBoat">setBoat</a></li><li><a href="global.html#showAIS">showAIS</a></li><li><a href="global.html#showBoatPosition">showBoatPosition</a></li><li><a href="global.html#showContextMenu">showContextMenu</a></li><li><a href="global.html#showDestination">showDestination</a></li><li><a href="global.html#showInitMessage">showInitMessage</a></li><li><a href="global.html#showPOI">showPOI</a></li><li><a href="global.html#showPolarTable">showPolarTable</a></li><li><a href="global.html#showRoute">showRoute</a></li><li><a href="global.html#showRouteReport">showRouteReport</a></li><li><a href="global.html#showWayPoint">showWayPoint</a></li><li><a href="global.html#simplify">simplify</a></li><li><a href="global.html#stamina">stamina</a></li><li><a href="global.html#statChanges">statChanges</a></li><li><a href="global.html#switchTab">switchTab</a></li><li><a href="global.html#symmetrizeData">symmetrizeData</a></li><li><a href="global.html#toDMSString">toDMSString</a></li><li><a href="global.html#updateAllBoats">updateAllBoats</a></li><li><a href="global.html#updateBindPopup">updateBindPopup</a></li><li><a href="global.html#updateBoatSelect">updateBoatSelect</a></li><li><a href="global.html#updateHeading">updateHeading</a></li><li><a href="global.html#updateIconStyle">updateIconStyle</a></li><li><a href="global.html#updateRouteDisplay">updateRouteDisplay</a></li><li><a href="global.html#updateStatusBar">updateStatusBar</a></li><li><a href="global.html#updateToolsVisibility">updateToolsVisibility</a></li><li><a href="global.html#updateWindyMap">updateWindyMap</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Tue May 13 2025 23:41:58 GMT+0200 (heure d’été d’Europe centrale)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

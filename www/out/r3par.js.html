@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: r3par.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: r3par.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/* jshint esversion: 6 */
+
+/**
+ * Opens a SweetAlert2 modal with two tabs to modify route parameters.
+ *
+ * @param {Object} routeParam - The object containing route parameters.
+ */
+function changeParam(routeParam) {
+   Swal.fire({
+      title: 'Edit Route Parameters',
+      html: `
+         &lt;div class="tab-container">
+            &lt;div class="tabs">
+               &lt;button class="tab-button active" onclick="switchTab(event, 'behavior')">Behavior&lt;/button>
+               &lt;button class="tab-button" onclick="switchTab(event, 'technical')">Technical&lt;/button>
+               &lt;button class="tab-button" onclick="switchTab(event, 'constFlows')">Const Flows&lt;/button>
+            &lt;/div>
+            
+            &lt;div id="behavior" class="tab-content active">
+               &lt;div class="form-group">&lt;label>X Wind:&lt;/label>&lt;input type="number" id="xWind" min="0.50" max="1.50" step="0.01" value="${routeParam.xWind || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>Max Wind:&lt;/label>&lt;input type="number" id="maxWind" min="10" max="150" value="${routeParam.maxWind || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>Tack (sec):&lt;/label>&lt;input type="number" id="penalty0" value="${routeParam.penalty0 || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>Gybe (sec):&lt;/label>&lt;input type="number" id="penalty1" value="${routeParam.penalty1 || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>Sail Change (sec):&lt;/label>&lt;input type="number" id="penalty2" value="${routeParam.penalty2 || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>Motor Speed:&lt;/label>&lt;input type="number" id="motorSpeed" step="0.1" value="${routeParam.motorSpeed || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>Threshold Motor:&lt;/label>&lt;input type="number" id="threshold" step="0.1" value="${routeParam.threshold || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>Day Efficiency:&lt;/label>&lt;input type="number" id="dayEfficiency" min="0.50" max="1.50" step="0.01" value="${routeParam.dayEfficiency || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>Night Efficiency:&lt;/label>&lt;input type="number" id="nightEfficiency" min="0.50" max="1.50" step="0.01" value="${routeParam.nightEfficiency || ''}">&lt;/div>
+            &lt;/div>
+            
+            &lt;div id="technical" class="tab-content">
+               &lt;div class="form-group">&lt;label>COG Step:&lt;/label>&lt;input type="number" id="cogStep" min="2" max="10" value="${routeParam.cogStep || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>COG Range:&lt;/label>&lt;input type="number" id="cogRange" min="50" max="180" value="${routeParam.cogRange || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>jFactor:&lt;/label>&lt;input type="number" id="jFactor" step="0.01" value="${routeParam.jFactor || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>kFactor:&lt;/label>&lt;input type="number" id="kFactor" min="0" max="1" value="${routeParam.kFactor || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>nSectors:&lt;/label>&lt;input type="number" id="nSectors" min="90" max="1080" value="${routeParam.nSectors || ''}">&lt;/div>
+               &lt;div class="form-group">
+                  &lt;label for="isoDesc">IsoDesc Focal:&lt;/label>
+                  &lt;input type="checkbox" style="margin-left: 0" id="isoDesc" ${routeParam.isoDesc ? 'checked' : ''}>
+               &lt;/div>
+            &lt;/div>
+            &lt;div id="constFlows" class="tab-content">
+               &lt;div class="form-group">&lt;label>Const Wind TWS:&lt;/label>&lt;input type="number" id="constWindTws" min="0" max="100" value="${routeParam.constWindTws || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>Const Wind TWD:&lt;/label>&lt;input type="number" id="constWindTwd" min="0" max="360" value="${routeParam.constWindTwd || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>Const Wave Height:&lt;/label>&lt;input type="number" id="constWave" min="0" max="10" value="${routeParam.constWave || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>Const Current Speed:&lt;/label>&lt;input type="number" id="constCurrentS" min="0" max="10" value="${routeParam.constCurrentS || ''}">&lt;/div>
+               &lt;div class="form-group">&lt;label>Const Current Dir.&lt;/label>&lt;input type="number" id="constCurrentD" min="0" max="360" value="${routeParam.constCurrentD || ''}">&lt;/div>
+            &lt;/div>
+         &lt;/div>
+         &lt;/div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Save',
+      preConfirm: () => {
+         return {
+            xWind: parseFloat(document.getElementById('xWind').value),
+            maxWind: parseInt(document.getElementById('maxWind').value),
+            penalty0: parseInt(document.getElementById('penalty0').value),
+            penalty1: parseInt(document.getElementById('penalty1').value),
+            penalty2: parseInt(document.getElementById('penalty2').value),
+            motorSpeed: parseFloat(document.getElementById('motorSpeed').value),
+            threshold: parseFloat(document.getElementById('threshold').value),
+            dayEfficiency: parseFloat(document.getElementById('dayEfficiency').value),
+            nightEfficiency: parseFloat(document.getElementById('nightEfficiency').value),
+            cogStep: parseInt(document.getElementById('cogStep').value),
+            cogRange: parseInt(document.getElementById('cogRange').value),
+            jFactor: parseFloat(document.getElementById('jFactor').value),
+            kFactor: parseInt(document.getElementById('kFactor').value),
+            nSectors: parseInt(document.getElementById('nSectors').value),
+            isoDesc: document.getElementById("isoDesc").checked,
+            constWindTws: parseFloat(document.getElementById('constWindTws').value),
+            constWindTwd: parseInt(document.getElementById('constWindTwd').value),
+            constWave: parseFloat(document.getElementById('constWave').value),
+            constCurrentS: parseFloat(document.getElementById('constCurrentS').value),
+            constCurrentD: parseInt(document.getElementById('constCurrentD').value)
+         };
+      }
+   }).then((result) => {
+      if (result.isConfirmed) {
+         Object.assign(routeParam, result.value);
+         console.log('Updated route parameters:', routeParam);
+      }
+   });
+}
+
+/**
+ * Handles tab switching inside the Swal modal.
+ * 
+ * @param {Event} event - The click event.
+ * @param {string} tabId - The ID of the tab to activate.
+ */
+function switchTab (event, tabId) {
+   document.querySelectorAll('.tab-button').forEach(button => button.classList.remove('active'));
+   document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+   event.currentTarget.classList.add('active');
+   document.getElementById(tabId).classList.add('active');
+}
+
+/**
+ * display parameter file, after launching fetch request to server 
+ *
+ */
+function parDump() {
+   const formData = `type=${REQ.PAR_RAW} `;
+   console.log("Request sent:", formData);
+
+   fetch (apiUrl, {
+      method: "POST",
+      headers: {
+         "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: formData
+   })
+   .then(response => {
+      console.log ("Raw response:", response);
+      if (!response.ok) {
+         throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      return response.text(); // Convertir la réponse en texte
+   })
+   .then(data => {
+      console.log("Server Response:", data);
+
+      let content = `&lt;pre style="text-align: left; font-family: 'Courier New', Courier, monospace; font-size: 14px; background: #f4f4f4; padding: 10px; border-radius: 5px;">${data}&lt;/pre>`;
+
+      Swal.fire({
+         title: "Parameter Info",
+         html: content,
+         icon: "success",
+         confirmButtonText: "OK",
+         width: "60%",
+         confirmButtonColor: "#FFA500"
+      });
+   })
+   .catch(error => {
+      console.error("Catched error:", error);
+      Swal.fire({
+         title: "Error",
+         text: error.message,
+         icon: "error",
+         confirmButtonText: "OK",
+         confirmButtonColor: "#FFA500"
+      });
+   });
+}
+
+/**
+ * get a subset of parameters on server, after launching fetch request to server
+   initialize associated values 
+ *
+ */
+function getParam () {
+   const formData = `type=${REQ.PAR_JSON}`;
+   console.log ("Request sent:", formData);
+
+   fetch (apiUrl, {
+      method: "POST",
+      headers: {
+         "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: formData
+   })
+   .then (response => response.json())
+   .then (data => {
+      console.log ("JSON data received:", data);
+      gribLimits.name = data.grib;
+      gribLimits.currentName = data.currentGrib;
+      polarName = data.polar;
+      polWaveName = data.wavePolar;
+   })
+   .catch (error => {
+      console.error("Error requesting grib:", error);
+      Swal.fire("Erreur", "Impossible de get file list", "error");
+   });
+}
+
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#addMarker">addMarker</a></li><li><a href="global.html#addPOI">addPOI</a></li><li><a href="global.html#addWaypoint">addWaypoint</a></li><li><a href="global.html#aisData">aisData</a></li><li><a href="global.html#aisDump">aisDump</a></li><li><a href="global.html#aisLayer">aisLayer</a></li><li><a href="global.html#backWard">backWard</a></li><li><a href="global.html#bestVmg">bestVmg</a></li><li><a href="global.html#bestVmgBack">bestVmgBack</a></li><li><a href="global.html#buildBodyRequest">buildBodyRequest</a></li><li><a href="global.html#button4POI">button4POI</a></li><li><a href="global.html#changeParam">changeParam</a></li><li><a href="global.html#chooseFile">chooseFile</a></li><li><a href="global.html#chooseGrib">chooseGrib</a></li><li><a href="global.html#choosePolar">choosePolar</a></li><li><a href="global.html#clearRoutes">clearRoutes</a></li><li><a href="global.html#closeContextMenu">closeContextMenu</a></li><li><a href="global.html#condenseTimeStamps">condenseTimeStamps</a></li><li><a href="global.html#createProgressBar">createProgressBar</a></li><li><a href="global.html#dateToStr">dateToStr</a></li><li><a href="global.html#deleteAllPOIs">deleteAllPOIs</a></li><li><a href="global.html#deleteCompetitor">deleteCompetitor</a></li><li><a href="global.html#deleteCompetitorByName">deleteCompetitorByName</a></li><li><a href="global.html#deletePOI">deletePOI</a></li><li><a href="global.html#dispAllCompetitors">dispAllCompetitors</a></li><li><a href="global.html#dispBestTimeHistogram">dispBestTimeHistogram</a></li><li><a href="global.html#displayWayPoints">displayWayPoints</a></li><li><a href="global.html#dmsToDecimal">dmsToDecimal</a></li><li><a href="global.html#downloadTextFile">downloadTextFile</a></li><li><a href="global.html#drawGribLimits">drawGribLimits</a></li><li><a href="global.html#drawOrtho">drawOrtho</a></li><li><a href="global.html#drawPolyline">drawPolyline</a></li><li><a href="global.html#dumpFile">dumpFile</a></li><li><a href="global.html#dumpIsoDesc">dumpIsoDesc</a></li><li><a href="global.html#dumpIsoc">dumpIsoc</a></li><li><a href="global.html#dumpRoute">dumpRoute</a></li><li><a href="global.html#epochToStrDate">epochToStrDate</a></li><li><a href="global.html#escapeHtml">escapeHtml</a></li><li><a href="global.html#fPenalty">fPenalty</a></li><li><a href="global.html#fPointLoss">fPointLoss</a></li><li><a href="global.html#fTimeToRecupOnePoint">fTimeToRecupOnePoint</a></li><li><a href="global.html#feedback">feedback</a></li><li><a href="global.html#fetchAisPosition">fetchAisPosition</a></li><li><a href="global.html#fetchGpsPosition">fetchGpsPosition</a></li><li><a href="global.html#finalUpdate">finalUpdate</a></li><li><a href="global.html#findBounds">findBounds</a></li><li><a href="global.html#findMaxSpeed">findMaxSpeed</a></li><li><a href="global.html#forWard">forWard</a></li><li><a href="global.html#formatDuration">formatDuration</a></li><li><a href="global.html#formatDurationShort">formatDurationShort</a></li><li><a href="global.html#formatFileSize">formatFileSize</a></li><li><a href="global.html#formatLocalDate">formatLocalDate</a></li><li><a href="global.html#generatePolarPlotly">generatePolarPlotly</a></li><li><a href="global.html#getGreatCirclePath">getGreatCirclePath</a></li><li><a href="global.html#getLocalUtcOffsetInSeconds">getLocalUtcOffsetInSeconds</a></li><li><a href="global.html#getParam">getParam</a></li><li><a href="global.html#getSerializablePOIs">getSerializablePOIs</a></li><li><a href="global.html#getServerInit">getServerInit</a></li><li><a href="global.html#getTextColorFromLuminance">getTextColorFromLuminance</a></li><li><a href="global.html#goBegin">goBegin</a></li><li><a href="global.html#gpsMarker">gpsMarker</a></li><li><a href="global.html#gpsPolyline">gpsPolyline</a></li><li><a href="global.html#gpsTrack">gpsTrack</a></li><li><a href="global.html#gribInfo">gribInfo</a></li><li><a href="global.html#handleRequest">handleRequest</a></li><li><a href="global.html#helpInfo">helpInfo</a></li><li><a href="global.html#importCSV">importCSV</a></li><li><a href="global.html#interpolate">interpolate</a></li><li><a href="global.html#interpolateSpeeds">interpolateSpeeds</a></li><li><a href="global.html#lastStepDurationFormatted">lastStepDurationFormatted</a></li><li><a href="global.html#latLonToStr">latLonToStr</a></li><li><a href="global.html#launchRouting">launchRouting</a></li><li><a href="global.html#loadAppState">loadAppState</a></li><li><a href="global.html#loxoCap">loxoCap</a></li><li><a href="global.html#loxoDist">loxoDist</a></li><li><a href="global.html#manageCompetitors">manageCompetitors</a></li><li><a href="global.html#move">move</a></li><li><a href="global.html#newCompetitor">newCompetitor</a></li><li><a href="global.html#orthoCap">orthoCap</a></li><li><a href="global.html#orthoDist">orthoDist</a></li><li><a href="global.html#parDump">parDump</a></li><li><a href="global.html#polarInfo">polarInfo</a></li><li><a href="global.html#popup4Comp">popup4Comp</a></li><li><a href="global.html#refreshMarker">refreshMarker</a></li><li><a href="global.html#removeCompetitor">removeCompetitor</a></li><li><a href="global.html#replay">replay</a></li><li><a href="global.html#request">request</a></li><li><a href="global.html#requestAllCompetitors">requestAllCompetitors</a></li><li><a href="global.html#requestBestTime">requestBestTime</a></li><li><a href="global.html#requestOne">requestOne</a></li><li><a href="global.html#resetWaypoint">resetWaypoint</a></li><li><a href="global.html#saveAppState">saveAppState</a></li><li><a href="global.html#setBoat">setBoat</a></li><li><a href="global.html#showAIS">showAIS</a></li><li><a href="global.html#showBoatPosition">showBoatPosition</a></li><li><a href="global.html#showContextMenu">showContextMenu</a></li><li><a href="global.html#showDestination">showDestination</a></li><li><a href="global.html#showInitMessage">showInitMessage</a></li><li><a href="global.html#showPOI">showPOI</a></li><li><a href="global.html#showPolarTable">showPolarTable</a></li><li><a href="global.html#showRoute">showRoute</a></li><li><a href="global.html#showRouteReport">showRouteReport</a></li><li><a href="global.html#showWayPoint">showWayPoint</a></li><li><a href="global.html#simplify">simplify</a></li><li><a href="global.html#stamina">stamina</a></li><li><a href="global.html#statChanges">statChanges</a></li><li><a href="global.html#switchTab">switchTab</a></li><li><a href="global.html#symmetrizeData">symmetrizeData</a></li><li><a href="global.html#toDMSString">toDMSString</a></li><li><a href="global.html#updateAllBoats">updateAllBoats</a></li><li><a href="global.html#updateBindPopup">updateBindPopup</a></li><li><a href="global.html#updateBoatSelect">updateBoatSelect</a></li><li><a href="global.html#updateHeading">updateHeading</a></li><li><a href="global.html#updateIconStyle">updateIconStyle</a></li><li><a href="global.html#updateRouteDisplay">updateRouteDisplay</a></li><li><a href="global.html#updateStatusBar">updateStatusBar</a></li><li><a href="global.html#updateToolsVisibility">updateToolsVisibility</a></li><li><a href="global.html#updateWindyMap">updateWindyMap</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Tue May 13 2025 23:41:58 GMT+0200 (heure d’été d’Europe centrale)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

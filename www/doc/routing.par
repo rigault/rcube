@@ -1,0 +1,29 @@
+DESC:            Routing parameters. See also docpar.txt for documentation
+WD:              /home/rr/rcube/
+POLAR:           /home/rr/rcube/pol/Ultim.csv
+WAVE_POL:        /home/rr/rcube/wavepol/polwave.csv
+ISSEA:           /home/rr/rcube/geo/issea.txt
+LOG:             /home/rr/rcube/routing.log
+WEB:             /home/rr/rcube/www
+MOST_RECENT_GRIB:1
+VR_STAMINA:      100.00
+RANGE_COG:       80
+COG_STEP:        2
+PENALTY0:        180
+PENALTY1:        180
+PENALTY2:        180
+MOTOR_S:         6.00
+THRESHOLD:       0.00
+DAY_EFFICIENCY:  1.00
+NIGHT_EFFICIENCY:1.00
+X_WIND:          1.00
+MAX_WIND:        100.00
+OPT:             1
+J_FACTOR:        0
+K_FACTOR:        3
+N_SECTORS:       720
+SMTP_SERVER:     smtps://smtp.orange.fr
+SMTP_USER_NAME:  meteoinfoforrr@orange.fr
+SMTP_TO:         rene.rigault@wanadoo.fr
+MAIL_PW:         Mongouarou$001
+

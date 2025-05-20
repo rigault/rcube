@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: r3routinglaunch.history.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: r3routinglaunch.history.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * Displays a basic Swal2 modal to confirm route parameters.
+ */
+function routingLaunch() {
+   alert ("hello");
+   // Ensure routeParam exists
+   if (typeof routeParam !== "object" || routeParam === null) {
+      routeParam = {};
+   }
+
+   // Prepare default date/time
+   let startTime = routeParam.startTime instanceof Date &amp;&amp; !isNaN(routeParam.startTime)
+      ? routeParam.startTime
+      : new Date();
+
+   let localTime = new Date(startTime.getTime() - startTime.getTimezoneOffset() * 60000);
+   let defaultDateStr = localTime.toISOString().slice(0, 16);
+
+   // Boat select options
+   const boatNames = competitors.map(c => c.name);
+   let boatOptions = `&lt;option value="0"${routeParam.iBoat === 0 ? " selected" : ""}>${(boatNames.length &lt;= 1) ? "" : "All"}&lt;/option>`;
+   boatNames.forEach((name, i) => {
+      const selected = (routeParam.iBoat === (i + 1)) ? " selected" : "";
+      boatOptions += `&lt;option value="${i + 1}"${selected}>${name}&lt;/option>`;
+   });
+
+   // Show the modal
+   Swal.fire({
+      title: 'Route Parameters',
+      html: `
+         &lt;div>
+            &lt;label>Departure Time:&lt;/label>&lt;br>
+            &lt;input type="datetime-local" id="startTime" value="${defaultDateStr}">&lt;br>&lt;br>
+
+            &lt;label>Time Step:&lt;/label>&lt;br>
+            &lt;select id="isoStep">
+               &lt;option value="900"${routeParam.isoStep === 900 ? " selected" : ""}>15 min&lt;/option>
+               &lt;option value="1800"${routeParam.isoStep === 1800 ? " selected" : ""}>30 min&lt;/option>
+               &lt;option value="3600"${routeParam.isoStep === 3600 ? " selected" : ""}>1 hour&lt;/option>
+               &lt;option value="10800"${routeParam.isoStep === 10800 ? " selected" : ""}>3 hours&lt;/option>
+            &lt;/select>&lt;br>&lt;br>
+
+            &lt;label>Boat:&lt;/label>&lt;br>
+            &lt;select id="boatSelect">${boatOptions}&lt;/select>&lt;br>&lt;br>
+
+            &lt;label>&lt;input type="checkbox" id="forbidZones"${routeParam.forbid ? " checked" : ""}> Forbid Zones&lt;/label>&lt;br>
+            &lt;label>&lt;input type="checkbox" id="isoc"${routeParam.isoc ? " checked" : ""}> Isochrones&lt;/label>&lt;br>
+            &lt;label>&lt;input type="checkbox" id="withWaves"${routeParam.withWaves ? " checked" : ""}> With Waves&lt;/label>&lt;br>
+            &lt;label>&lt;input type="checkbox" id="withCurrent"${routeParam.withCurrent ? " checked" : ""}> With CCurrent&lt;/label>&lt;br>&lt;br>
+            &lt;label>&lt;input type="checkbox" id="clipBoard"${clipBoard ? " checked" : ""}> Request In Clipboard&lt;/label>&lt;br>&lt;br>
+
+            &lt;label>Time Interval:&lt;/label>&lt;br>
+            &lt;select id="timeInterval">
+               &lt;option value="0"${routeParam.timeInterval === 0 ? " selected" : ""}>None&lt;/option>
+               &lt;option value="900"${routeParam.timeInterval === 900 ? " selected" : ""}>15 min&lt;/option>
+               &lt;option value="1800"${routeParam.timeInterval === 1800 ? " selected" : ""}>30 min&lt;/option>
+               &lt;option value="3600"${routeParam.timeInterval === 3600 ? " selected" : ""}>1 hour&lt;/option>
+               &lt;option value="7200"${routeParam.timeInterval === 7200 ? " selected" : ""}>2 hours&lt;/option>
+               &lt;option value="10800"${routeParam.timeInterval === 10800 ? " selected" : ""}>3 hours&lt;/option>
+               &lt;option value="21600"${routeParam.timeInterval === 21600 ? " selected" : ""}>6 hours&lt;/option>
+            &lt;/select>&lt;br>&lt;br>
+
+            &lt;label>N Try:&lt;/label>&lt;br>
+            &lt;input type="number" id="nTry" min="0" max="384" value="${routeParam.nTry || 0}">
+         &lt;/div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Launch Route',
+      preConfirm: () => {
+         // Read and validate inputs
+         const startTimeStr = document.getElementById("startTime").value;
+         const isoStep = parseInt(document.getElementById("isoStep").value, 10);
+         const iBoat = parseInt(document.getElementById("boatSelect").value, 10);
+         const forbid = document.getElementById("forbidZones").checked;
+         const isoc = document.getElementById("isoc").checked;
+         const withWaves = document.getElementById("withWaves").checked;
+         const withCurrent = document.getElementById("withCurrent").checked;
+         clipBoard = document.getElementById("clipBoard").checked; // global variable
+         const timeInterval = parseInt(document.getElementById("timeInterval").value, 10);
+         const nTry = parseInt(document.getElementById("nTry").value, 10) || 0;
+
+         if ((nTry > 1) &amp;&amp; (timeInterval !== 0) &amp;&amp; (iBoat === 0)) {
+            Swal.showValidationMessage(
+               "All competitors selection incompatible with best time option"
+            );
+            return false;
+         }
+
+         // Update routeParam
+         routeParam.startTimeStr = startTimeStr;
+         routeParam.startTime = new Date(startTimeStr);
+         routeParam.isoStep = isoStep;
+         routeParam.iBoat = iBoat;
+         routeParam.forbid = forbid;
+         routeParam.isoc = isoc;
+         routeParam.withWaves = withWaves;
+         routeParam.withCurrent = withCurrent;
+         routeParam.timeInterval = timeInterval;
+         routeParam.nTry = nTry;
+
+         return true;
+      }
+   }).then((result) => {
+      if (result.isConfirmed) {
+         updateStatusBar();
+         console.log("Updated Route Parameters:", routeParam);
+         request();
+      }
+   });
+}
+
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#addMarker">addMarker</a></li><li><a href="global.html#addPOI">addPOI</a></li><li><a href="global.html#addWaypoint">addWaypoint</a></li><li><a href="global.html#aisData">aisData</a></li><li><a href="global.html#aisDump">aisDump</a></li><li><a href="global.html#aisLayer">aisLayer</a></li><li><a href="global.html#backWard">backWard</a></li><li><a href="global.html#bestVmg">bestVmg</a></li><li><a href="global.html#bestVmgBack">bestVmgBack</a></li><li><a href="global.html#buildBodyRequest">buildBodyRequest</a></li><li><a href="global.html#button4POI">button4POI</a></li><li><a href="global.html#changeParam">changeParam</a></li><li><a href="global.html#chooseFile">chooseFile</a></li><li><a href="global.html#chooseGrib">chooseGrib</a></li><li><a href="global.html#choosePolar">choosePolar</a></li><li><a href="global.html#clearRoutes">clearRoutes</a></li><li><a href="global.html#closeContextMenu">closeContextMenu</a></li><li><a href="global.html#condenseTimeStamps">condenseTimeStamps</a></li><li><a href="global.html#createProgressBar">createProgressBar</a></li><li><a href="global.html#dateToStr">dateToStr</a></li><li><a href="global.html#deleteAllPOIs">deleteAllPOIs</a></li><li><a href="global.html#deleteCompetitor">deleteCompetitor</a></li><li><a href="global.html#deleteCompetitorByName">deleteCompetitorByName</a></li><li><a href="global.html#deletePOI">deletePOI</a></li><li><a href="global.html#dispAllCompetitors">dispAllCompetitors</a></li><li><a href="global.html#dispBestTimeHistogram">dispBestTimeHistogram</a></li><li><a href="global.html#displayWayPoints">displayWayPoints</a></li><li><a href="global.html#downloadTextFile">downloadTextFile</a></li><li><a href="global.html#drawGribLimits">drawGribLimits</a></li><li><a href="global.html#drawOrtho">drawOrtho</a></li><li><a href="global.html#drawPolyline">drawPolyline</a></li><li><a href="global.html#dumpFile">dumpFile</a></li><li><a href="global.html#dumpIsoDesc">dumpIsoDesc</a></li><li><a href="global.html#dumpIsoc">dumpIsoc</a></li><li><a href="global.html#dumpRoute">dumpRoute</a></li><li><a href="global.html#epochToStrDate">epochToStrDate</a></li><li><a href="global.html#escapeHtml">escapeHtml</a></li><li><a href="global.html#fPenalty">fPenalty</a></li><li><a href="global.html#fPointLoss">fPointLoss</a></li><li><a href="global.html#fTimeToRecupOnePoint">fTimeToRecupOnePoint</a></li><li><a href="global.html#feedback">feedback</a></li><li><a href="global.html#fetchAisPosition">fetchAisPosition</a></li><li><a href="global.html#fetchGpsPosition">fetchGpsPosition</a></li><li><a href="global.html#finalUpdate">finalUpdate</a></li><li><a href="global.html#findBounds">findBounds</a></li><li><a href="global.html#findMaxSpeed">findMaxSpeed</a></li><li><a href="global.html#forWard">forWard</a></li><li><a href="global.html#formatDuration">formatDuration</a></li><li><a href="global.html#formatDurationShort">formatDurationShort</a></li><li><a href="global.html#formatFileSize">formatFileSize</a></li><li><a href="global.html#formatLocalDate">formatLocalDate</a></li><li><a href="global.html#generatePolarPlotly">generatePolarPlotly</a></li><li><a href="global.html#getGreatCirclePath">getGreatCirclePath</a></li><li><a href="global.html#getLocalUtcOffsetInSeconds">getLocalUtcOffsetInSeconds</a></li><li><a href="global.html#getParam">getParam</a></li><li><a href="global.html#getSerializablePOIs">getSerializablePOIs</a></li><li><a href="global.html#getServerInit">getServerInit</a></li><li><a href="global.html#getTextColorFromLuminance">getTextColorFromLuminance</a></li><li><a href="global.html#goBegin">goBegin</a></li><li><a href="global.html#gpsMarker">gpsMarker</a></li><li><a href="global.html#gpsPolyline">gpsPolyline</a></li><li><a href="global.html#gpsTrack">gpsTrack</a></li><li><a href="global.html#gribInfo">gribInfo</a></li><li><a href="global.html#handleRequest">handleRequest</a></li><li><a href="global.html#helpInfo">helpInfo</a></li><li><a href="global.html#importCSV">importCSV</a></li><li><a href="global.html#interpolate">interpolate</a></li><li><a href="global.html#interpolateSpeeds">interpolateSpeeds</a></li><li><a href="global.html#lastStepDurationFormatted">lastStepDurationFormatted</a></li><li><a href="global.html#launchRouting">launchRouting</a></li><li><a href="global.html#loadAppState">loadAppState</a></li><li><a href="global.html#loxoCap">loxoCap</a></li><li><a href="global.html#loxoDist">loxoDist</a></li><li><a href="global.html#manageCompetitors">manageCompetitors</a></li><li><a href="global.html#move">move</a></li><li><a href="global.html#newCompetitor">newCompetitor</a></li><li><a href="global.html#oldLatLonToStr">oldLatLonToStr</a></li><li><a href="global.html#orthoCap">orthoCap</a></li><li><a href="global.html#orthoDist">orthoDist</a></li><li><a href="global.html#parDump">parDump</a></li><li><a href="global.html#polarInfo">polarInfo</a></li><li><a href="global.html#popup4Comp">popup4Comp</a></li><li><a href="global.html#refreshMarker">refreshMarker</a></li><li><a href="global.html#removeCompetitor">removeCompetitor</a></li><li><a href="global.html#request">request</a></li><li><a href="global.html#requestAllCompetitors">requestAllCompetitors</a></li><li><a href="global.html#requestBestTime">requestBestTime</a></li><li><a href="global.html#requestOne">requestOne</a></li><li><a href="global.html#resetWaypoint">resetWaypoint</a></li><li><a href="global.html#routingLaunch">routingLaunch</a></li><li><a href="global.html#saveAppState">saveAppState</a></li><li><a href="global.html#setBoat">setBoat</a></li><li><a href="global.html#showAIS">showAIS</a></li><li><a href="global.html#showBoatPosition">showBoatPosition</a></li><li><a href="global.html#showContextMenu">showContextMenu</a></li><li><a href="global.html#showDestination">showDestination</a></li><li><a href="global.html#showInitMessage">showInitMessage</a></li><li><a href="global.html#showPOI">showPOI</a></li><li><a href="global.html#showPolarTable">showPolarTable</a></li><li><a href="global.html#showRoute">showRoute</a></li><li><a href="global.html#showRouteReport">showRouteReport</a></li><li><a href="global.html#showWayPoint">showWayPoint</a></li><li><a href="global.html#simplify">simplify</a></li><li><a href="global.html#stamina">stamina</a></li><li><a href="global.html#statChanges">statChanges</a></li><li><a href="global.html#switchTab">switchTab</a></li><li><a href="global.html#symmetrizeData">symmetrizeData</a></li><li><a href="global.html#toDMSString">toDMSString</a></li><li><a href="global.html#updateAllBoats">updateAllBoats</a></li><li><a href="global.html#updateBindPopup">updateBindPopup</a></li><li><a href="global.html#updateBoatSelect">updateBoatSelect</a></li><li><a href="global.html#updateHeading">updateHeading</a></li><li><a href="global.html#updateIconStyle">updateIconStyle</a></li><li><a href="global.html#updateRouteDisplay">updateRouteDisplay</a></li><li><a href="global.html#updateStatusBar">updateStatusBar</a></li><li><a href="global.html#updateWindyMap">updateWindyMap</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Sat Apr 26 2025 16:00:46 GMT+0200 (heure d’été d’Europe centrale)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

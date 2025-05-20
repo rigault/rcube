@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: r3polar.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: r3polar.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/* jshint esversion: 6 */
+
+const POL_TYPE = {WIND_POLAR: 0, WAVE_POLAR: 1}; 
+
+/**
+ * Provide information about polar file 
+ * @param {string} polarName - name of polar
+ */
+function polarInfo (polType, polarName) {
+   const dir = (polType === POL_TYPE.WIND_POLAR) ? "pol" : "wavepol";
+   const formData = `type=${REQ.POLAR}&amp;polar=${dir}/${polarName}`;
+   console.log ("In polarInfo:" + formData);
+
+   fetch (apiUrl, {
+      method: "POST",
+      headers: {
+         "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: formData
+   })
+   .then(response => response.ok ? response.json() : Promise.reject (`In polarInfo Error ${response.status}: ${response.statusText}`))
+   .then (data => {
+      if (Array.isArray(data) &amp;&amp; data.length === 3) {
+         generatePolarPlotly (polType, polarName, data[0], data [1], data [2]); // polar and sailPolar
+      } else {
+         throw new Error ("Invalid format");
+      }
+   })
+   .catch (error => {
+      Swal.fire({
+         title: "Erreur",
+         text: error,
+         icon: "error",
+         confirmButtonColor: "#FFA500",
+         confirmButtonText: "OK"
+      });
+   });
+}
+
+/**
+ * dump polar information about polar
+ * @param {Object} data - polar information
+ * @param {Object} sailData - sail polar information
+ * @param {Object} legend - sail polar legend
+ */
+function showPolarTable (polType, polarName, data, sailData, legend) {
+   let windSpeeds = data.array[0].slice(1).map(v => parseFloat(v)).filter(v => !isNaN(v));
+   console.log("data: " + JSON.stringify(data));
+   console.log("sailData: " + JSON.stringify(sailData));
+   console.log("legend: " + JSON.stringify(legend));
+
+   // Vérifier si sailData et legend sont valides
+   let sailDataValid = sailData &amp;&amp; sailData.array &amp;&amp; Array.isArray(sailData.array) &amp;&amp; sailData.array.length > 0;
+   let legendValid = legend &amp;&amp; legend.legend &amp;&amp; Array.isArray(legend.legend);
+
+   if (!sailDataValid) {
+      console.warn ("sailData is empty or undefined. No color.");
+   }
+   if (!legendValid) {
+      console.warn ("legend is empty or undefined, No legend.");
+   }
+
+   let tableHTML = "&lt;table border='1' style='border-collapse: collapse; width: 100%; text-align: center;'>";
+
+   // Ligne d'en-tête (TWS for wind, height for Waves)
+   tableHTML += (polType === POL_TYPE.WIND_POLAR) ? "&lt;tr style='font-weight: bold; background-color: #FFA500; color: white;'>&lt;th>TWA / TWS&lt;/th>"
+                                                 : "&lt;tr style='font-weight: bold; background-color: #FFA500; color: white;'>&lt;th>Angle / Height&lt;/th>";
+   windSpeeds.forEach(tws => {
+      tableHTML += `&lt;th>${tws}&lt;/th>`;
+   });
+   tableHTML += "&lt;/tr>";
+   const sailNames = Object.keys(sailLegend);
+
+   // Création du tableau principal
+   data.array.slice(1).forEach((row, rowIndex) => {
+      let twa = row[0]; // Angle du vent (TWA)
+      tableHTML += `&lt;tr>&lt;td style='font-weight: bold; background-color: #f0f0f0;'>${twa}°&lt;/td>`;
+
+      row.slice(1).forEach((value, colIndex) => {
+         let cellStyle = "padding: 5px;"; // Style de base
+
+         if (sailDataValid) {
+            let sailValue = sailData.array[rowIndex + 1]?.[colIndex + 1] || 0;
+            const sailName = sailNames[sailValue];
+            const entry = sailLegend[sailName] || { bg: 'lightgray', luminance: 200 };
+            let textColor = getTextColorFromLuminance(entry.luminance);
+            cellStyle += `background-color: ${entry.bg};color: ${textColor};font-weight: bold;`;
+         }
+         tableHTML += `&lt;td style='${cellStyle}'>${value.toFixed(2)}&lt;/td>`;
+      });
+
+      tableHTML += "&lt;/tr>";
+   });
+
+   tableHTML += "&lt;/table>";
+
+   // Génération HTML de la légende
+   let legendHTML = "";
+   if (legendValid) {
+      legendHTML = "&lt;div style='display: flex; justify-content: center; margin-top: 20px; flex-wrap: wrap;'>";
+      Object.entries(sailLegend).forEach(([name, { bg, luminance }]) => {
+         const textColor = getTextColorFromLuminance(luminance);
+         legendHTML += `
+            &lt;div style='
+               background-color: ${bg};
+               color: ${textColor};
+               font-weight: bold;
+               padding: 10px 15px;
+               margin: 5px;
+               border-radius: 5px;
+               min-width: 50px;
+               text-align: center;
+               '>${name}&lt;/div>`;
+      });
+      legendHTML += "&lt;/div>";
+   }
+
+   // Affichage avec SweetAlert
+   Swal.fire({
+      title: (polType === POL_TYPE.WIND_POLAR) ? `Speed in Knots Max: ${data.max}` : `Height in meters Max: ${data.max}`,
+      html: tableHTML + legendHTML,
+      width: "80%",
+      confirmButtonColor: "#FFA500",
+      confirmButtonText: "Return to graph"
+   }).then(() => {
+      generatePolarPlotly (polType, polarName, data, sailData, legend); // Recharge la polaire après fermeture du tableau
+   });
+}
+
+/** interpolate speeds */
+function interpolate (value, x0, y0, x1, y1) {
+   return x1 === x0 ? y0 : y0 + ((value - x0) * (y1 - y0)) / (x1 - x0);
+}
+
+/** interpolate speeds */
+function interpolateSpeeds (tws, windSpeeds, data) {
+   if (tws &lt;= windSpeeds[0]) return data.array.slice(1).map(row => parseFloat(row[1]));
+   if (tws >= windSpeeds[windSpeeds.length - 1]) return data.array.slice(1).map(row => parseFloat(row[windSpeeds.length]));
+
+   let i = 0;
+   while (i &lt; windSpeeds.length - 1 &amp;&amp; windSpeeds[i + 1] &lt; tws) i++;
+
+   let speeds0 = data.array.slice(1).map(row => parseFloat(row[i + 1]));
+   let speeds1 = data.array.slice(1).map(row => parseFloat(row[i + 2]));
+
+   return speeds0.map((s0, index) => interpolate(tws, windSpeeds[i], s0, windSpeeds[i + 1], speeds1[index]));
+}
+
+/** Symetries polar data */
+function symmetrizeData(twaValues, speeds) {
+   let fullTwa = [...twaValues];
+   let fullSpeeds = [...speeds];
+
+   for (let i = twaValues.length - 2; i >= 0; i--) {
+      fullTwa.push(360 - twaValues[i]);
+      fullSpeeds.push(speeds[i]);
+   }
+
+   return { fullTwa, fullSpeeds };
+}
+
+/** calculate max and VMG values */ 
+function findMaxSpeed (speeds) {
+   return Math.max(...speeds);
+}
+
+/** calculate best VMG (Velocity Made Good) when wind is front */ 
+function bestVmg (twaValues, speeds) {
+   let bestSpeed = -1, bestAngle = -1;
+   for (let i = 0; i &lt; twaValues.length; i++) {
+      if (twaValues[i] > 90) break;
+      let vmg = speeds[i] * Math.cos(twaValues[i] * Math.PI / 180);
+      if (vmg > bestSpeed) {
+         bestSpeed = vmg;
+         bestAngle = twaValues[i];
+      }
+   }
+   return { angle: bestAngle, speed: bestSpeed };
+}
+
+/** calculate best VMG (Velocity Made Good) when wind is back */ 
+function bestVmgBack(twaValues, speeds) {
+   let bestSpeed = -1, bestAngle = -1;
+   for (let i = 0; i &lt; twaValues.length; i++) {
+      if (twaValues[i] &lt; 90) continue;
+      let vmg = Math.abs(speeds[i] * Math.cos(twaValues[i] * Math.PI / 180));
+      if (vmg > bestSpeed) {
+         bestSpeed = vmg;
+         bestAngle = twaValues[i];
+      }
+   }
+   return { angle: bestAngle, speed: bestSpeed };
+}
+
+/**
+ * draw with plotty information about polar 
+ * @param {Object} data - polar information
+ * @param {Object} sailData - sail polar information
+ * @param {Object} legend - sail polar legend
+ */
+function generatePolarPlotly (polType, polarName, data, sailData, legend) {
+   if (!data.array || !Array.isArray (data.array) || data.array.length &lt; 2) return;
+   let maxMaxVal = Math.ceil (data.max);
+
+   const windSpeeds = data.array[0].slice(1).map(v => parseFloat(v)).filter(v => !isNaN(v));
+   const twaValues = data.array.slice(1).map(row => parseFloat(row[0])).filter(v => !isNaN(v));
+   let maxTWS = Math.ceil(windSpeeds[windSpeeds.length - 1] * 1.1);
+   const initialTWS = (polType === POL_TYPE.WIND_POLAR) ? 15 : 0;
+   const what =  (polType === POL_TYPE.WIND_POLAR) ? "TWS" : "Height";
+   // polType = POL_TYPE.WIND_POLAR;
+
+   const chartContainer = document.createElement("div");
+   chartContainer.innerHTML = `
+      &lt;label for="windSpeed">${what}:&lt;/label>
+      &lt;input type="range" id="windSpeedSlider" min="${windSpeeds[0]}" max="${maxTWS}" step="0.1" value="${initialTWS}">
+      &lt;span id="windSpeedValue">${initialTWS}&lt;/span>
+      &lt;div id="polarPlotly" style="width: 100%; height: 400px;">&lt;/div>
+      &lt;p>&lt;strong>Max:&lt;/strong> &lt;span id="maxSpeed">-&lt;/span>&lt;/p>
+   `;
+    if (polType === POL_TYPE.WIND_POLAR) {
+       chartContainer.innerHTML += `
+          &lt;p>&lt;strong>Front VMG:&lt;/strong> &lt;span id="bestVmg">-&lt;/span> kn at &lt;span id="bestVmgAngle">-&lt;/span>°&lt;/p>
+          &lt;p>&lt;strong>Back VMG:&lt;/strong> &lt;span id="bestVmgBack">-&lt;/span> kn at &lt;span id="bestVmgBackAngle">-&lt;/span>°&lt;/p>
+       `;
+    }
+    chartContainer.innerHTML += `
+      &lt;button id="showTable" style="margin-top: 10px; padding: 5px 10px; background-color: #FFA500; color: white; border: none; cursor: pointer;">
+         Dump Table
+      &lt;/button>
+   `;
+
+   Swal.fire({ title: `${polarName} Max: ${data.max}`, html: chartContainer, width: "60%", showConfirmButton: true });
+
+
+   function updatePlot (polType, tws) {
+      document.getElementById ("windSpeedValue").innerText = `${tws.toFixed(1)}`;
+
+      let speeds = interpolateSpeeds(tws, windSpeeds, data);
+      let { fullTwa, fullSpeeds } = symmetrizeData(twaValues, speeds);
+
+      let maxSpeed = findMaxSpeed(fullSpeeds);
+      let vmg = bestVmg(fullTwa, fullSpeeds);
+      let vmgBack = bestVmgBack(fullTwa, fullSpeeds);
+
+      document.getElementById("maxSpeed").innerText = maxSpeed.toFixed(2);
+      if (polType === POL_TYPE.WIND_POLAR) { 
+         document.getElementById("bestVmg").innerText = vmg.speed.toFixed(2);
+         document.getElementById("bestVmgAngle").innerText = vmg.angle.toFixed(0);
+         document.getElementById("bestVmgBack").innerText = vmgBack.speed.toFixed(2);
+         document.getElementById("bestVmgBackAngle").innerText = vmgBack.angle.toFixed(0);
+      }
+      const trace = {
+         type: "scatterpolar",
+         mode: "lines", // "lines+markers",
+         r: fullSpeeds,
+         theta: fullTwa,
+         name: `Value: ${tws.toFixed(1)}`,
+         line: { color: "black" },
+         //line: { color: lineColor },
+         hovertemplate: `TWA: %{theta}&lt;br>Speed: %{r:.2f} Kn&lt;extra>&lt;/extra>`
+      };
+
+      const layout = {
+         polar: {
+            radialaxis: { visible: true, range: [0, maxMaxVal || 1] },
+            angularaxis: { direction: "clockwise", rotation: 90 }
+         },
+         showlegend: false
+      };
+
+      Plotly.newPlot ("polarPlotly", [trace], layout);
+   }
+
+   document.getElementById ("windSpeedSlider").addEventListener("input", function() {
+      updatePlot(polType, parseFloat(this.value));
+   });
+
+   document.getElementById ("showTable").addEventListener("click", function() {
+      showPolarTable (polType, polarName, data, sailData, legend);
+   });
+
+   updatePlot (polType, initialTWS);
+}
+
+/**
+ * choose a polar then launch polarInfo 
+ * @param {string} directory
+ * @param {string} current polar name
+ */
+function choosePolar (dir, currentPolar) {
+   const formData = `type=${REQ.DIR}&amp;dir=${dir}&amp;sortByName=true`;
+   console.log ("Requête envoyée:", formData);
+   const polType = (dir === "pol") ? POL_TYPE.WIND_POLAR : POL_TYPE.WAVE_POLAR;
+
+   fetch(apiUrl, {
+      method: "POST",
+      headers: {
+         "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: formData
+   })
+   .then(response => response.json())
+   .then(data => {
+      if (!Array.isArray(data) || data.length === 0) {
+         Swal.fire("Erreur", "No polar file found", "error");
+         return;
+      }
+
+      // Création du menu déroulant SANS la taille et la date
+      const fileOptions = data.map(file => {
+         const selected = file[0] === currentPolar ? "selected" : "";
+         return `&lt;option value="${file[0]}" ${selected}>${file[0]}&lt;/option>`;
+      }).join("");
+
+      // Affichage de la boîte de dialogue
+      Swal.fire({
+         title: "Polar Select",
+         html: `
+            &lt;div class="swal-wide">
+               &lt;select id="polarSelect" class="swal2-select">
+                  ${fileOptions}
+               &lt;/select>
+            &lt;/div>
+         `,
+         showCancelButton: true,
+         confirmButtonText: "Confirm",
+         cancelButtonText: "Cancel",
+         customClass: { popup: "swal-wide" },
+         preConfirm: () => {
+            const selectedFile = document.getElementById("polarSelect").value;
+            if (!selectedFile) {
+               Swal.showValidationMessage ("Select File");
+            }
+            return selectedFile;
+         }
+      }).then(result => {
+         if (result.isConfirmed) {
+            if (polType === POL_TYPE.WIND_POLAR) {
+               polarName = result.value; // Mise à jour du fichier sélectionné
+               saveAppState ();          // save in local context
+               polarInfo (polType,  polarName);
+            }
+            else {
+               polWaveName = result.value;
+               polarInfo (polType,  polWaveName);
+            }
+            updateStatusBar ();
+         }
+      });
+   })
+   .catch(error => {
+      console.error ("Error in file polar request:", error);
+      Swal.fire ("Erreur", "Impossible to get File List", "error");
+   });
+}
+
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#addMarker">addMarker</a></li><li><a href="global.html#addPOI">addPOI</a></li><li><a href="global.html#addWaypoint">addWaypoint</a></li><li><a href="global.html#aisData">aisData</a></li><li><a href="global.html#aisDump">aisDump</a></li><li><a href="global.html#aisLayer">aisLayer</a></li><li><a href="global.html#backWard">backWard</a></li><li><a href="global.html#bestVmg">bestVmg</a></li><li><a href="global.html#bestVmgBack">bestVmgBack</a></li><li><a href="global.html#buildBodyRequest">buildBodyRequest</a></li><li><a href="global.html#button4POI">button4POI</a></li><li><a href="global.html#changeParam">changeParam</a></li><li><a href="global.html#chooseFile">chooseFile</a></li><li><a href="global.html#chooseGrib">chooseGrib</a></li><li><a href="global.html#choosePolar">choosePolar</a></li><li><a href="global.html#clearRoutes">clearRoutes</a></li><li><a href="global.html#closeContextMenu">closeContextMenu</a></li><li><a href="global.html#condenseTimeStamps">condenseTimeStamps</a></li><li><a href="global.html#createProgressBar">createProgressBar</a></li><li><a href="global.html#dateToStr">dateToStr</a></li><li><a href="global.html#deleteAllPOIs">deleteAllPOIs</a></li><li><a href="global.html#deleteCompetitor">deleteCompetitor</a></li><li><a href="global.html#deleteCompetitorByName">deleteCompetitorByName</a></li><li><a href="global.html#deletePOI">deletePOI</a></li><li><a href="global.html#dispAllCompetitors">dispAllCompetitors</a></li><li><a href="global.html#dispBestTimeHistogram">dispBestTimeHistogram</a></li><li><a href="global.html#displayWayPoints">displayWayPoints</a></li><li><a href="global.html#dmsToDecimal">dmsToDecimal</a></li><li><a href="global.html#downloadTextFile">downloadTextFile</a></li><li><a href="global.html#drawGribLimits">drawGribLimits</a></li><li><a href="global.html#drawOrtho">drawOrtho</a></li><li><a href="global.html#drawPolyline">drawPolyline</a></li><li><a href="global.html#dumpFile">dumpFile</a></li><li><a href="global.html#dumpIsoDesc">dumpIsoDesc</a></li><li><a href="global.html#dumpIsoc">dumpIsoc</a></li><li><a href="global.html#dumpRoute">dumpRoute</a></li><li><a href="global.html#epochToStrDate">epochToStrDate</a></li><li><a href="global.html#escapeHtml">escapeHtml</a></li><li><a href="global.html#fPenalty">fPenalty</a></li><li><a href="global.html#fPointLoss">fPointLoss</a></li><li><a href="global.html#fTimeToRecupOnePoint">fTimeToRecupOnePoint</a></li><li><a href="global.html#feedback">feedback</a></li><li><a href="global.html#fetchAisPosition">fetchAisPosition</a></li><li><a href="global.html#fetchGpsPosition">fetchGpsPosition</a></li><li><a href="global.html#finalUpdate">finalUpdate</a></li><li><a href="global.html#findBounds">findBounds</a></li><li><a href="global.html#findMaxSpeed">findMaxSpeed</a></li><li><a href="global.html#forWard">forWard</a></li><li><a href="global.html#formatDuration">formatDuration</a></li><li><a href="global.html#formatDurationShort">formatDurationShort</a></li><li><a href="global.html#formatFileSize">formatFileSize</a></li><li><a href="global.html#formatLocalDate">formatLocalDate</a></li><li><a href="global.html#generatePolarPlotly">generatePolarPlotly</a></li><li><a href="global.html#getGreatCirclePath">getGreatCirclePath</a></li><li><a href="global.html#getLocalUtcOffsetInSeconds">getLocalUtcOffsetInSeconds</a></li><li><a href="global.html#getParam">getParam</a></li><li><a href="global.html#getSerializablePOIs">getSerializablePOIs</a></li><li><a href="global.html#getServerInit">getServerInit</a></li><li><a href="global.html#getTextColorFromLuminance">getTextColorFromLuminance</a></li><li><a href="global.html#goBegin">goBegin</a></li><li><a href="global.html#gpsMarker">gpsMarker</a></li><li><a href="global.html#gpsPolyline">gpsPolyline</a></li><li><a href="global.html#gpsTrack">gpsTrack</a></li><li><a href="global.html#gribInfo">gribInfo</a></li><li><a href="global.html#handleRequest">handleRequest</a></li><li><a href="global.html#helpInfo">helpInfo</a></li><li><a href="global.html#importCSV">importCSV</a></li><li><a href="global.html#interpolate">interpolate</a></li><li><a href="global.html#interpolateSpeeds">interpolateSpeeds</a></li><li><a href="global.html#lastStepDurationFormatted">lastStepDurationFormatted</a></li><li><a href="global.html#latLonToStr">latLonToStr</a></li><li><a href="global.html#launchRouting">launchRouting</a></li><li><a href="global.html#loadAppState">loadAppState</a></li><li><a href="global.html#loxoCap">loxoCap</a></li><li><a href="global.html#loxoDist">loxoDist</a></li><li><a href="global.html#manageCompetitors">manageCompetitors</a></li><li><a href="global.html#move">move</a></li><li><a href="global.html#newCompetitor">newCompetitor</a></li><li><a href="global.html#orthoCap">orthoCap</a></li><li><a href="global.html#orthoDist">orthoDist</a></li><li><a href="global.html#parDump">parDump</a></li><li><a href="global.html#polarInfo">polarInfo</a></li><li><a href="global.html#popup4Comp">popup4Comp</a></li><li><a href="global.html#refreshMarker">refreshMarker</a></li><li><a href="global.html#removeCompetitor">removeCompetitor</a></li><li><a href="global.html#replay">replay</a></li><li><a href="global.html#request">request</a></li><li><a href="global.html#requestAllCompetitors">requestAllCompetitors</a></li><li><a href="global.html#requestBestTime">requestBestTime</a></li><li><a href="global.html#requestOne">requestOne</a></li><li><a href="global.html#resetWaypoint">resetWaypoint</a></li><li><a href="global.html#saveAppState">saveAppState</a></li><li><a href="global.html#setBoat">setBoat</a></li><li><a href="global.html#showAIS">showAIS</a></li><li><a href="global.html#showBoatPosition">showBoatPosition</a></li><li><a href="global.html#showContextMenu">showContextMenu</a></li><li><a href="global.html#showDestination">showDestination</a></li><li><a href="global.html#showInitMessage">showInitMessage</a></li><li><a href="global.html#showPOI">showPOI</a></li><li><a href="global.html#showPolarTable">showPolarTable</a></li><li><a href="global.html#showRoute">showRoute</a></li><li><a href="global.html#showRouteReport">showRouteReport</a></li><li><a href="global.html#showWayPoint">showWayPoint</a></li><li><a href="global.html#simplify">simplify</a></li><li><a href="global.html#stamina">stamina</a></li><li><a href="global.html#statChanges">statChanges</a></li><li><a href="global.html#switchTab">switchTab</a></li><li><a href="global.html#symmetrizeData">symmetrizeData</a></li><li><a href="global.html#toDMSString">toDMSString</a></li><li><a href="global.html#updateAllBoats">updateAllBoats</a></li><li><a href="global.html#updateBindPopup">updateBindPopup</a></li><li><a href="global.html#updateBoatSelect">updateBoatSelect</a></li><li><a href="global.html#updateHeading">updateHeading</a></li><li><a href="global.html#updateIconStyle">updateIconStyle</a></li><li><a href="global.html#updateRouteDisplay">updateRouteDisplay</a></li><li><a href="global.html#updateStatusBar">updateStatusBar</a></li><li><a href="global.html#updateToolsVisibility">updateToolsVisibility</a></li><li><a href="global.html#updateWindyMap">updateWindyMap</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.4</a> on Tue May 13 2025 23:41:58 GMT+0200 (heure d’été d’Europe centrale)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang = "fr">
+<head>
+<meta charset="UTF-8">
+<title>RCube</title>
+<link rel="icon" type="image/ico" href="favicon.ico">
+<link rel="stylesheet" type="text/css" href="r3help.css">
+</head>
+<body>
+<header> 
+   <div class="container">
+      <div class="menu"></div>
+      <div class="main">
+         <span class=titlename>Rcube</span>
+      </div>
+   </div>
+   <hr>
+</header>
+
+<div class="container">
+
+<div class="menu">
+<h2>Table des matières </h2>
+   <a href="#chap1">1. Introduction</a>
+   <a href="#chap2">2. Documentation</a>
+   <a href="#chap3">3. Fichiers</a>
+   <p></p>
+
+   <table>
+      <caption>Acronymes et signification associée</caption>
+      <thead>
+         <tr>
+            <th>Acronyme</th><th>Littéral</th>
+         </tr>
+      </thead>
+      <tbody>
+         <tr>
+            <td>ECMWF</td><td>European Centre for <br>Medium-Range Weather Forecasts</td>
+         </tr>
+         <tr>
+            <td>GFS</td><td>Global Forecast System</td>
+         </tr>
+         <tr>
+            <td>GRIB</td><td>General Regularly-distributed <br>Information in Binary</td>
+         </tr>
+         <tr>
+            <td>NOAA</td><td>National Oceanic and Atmosphere <br>Administration</td>
+         </tr>
+         <tr>
+            <td>AWA</td><td>Apparent Wind Angle</td>
+         </tr>
+         <tr>
+            <td>AWS</td><td>Apparent Wind Speed</td>
+         </tr>
+         <tr>
+            <td>HDG</td><td>Heading</td>
+         </tr>
+         <tr>
+            <td>TWA</td><td>True Wind Angle</td>
+         </tr>
+         <tr>
+            <td>TWD</td><td>True Wind Direction</td>
+         <tr>
+            <td>TWS</td><td>True Wind Speed</td>
+         <tr>
+            <td>COG</td><td>Course Over Ground</td>
+         </tr>
+         <tr>
+            <td>SOG</td><td>Speed Over Ground</td>
+         </tr>
+         <tr>
+            <td>VMC</td><td>Velocity Made On Course</td>
+         </tr>
+         <tr>
+            <td>VMG</td><td>Velocity Made Good</td>
+         </tr>
+      </tbody>
+   </table>
+</div> <!-- menu -->
+
+<div class="main">
+
+<h1 id="chap1">1. Introduction</h1>
+
+<p>Le client utilise les techniques de développements Web classiques. HTML, CSS et Javascript</p>
+<p>L'essentiel est rédigé en Javascript.<p>
+<p>Le client consomme l'API Json exposée par le serveur.</p>
+<p>Il utilise pour cela les instructions <code>fetch</code> Javascript.</p>
+<p>Un plugin <code>aisgpsserver</code> écrit en langage C permettant de retrouver les informations AIS et GPS est décrit dans l'annexe consacrée au serveur.<p>
+<p>Le client utilise l'API <strong>windy</strong> pour l'affichage du fond de carte météo.</p>
+<p>L'API Windy repose sur l'API <strong>leaflet</strong>.
+<p>L'API <strong>sweetalert2</strong> est utilisée pour la gestion des alertes des boites de dialogues, des tableaux.<p> 
+<p>L'API <strong>plotly</strong> est utilisée pour la représentation des graphiques.<p> 
+
+<h1 id="chap2">2. Documentation</h1>
+   <p>La documentation est constituée&nbsp;:</p>
+   <ul>
+      <li>Des fichiers html, css que vous lisez et qui sont dans le répertoire <code>www</code>,</li>
+      <li>de la documentation produite par la commande <code>jsdoc *.js</code></li>
+   </ul>
+
+<h1 id="chap3">3. Fichiers</h1>
+<h2> Fichiers html et css </h2>
+   <table>
+      <caption>Fichiers et actions associées</caption>
+      <thead>
+      <tr>
+         <th>Fichier</th><th>Commentaire</th>
+      </tr>
+      </thead>
+      <tbody>
+         <tr>
+            <td>r3.html ou index.html</td><td>Point d'entrée. Définition des menus</td>
+         </tr>
+         <tr>
+            <td>r3help.html</td><td>Aide Utilisateur</td>
+         </tr>
+         <tr>
+            <td>r3ServerTechDoc.html</td><td>Documentation technique pour le côté serveur et la description de l'API.</td>
+         </tr>
+         <tr>
+            <td>r3ClientTechDoc.html</td><td>Documentation technique pour le côté client (le fichier que vous lisez).</td>
+         </tr>
+         <tr>
+            <td>r3.css</td><td>Elements CSS principaux.</td>
+         </tr>
+         <tr>
+            <td>r3help.css</td><td>Elements CSS pour r3help.html, r3ServerTechDoc.html et r3ClientTechDoc.html.</td>
+         </tr>
+         <tr>
+            <td>r3par.css</td><td>Elements CSS pour r3par.js importé via r3.html.</td>
+         </tr>
+         <tr>
+            <td>launch.css</td><td>Elements CSS pour launch.js importé via r3.html.</td>
+         </tr>
+         <tr>
+            <td>stamina.css</td><td>Elements CSS pour stamina.js, importé via r3.html.</td>
+         </tr>
+      </tbody>
+   </table>
+
+<h2>Fichiers javascripts js</h2>
+   <table>
+      <caption>Fichiers et actions associées</caption>
+      <thead>
+      <tr>
+         <th>Fichier</th><th>Commentaire</th>
+      </tr>
+      </thead>
+      <tbody>
+         <tr>
+            <td>r3.js</td><td>Le code principal.</td>
+         </tr>
+         <tr>
+            <td>r3param.js</td><td>Paramètres globaux à adapter.</td>
+         </tr>
+         <tr>
+            <td>r3par.js</td><td>Gestion des paramètres. Associé au fichier CSS r3par.css.</td>
+         </tr>
+         <tr>
+            <td>aisgps.js</td><td>Gestion ais et gps. A associer avec le plugin écrit en c <code>aisgpsserver</code>.</td>
+         </tr>
+         <tr>
+            <td>feedback.js</td><td>Envoi de feed back par l'utilisateur.</td>
+         </tr>
+         <tr>
+            <td>launch.js</td><td>Boîte de Lancement d'un routage.</td>
+         </tr>
+         <tr>
+            <td>r3besttime.js</td><td>Choix du meilleur moment pour partir.</td>
+         </tr>
+         <tr>
+            <td>r3displaycomp.js</td><td>Affichage et gestion des compétiteurs. Import via fichiers CSV possible pour Virtual Regatta.</td>
+         </tr>
+         <tr>
+            <td>r3grib.js</td><td>Affichage des méta-informations Grib.</td>
+         </tr>
+         <tr>
+            <td>r3polar.js</td><td>Choix, affichage et dump des polaires.</td>
+         </tr>
+         <tr>
+            <td>r3routereport.js</td><td>Affichage de la route (routegramme), dump de la route, 
+                dump des isoDesc (méta-informations sur isochrones).</td>
+         </tr>
+         <tr>
+            <td>r3routinglaunch.js</td><td>Lancement du routage.</td>
+         </tr>
+         <tr>
+            <td>r3util.js</td><td>Utilitaires (helpInfo, initialisations).</td>
+         </tr>
+         <tr>
+            <td>util.js</td><td>Fonction utile pour conversions et gestion du temps.</td>
+         </tr>
+         <tr>
+            <td>r3waypoints.js</td><td>Affichage des waypoints et fonctions de calculs (orthodromie, loxodromie).</td>
+         </tr>
+         <tr>
+            <td>stamina.js</td><td>Gestion de la stamina ou énergie pour Virtual Regatta.</td>
+         </tr>
+      </tbody>
+   </table>
+
+<h2>Repertoire "out"</h2>
+   <p>Contient les fichiers produits par JSdoc. Le point d'entrée est <code>out/index.html</code>.<p>
+
+<h2>Conventions de codage</h2>
+<p>ESlint est utilisé pour vérifier le code</p>
+<p>package.json et eslint.config.js pour la définition du comportement. </p>
+
+</div> <!-- main -->
+
+<div class="notes">
+
+<h2>Liens </h2>
+
+<p><a href= "../out/index.html">JSdoc</a></p>
+<p><a href= "https://api.windy.com/map-forecast/docs">Windy API</a></p>
+<p><a href= "https://leafletjs.com/">Leaflet Library</a></p>
+<p><a href= "https://sweetalert2.github.io/">Sweetalert2 (swal2)</a></p>
+<p><a href= "https://plotly.com/">Plotly</a></p>
+
+</div> <!-- notes -->
+</div> <!-- container -->
+<hr>
+
+<footer>
+René Rigault, 2025
+</footer>
+
+</body>
+</html>

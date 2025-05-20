@@ -1,0 +1,3 @@
+#!/bin/bash
+google-chrome --disable-web-security --user-data-dir="/tmp/chrome_dev" r3.html
+#google-chrome r3.html
