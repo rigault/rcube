@@ -1,5 +1,4 @@
 /*! compilation: gcc -c aisgps.c `pkg-config --cflags glib-2.0` */
-
 #ifdef _WIN32
 #include <windows.h>
 #else
