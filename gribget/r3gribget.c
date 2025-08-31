@@ -6,7 +6,6 @@
    calculate automatically the run depending on UTC time and estimated DELAY 
 */
 
-#include <glib.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +14,11 @@
 #include <curl/curl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <errno.h>
+#include <dirent.h>      // DIR, opendir, readdir, closedir
+
+#include "../csources/glibwrapper.h"
 
 #define SYNOPSYS "<dir> <mode> [<maxStep> <topLat> <leftLon> <bottomLat> <rightLon>]\n\
 dir: directory that will host grib file. Ex: /../../grib\n\
@@ -88,29 +92,138 @@ static bool fileExists (const char *filename) {
    return (stat (filename, &buffer) == 0 && buffer.st_size > 0);
 }
 
-/*! remove all .tmp file with prefix */
-static void removeAllTmpFilesWithPrefix (const char *prefix) {
-   char *directory = g_path_get_dirname (prefix); 
-   char *base_prefix = g_path_get_basename (prefix);
+/*! return secondes with decimals */
+double monotonic (void) {
+   struct timespec ts;
+   clock_gettime(CLOCK_MONOTONIC, &ts);
+   return (double) ts.tv_sec + (double) ts.tv_nsec * 1e-9;
+}
 
-   GDir *dir = g_dir_open (directory, 0, NULL);
-   if (!dir) {
-      fprintf (stderr, "In removeAllTmpFilesWithPrefix: Fail opening directory: %s", directory);
-      g_free (directory);
-      g_free (base_prefix);
+/*! Equivalent to GLIB g_mkdir_with_parents.
+   or bash  mkdir -p */
+int mkdir_p(const char *path, mode_t mode) {
+   if (!path || !*path) { errno = EINVAL; return -1; }
+
+   char *tmp = strdup(path);
+   if (!tmp) { errno = ENOMEM; return -1; }
+
+   // delete filals //
+   size_t len = strlen(tmp);
+   while (len > 1 && tmp[len - 1] == '/') {
+      tmp[--len] = '\0';
+   }
+
+   // create every level
+   for (char *p = tmp + 1; *p; ++p) {
+      if (*p == '/') {
+         *p = '\0';
+         if (mkdir(tmp, mode) != 0) {
+            if (errno != EEXIST) { free(tmp); return -1; }
+            struct stat st;
+            if (stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode)) {
+               free(tmp); errno = ENOTDIR; return -1;
+            }
+         }
+         *p = '/';
+      }
+   }
+
+   // create last level
+   if (mkdir(tmp, mode) != 0) {
+      if (errno != EEXIST) {
+         free(tmp);
+         return -1;
+      }
+      struct stat st;
+      if (stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode)) {
+         free(tmp); errno = ENOTDIR; return -1;
+      }
+   }
+
+   free(tmp);
+   return 0;
+}
+
+/*! split "prefix" to (directory, base_prefix).
+ *  Ex: "/tmp/abc" -> /tmp" and "abc"
+ */
+static void splitPrefix(const char *input, char **out_dir, char **out_base) {
+   const char *slash = strrchr(input, '/');
+   if (slash) {
+      size_t dir_len = (size_t)(slash - input);
+      if (dir_len == 0) dir_len = 1; /* garder "/" */
+      *out_dir = (char *)malloc(dir_len + 1);
+      if (*out_dir) {
+         memcpy(*out_dir, input, dir_len);
+         (*out_dir)[dir_len] = '\0';
+      }
+      *out_base = strdup(slash + 1);
+   } else {
+      *out_dir = strdup(".");
+      *out_base = strdup(input);
+   }
+   if (!*out_dir || !*out_base) {
+      free(*out_dir); free(*out_base);
+      *out_dir = *out_base = NULL;
+   }
+}
+
+/*! remove all .tmp file with prefix */
+static void removeAllTmpFilesWithPrefix(const char *prefix) {
+   char *directory = NULL;
+   char *base_prefix = NULL;
+
+   splitPrefix (prefix, &directory, &base_prefix);
+   if (!directory || !base_prefix) {
+      fprintf(stderr, "removeAllTmpFilesWithPrefix: out of memory\n");
+      free(directory); free(base_prefix);
       return;
    }
-   const char *filename = NULL;
-   while ((filename = g_dir_read_name (dir))) {
-      if (g_str_has_prefix (filename, base_prefix) && g_str_has_suffix(filename, ".tmp")) {
-         char *filepath = g_build_filename (directory, filename, NULL);
-         remove (filepath);
-         g_free (filepath);
-     }
+
+   DIR *dir = opendir(directory);
+   if (!dir) {
+      fprintf(stderr, "In removeAllTmpFilesWithPrefix: Fail opening directory: %s: %s\n",
+            directory, strerror(errno));
+      free(directory);
+      free(base_prefix);
+      return;
    }
-   g_dir_close(dir);
-   g_free(directory);
-   g_free(base_prefix);
+
+   struct dirent *ent;
+   while ((ent = readdir(dir)) != NULL) {
+      const char *filename = ent->d_name;
+
+      /* Ignore "." et ".." */
+      if (filename[0] == '.' && (filename[1] == '\0' || (filename[1] == '.' && filename[2] == '\0')))
+         continue;
+
+      if (g_str_has_prefix(filename, base_prefix) && g_str_has_suffix(filename, ".tmp")) {
+         size_t dir_len = strlen(directory);
+         int need_slash = (dir_len > 0 && directory[dir_len - 1] != '/');
+         size_t path_len = dir_len + need_slash + strlen(filename) + 1;
+
+         char *filepath = (char *)malloc(path_len);
+         if (!filepath) {
+            /* pas de mémoire : on saute */
+            continue;
+         }
+
+         if (need_slash)
+            snprintf(filepath, path_len, "%s/%s", directory, filename);
+         else
+            snprintf(filepath, path_len, "%s%s", directory, filename);
+
+         if (remove(filepath) != 0) {
+            fprintf(stderr, "removeAllTmpFilesWithPrefix: failed to remove %s: %s\n",
+                  filepath, strerror(errno));
+         }
+         free(filepath);
+      }
+   }
+
+   closedir(dir);
+   free(directory);
+   free(base_prefix);
 }
 
 /*! Treatment for ECMWF or ARPEGE or AROME files. DO NO USE FOR NOAA: USELESS because already reduced and may bug.
@@ -145,9 +258,9 @@ static bool reduce (const char *dir, const char *inFile, const char *shortNames,
    snprintf (command, MAX_SIZE_LINE, "wgrib2 %s/%s -small_grib %.0lf:%.0lf %.0lf:%.0lf %s >/dev/null",
       dir, tempCompact, lonLeft, lonRight, latMin, latMax, outFile);
    
-   if (verbose) printf ("wrib2: %s\n", command);
+   if (verbose) printf ("wgrib2: %s\n", command);
    if (system (command) != 0) {
-      fprintf (stderr, "In reduce, Error call: %s, no: %d\n", command, errno);
+      fprintf (stderr, "In reduce, Error call: %s\n", command);
       remove (toRemove);
       return false;
    }
@@ -392,10 +505,18 @@ static void fetchArome (int maxStep, double topLat, double leftLon, double botto
    concatenateGrib (METEO_FRANCE_ROOT, "AROME", yyyy, mm, dd, hh, maxStep);
 }
 
+/*! Uncompress Grib file received from METOCONSULT to Template 5.0 */
+static bool uncompress (const char *in, const char *out) {
+   char command [MAX_SIZE_LINE * 4];
+   snprintf (command, sizeof (command), "wgrib2 %s -set_scaling same same -set_grib_type simple -grib_out %s >/dev/null", in, out);
+   return (system (command) == 0);
+}
+
 /*! Process METEOCONSULT Wind grib download */
 static void fetchMeteoConsult (int type, int region) {
    char yyyy [5], mm [3], dd [3], hh [3], url [1024] = "";
    char finalFile [MAX_SIZE_LINE];
+   char uncompressedFile [MAX_SIZE_LINE];
 
    int nTry = 0;
    int delay = (type == METEO_CONSULT_WIND) ? METEO_CONSULT_WIND_DELAY : METEO_CONSULT_CURRENT_DELAY;
@@ -412,10 +533,11 @@ static void fetchMeteoConsult (int type, int region) {
          snprintf (url, sizeof (url), METEO_CONSULT_CURRENT_URL [region *2 + 1], METEO_CONSULT_ROOT_GRIB_URL, hhInt, mmInt, ddInt);
       printf ("url: %s\n", url);
 
-      char *baseName= g_path_get_basename (url);
+      char *baseName= path_get_basename (url);
       snprintf (finalFile, sizeof(finalFile), "%s/%s", gribDir, baseName);
       printf ("finalFile: %s\n", finalFile);
-      g_free (baseName);
+      snprintf (uncompressedFile, sizeof(uncompressedFile), "%s/UC_%s", gribDir, baseName);
+      free (baseName);
 
       if (downloadFile (url, finalFile))
          break; // success
@@ -428,12 +550,16 @@ static void fetchMeteoConsult (int type, int region) {
 
    if (nTry >=  MAX_N_TRY)
       fprintf (stderr, "⚠️ Download failed after: %d try\n", nTry);
+   else  // creation of uncompressed file
+      if (!uncompress(finalFile, uncompressedFile)) {
+        fprintf(stderr, "⚠️ Uncompress failed for: %s\n", finalFile);
+      }
 }
 
 int main (int argc, char *argv[]) {
    double topLat = 60.0, leftLon = -80.0, bottomLat = -20.0, rightLon = 10.0; // default values
    int maxStep = MAX_STEP;
-   gint64 start = g_get_monotonic_time ();
+   double start = monotonic (); 
 
    if (argc != 8 && argc != 3) {
       fprintf (stderr, "Usage: %s %s\n", argv[0], SYNOPSYS);
@@ -451,8 +577,10 @@ int main (int argc, char *argv[]) {
       rightLon = atof (argv[7]);
    }
 
-   g_mkdir_with_parents (gribDir, 0755);
-   
+   if (mkdir_p (gribDir, 0755) != 0) {
+      fprintf (stderr, "mkdir_p(%s) failed: %s\n", gribDir, strerror(errno));
+   }
+
    switch (mode) {
    case 1:
       fetchNoaa (maxStep, topLat, leftLon, bottomLat, rightLon);
@@ -476,7 +604,7 @@ int main (int argc, char *argv[]) {
       fprintf (stderr, "Invalid mode: Use 1 for NOAA, 2 for ECMWF, 3 for ARPEGE, 4 for AROME, 5xy or 6xy for METEO_CONSULT.\n");
       return EXIT_FAILURE;
    }  
-   double elapsed = (g_get_monotonic_time () - start) / 1e6; 
+   double elapsed = monotonic () - start; 
    printf ("✅ Processing completed in: %.2lf seconds.\n\n", elapsed);
    return EXIT_SUCCESS;
 }
