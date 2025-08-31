@@ -6,16 +6,17 @@
 * cog = Course over Ground  of the boat
 * */
 /*! compilation: gcc -c engine.c `pkg-config --cflags glib-2.0` */
-#include <glib.h>
 #include <float.h>   
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <time.h>
 #include <math.h>
 #include "r3types.h"
+#include "glibwrapper.h"
 #include "inline.h"
 #include "r3util.h"
 #include "grib.h"
@@ -25,7 +26,6 @@
 #define MIN_VMC_RATIO   0.5                     // for forwardSectorOptimize
 #define MAX_N_HISTORY   20                      // for saveRoute
 #define MAX_UNREACHABLE 0                       // for bestTimeDeparture. 0 mens stop after first unreeach detected.
-#define LIMIT_SOG       100                     // for SOG error detection
 #define MIN_DT          0.1                     // in hours, the minimum delta time to progress, includi,ng penalties
 
 /*! global variables */
@@ -444,9 +444,9 @@ static void statRoute (SailRoute *route) {
    Pp p = {0};
    if (route->n == 0) return;
    printf ("route.n = %d\n", route->n);
-   char *polarFileName = g_path_get_basename (par.polarFileName);
+   char *polarFileName = path_get_basename (par.polarFileName);
    g_strlcpy (route->polarFileName, polarFileName, sizeof (route->polarFileName));
-   g_free (polarFileName);
+   free (polarFileName);
    route->dataDate = zone.dataDate [0]; // save Grib origin
    route->dataTime = zone.dataTime [0];
    route->nSailChange = 0;
@@ -753,12 +753,14 @@ static inline bool goalP (const Pp *pA, const Pp *pB, const Pp *pDest, double t,
    if (par.withWaves && (w > 0) && ((waveCorrection = findPolar (twa, w, &wavePolMat, NULL, &bidon)) > 0)) { 
       sog = sog * (waveCorrection / 100.0);
    }
+
    if (sog > epsilon)
       *timeTo = *distance/sog;
    else {
       *timeTo = DBL_MAX;
       return false;
    }
+
    penalty = 0.0;
    // printf ("distance: %.2lf, twd: %.2lf, twa : %.2lf, tws: %.2lf, cog: %.2lf, sog:%.2lf, timeTo:%.2lf \n", *distance, twd, twa, tws, cog, sog, *timeTo);
    if (! *motor) {
@@ -770,6 +772,7 @@ static inline bool goalP (const Pp *pA, const Pp *pB, const Pp *pDest, double t,
          penalty += par.penalty2 / 3600.0;                      
    }
    else penalty = 0.0;
+
    double realDt = dt - penalty;
    if (realDt < MIN_DT) realDt = MIN_DT;   // In case penalty is very big...  
    
@@ -857,7 +860,6 @@ static void replicate(int n) {
     }
     isoDesc[n] = isoDesc[n - 1];
 }
-
 
 /*! find optimal routing from p0 to pDest using grib file and polar
     return number of steps to reach pDest, NIL if unreached, -1 if problem, -2 if stopped by user, 
@@ -1202,6 +1204,7 @@ void *allCompetitors () {
 }
 
 /*! translate hours in a string */
+/*
 static char *delayToStr (double delay, char *str, size_t maxLen) {
    const char prefix = (delay < 0) ? '-' : ' ';
    delay = fabs (delay);
@@ -1218,15 +1221,7 @@ static char *delayToStr (double delay, char *str, size_t maxLen) {
    
    return str;
 }
-
-/*! compare competittor duration for qsort */
-static int compareDuration (const void *a, const void *b) {
-    const Competitor *compA = (const Competitor *) a;
-    const Competitor *compB = (const Competitor *) b;
-    if (compA->duration < compB->duration) return -1;
-    if (compA->duration > compB->duration) return 1;
-    return 0;
-}
+*/
 
 /*! log one CSV line report. n is the number of competitors */
 void logReport (int n) {
@@ -1238,7 +1233,8 @@ void logReport (int n) {
    FILE *f;
    if (par.logFileName [0] == '\0') // check that a log file name is defined
       return;
-   bool existFile = g_file_test (par.logFileName, G_FILE_TEST_EXISTS);
+   struct stat st;
+   bool existFile = stat (par.logFileName, &st) == 0;
 
    if ((f = fopen (par.logFileName, "a")) == NULL) {
       fprintf (stderr, "In logReport, Error opening lo report file: %s\n", par.logFileName);
@@ -1254,8 +1250,8 @@ void logReport (int n) {
    newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route.duration, 
       arrivalDate, sizeof (arrivalDate));
 
-   char *polarFileName = g_path_get_basename (par.polarFileName);
-   char *gribFileName = g_path_get_basename (par.gribFileName);
+   char *polarFileName = path_get_basename (par.polarFileName);
+   char *gribFileName = path_get_basename (par.gribFileName);
 
    fprintf (f, "%04d-%02d-%02d %02d:%02d:%02d; %4.2lf; %4d; %c; %d; %s; %s; %s; %s; %s; %s; %.2lf; %3d°; %s; %s\n",
         timeInfos->tm_year+1900, timeInfos->tm_mon+1, timeInfos->tm_mday,
@@ -1273,13 +1269,13 @@ void logReport (int n) {
         polarFileName,
         gribFileName
    );
-   g_free (polarFileName);
-   g_free (gribFileName);
+   free (polarFileName);
+   free (gribFileName);
    fclose (f);
 }
    
-/*! translate competitors struct in a string  */
-void competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen, char *footer, size_t maxLenFooter) {
+/*! translate competitors struct in a string */
+/*void competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen, char *footer, size_t maxLenFooter) {
    char strDep [MAX_SIZE_DATE];
    char strDelay [MAX_SIZE_LINE], strMainDelay [MAX_SIZE_LINE];
    char line [MAX_SIZE_TEXT];
@@ -1317,7 +1313,7 @@ void competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen, c
       noAccents [18] = '\0'; // trunc
       snprintf (line, sizeof (line), "%-19s;%12s; %12s;      %8.2lf; %16s; %8.2lf; %16s; %16s\n", 
          noAccents, strLat, strLon, dist, copyComp->t[i].strETA, copyComp->t[i].dist, strDelay, strMainDelay);
-      g_free (noAccents);
+      free (noAccents);
 
       g_strlcat (buffer, line, maxLen);
    }
@@ -1328,8 +1324,9 @@ void competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen, c
    g_strlcat (buffer, " \n", maxLen);
    g_strlcat (buffer, footer, maxLen);
 }
-
+*/
 /*! export route with GPX format */
+/*
 bool exportRouteToGpx (const SailRoute *route, const gchar *fileName) {
    FILE *f;
    char strTime [MAX_SIZE_DATE]; 
@@ -1373,255 +1370,4 @@ bool exportRouteToGpx (const SailRoute *route, const gchar *fileName) {
    printf ("GPX file:%s generated\n", fileName);
    return true;
 }
-
-/*! generate json description of isochrones */
-GString *isochronesToJson () {
-   Pp pt;
-   int index;
-   GString *jsonString = g_string_new ("[\n");
-   Pp *newIsoc = NULL; // array of points
-   if ((newIsoc = malloc (MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
-      fprintf (stderr, "In isochronesToJson: error in memory newIsoc allocation\n");
-      return NULL;
-   }
-   
-   for (int i = 0; i < nIsoc; i += 1) {
-      g_string_append_printf (jsonString, "   [\n"); 
-      index = (isoDesc [i].size <= 1) ?  0 : isoDesc [i].first;
-      for (int j = 0; j < isoDesc [i].size; j++) {
-         newIsoc [j] = isocArray [i * MAX_SIZE_ISOC + index];
-         index += 1;
-         if (index == isoDesc [i].size) index = 0;
-      }
-      int max = isoDesc [i].size;
-      for (int k = 0; k < max; k++) {
-         pt = newIsoc [k];
-         g_string_append_printf (jsonString, "      [%.6lf, %.6lf, %d, %d, %d]%s\n", pt.lat, pt.lon, pt.id, pt.father, k, (k < max - 1) ? ","  : ""); 
-      }
-      g_string_append_printf (jsonString, "   ]%s\n", (i < nIsoc -1) ? "," : ""); // no comma for last value 
-   }
-   g_string_append_printf (jsonString, "]\n"); 
-   free (newIsoc);
-   return jsonString;
-}
-
-/*! generate json description of isochrones decriptor */
-GString *isoDescToJson () {
-   GString *jsonString = g_string_new ("[\n");
-
-   for (int i = 0; i < nIsoc; i++) {
-      //double distance = isoDesc [i].distance;
-      //if (distance >= DBL_MAX) distance = -1;
-      g_string_append_printf (jsonString, "   [%d, %d, %d, %d, %d, %.2lf, %.2lf, %.6lf, %.6lf]%s\n",
-         i, isoDesc [i].toIndexWp, isoDesc[i].size, isoDesc[i].first, isoDesc[i].closest, 
-         isoDesc[i].bestVmc, isoDesc[i].biggestOrthoVmc, 
-         isoDesc [i].focalLat, 
-         isoDesc [i].focalLon,
-         (i < nIsoc - 1) ? "," : "");
-   }
-   g_string_append_printf (jsonString, "]\n"); 
-   return jsonString;
-}
-
-/*! generate json description of track boats */
-GString *routeToJson (SailRoute *route, int index, bool isoc, bool isoDesc) {
-   GString *jString = g_string_new ("");
-   char strSail [MAX_SIZE_NAME];
-   double twa = 0.0, hdg = 0.0, twd = 0.0;
-   if (route->n <= 0) return jString;
-
-   int iComp = (route->competitorIndex < 0) ? 0 : route->competitorIndex;
-   gchar *gribBaseName = g_path_get_basename (par.gribFileName);
-   gchar *gribCurrentBaseName = g_path_get_basename (par.currentGribFileName);
-   gchar *wavePolarBaseName = g_path_get_basename (par.wavePolFileName);
-
-   g_string_append_printf (jString, "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"duration\": %d, \"totDist\": %.2lf, \n",
-      competitors.t[iComp].name, route->t [index].lCap, 0, (int) (route->duration * 3600), route->totDist);
-
-   g_string_append_printf (jString, "\"routingRet\": %d,\n", route->ret);
-   g_string_append_printf (jString, "\"isocTimeStep\": %.2lf,\n", route->isocTimeStep * 3600);
-   g_string_append_printf (jString, "\"calculationTime\": %.4lf,\n", route->calculationTime);
-   g_string_append_printf (jString, "\"destinationReached\": %s,\n", (route->destinationReached) ? "true" : "false");
-
-   g_string_append_printf (jString, "\"lastStepDuration\": [");
-   for (int i = 0; i < route->nWayPoints; i += 1)
-      g_string_append_printf (jString, "%.4lf, ", route->lastStepWpDuration [i] * 3600.0);
-   g_string_append_printf (jString, "%.4f],\n", route->lastStepDuration * 3600.0);
-   
-   g_string_append_printf (jString, "\"motorDist\": %.2lf, \"starboardDist\": %.2lf, \"portDist\": %.2lf,\n", \
-      route->motorDist, route->tribordDist, route->babordDist);
-
-   g_string_append_printf (jString, "\"nSailChange\": %d, \"nAmureChange\": %d,\n", route->nSailChange, route->nAmureChange);
-
-   g_string_append_printf (jString, "\"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf,\n",
-      zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight);
- 
-   g_string_append_printf (jString, "\"polar\": \"%s\", \"wavePolar\": \"%s\", \"grib\": \"%s\", \"currentGrib\": \"%s\", \"track\": [\n", 
-      route->polarFileName, wavePolarBaseName, gribBaseName, gribCurrentBaseName);
-   g_free (wavePolarBaseName);
-   g_free (gribBaseName);
-   g_free (gribCurrentBaseName);
-
-   for (int i = 0; i < route->n; i++) {
-      if (route->t[i].sog > LIMIT_SOG)
-         fprintf (stderr, "In routeToJson sog > LIMIT_SOG, lat = %.6lf, lon = %.6lf, sog = %.6lf, od = %.6lf; ld = %.6lf\n",
-            route->t[i].lat, route->t[i].lon, route->t[i].sog, route->t[i].od, route->t[i].ld);
-
-      twa = fTwa (route->t[i].lCap, route->t[i].twd);
-      hdg = route->t [i].oCap;
-      if (hdg < 0) hdg += 360;
-      twd = route->t[i].twd;
-      if (twd < 0) twd += 360;
-      fSailName (route->t[i].sail, strSail, sizeof (strSail));
-   if ((route->t[i].toIndexWp < -1) || (route->t[i].toIndexWp >= route->nWayPoints)) {
-         printf ("In routeToJson, Error: toIndexWp outside range; %d\n", route->t[i].toIndexWp);
-         // if (jString->str [jString->len -2] == ',') g_string_truncate (jString, jString->len - 2); break;
-      } 
-      g_string_append_printf (jString, "   [%d, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, \"%s\", %s, %d, %d]%s\n", 
-         route->t[i].toIndexWp,
-         route->t[i].lat, route->t[i].lon,
-         route->t[i].time * 3600.0,
-         route->t[i].od, route->t[i].sog, 
-         twd ,route->t[i].tws, 
-         hdg, twa,
-         route->t[i].g, route->t[i].w ,route->t[i].stamina, 
-         strSail, (route->t[i].motor) ? "true" : "false",
-         route->t[i].id, route->t[i].father,
-         //(route->destinationReached || i < route-> n - 1) ? "," :"");
-         (i < route-> n - 1) ? "," :"");
-   }
-   /*if (route->destinationReached)
-      g_string_append_printf (jString, "   [%d, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, \"%s\", %s, %d, %d]\n", 
-      -1,
-      par.pDest.lat, par.pDest.lon,
-      (route->t[route->n - 1].time + route->lastStepDuration) * 3600.0,
-      0.0, route->t[route->n - 1].sog,        // no other step. Dist = 0, Speed = 0
-      twd ,route->t[route->n - 1].tws,       // replicate last
-      hdg, twa,
-      route->t[route->n - 1].g, route->t[route->n - 1].w , route->t[route->n - 1].stamina,
-      strSail, (route->t[route->n - 1].motor) ? "true" : "false",
-      par.pDest.id, par.pDest.father);*/
-
-   g_string_append_printf (jString, "]\n}\n");
-
-   if (isoc) {
-      GString *isocString = isochronesToJson ();
-      if (isocString != NULL) {
-         g_string_append_printf (jString, ",\n\"_isoc\": \n%s", isocString->str);
-         g_string_free (isocString, TRUE);
-      }
-   }
-   if (isoDesc) {
-      GString *isoDescString = isoDescToJson ();
-      if (isoDescString != NULL) {
-         g_string_append_printf (jString, ",\n\"_isodesc\": \n%s", isoDescString->str);
-         g_string_free (isoDescString, TRUE);
-      }
-   }
-   // printf ("jStringDump%s\n", jString->str);   
-   return jString;
-}
-
-/*! translate competitor table to Json */
-static GString *competitorsReportJson (CompetitorsList *lComp) {
-   char strDep [MAX_SIZE_DATE];
-   GString *jString = g_string_new ("\"_report\": {\n");
-   if (lComp->n == 0) {
-      g_string_append_printf (jString, "{}\n");
-      return jString;
-   }
-   Competitor mainCompetitor = lComp->t [0];
-   if (lComp->n > 1)
-      qsort (lComp->t, lComp->n, sizeof (Competitor), compareDuration);
-   newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours, strDep, sizeof (strDep)); 
-
-   g_string_append_printf (jString, "\"nComp\": %d, \"startTimeStr\": \"%s\", \"isocTimeStep\": %d, \"polar\": \"%s\", \"array\": \n[\n",
-         lComp->n, strDep, (int) (3600 * par.tStep), route.polarFileName);
-   
-   for (int i = 0; i < lComp->n; i++) {
-      double dist;
-      if (strcmp (mainCompetitor.name, lComp->t [i].name) == 0)
-         dist = 0.0;
-      else
-         dist = orthoDist (lComp->t [i].lat, lComp->t [i].lon, mainCompetitor.lat, mainCompetitor.lon);
-
-      g_string_append_printf (jString, "{\"name\": \"%s\", \"lat\": %.4lf, \"lon\": %.4lf, \"distToMain\": %.2lf,", 
-            lComp->t[i].name, lComp->t [i]. lat, lComp->t [i].lon, dist);
-
-      int toBestDelay = 3600 * (lComp->t [i].duration - lComp->t [0].duration);
-      int toMainDelay = 3600 * (lComp->t [i].duration - mainCompetitor.duration);
-
-
-      g_string_append_printf (jString, "\"ETA\": \"%s\", \"distDone\": %.2lf, \"toBestDelay\": %d, \"toMainDelay\": %d",
-            lComp->t[i].strETA, lComp->t[i].dist, toBestDelay, toMainDelay);
-
-      g_string_append_printf (jString, "%s", (i < lComp->n - 1) ? "},\n": "}\n");
-   }
-
-   g_string_append_printf (jString, "]\n}\n");
-   return jString;
-}
-
-/*! Translate routes to Json, including isochrones for most recent competitor only
-   and report if number of competitor >= 1 */ 
-GString *allCompetitorsToJson (int n, bool isoc, bool isoDesc) {
-   GString *res = g_string_new ("{\n");
-   GString *jRoute = routeToJson (&route, 0, isoc, isoDesc); // only most recent route with isochrones 
-   g_string_append_printf (res, "%s", jRoute->str);
-   g_string_free (jRoute, TRUE);
-   int maxHistory = MIN (n - 1, historyRoute.n);
-   if (n > 0) {
-      g_string_append_printf (res, ",\n");
-      for (int i = 0; i < maxHistory; i += 1) {
-         GString *jRoute = routeToJson (&historyRoute.r[i], 0, false, false); 
-         g_string_append_printf (res, "%s, ", jRoute->str);
-         g_string_free (jRoute, TRUE);
-      }
-      GString *report = competitorsReportJson (&competitors);
-      g_string_append_printf (res, "%s", report->str);
-      g_string_free (report, TRUE);
-   }
-   g_string_append_printf (res, "}\n");
-   return res;
-}
-
-/*! Produce meta info and table linked to bestTimeDeparture */ 
-GString *bestTimeReportToJson (ChooseDeparture *chooseDeparture, bool isoc, bool isoDesc) {
-   GString *res = g_string_new ("{\n");
-   if (chooseDeparture->count == 0) {
-      g_string_append_printf (res, "\"_warning\": \"No Solution found. Destination unreachable.\"}\n");
-      return res;
-   }
-   GString *jRoute = routeToJson (&route, 0, isoc, isoDesc); // only most recent route with isochrones 
-   g_string_append_printf (res, "%s,\n", jRoute->str);
-   g_string_free (jRoute, TRUE);
-
-   GString *jString = g_string_new ("\"_bestTimeReport\": {\n");
-   if (chooseDeparture->count == 0) {
-      g_string_append_printf (jString, "{}\n");
-      return jString;
-   }
-   int tInterval = 3600 * chooseDeparture->tInterval;
-
-   g_string_append_printf (jString, "\"count\": %d, \"bestCount\": %d, \"tInterval\": %d,\n",
-         chooseDeparture->count, chooseDeparture->bestCount, tInterval);
-
-   g_string_append_printf (jString, "\"minDuration\": %.0lf, \"maxDuration\": %.0f,\n",
-          chooseDeparture->minDuration * 3600.0,  chooseDeparture->maxDuration * 3600.0);
-   
-   g_string_append_printf (jString, "\"array\": \n[");
-
-   for (int count = 0; count < chooseDeparture->count; count += 1) {
-      double val = 3600.0 * chooseDeparture->t [count];
-      g_string_append_printf (jString, "%.0lf%s", val, ((count < chooseDeparture->count - 1) ? ", ": ""));
-   }
-
-   g_string_append_printf (jString, "]\n}\n");
-
-   g_string_append_printf (res, "%s}\n", jString->str);
-   g_string_free (jRoute, TRUE);
-
-   return res;
-}
-
-
+*/

@@ -4,10 +4,10 @@ gcc $CFLAGS -c -O3 engine.c
 gcc $CFLAGS -c r3grib.c
 gcc $CFLAGS -c polar.c
 gcc $CFLAGS -c r3util.c
-gcc $CFLAGS -c readgriballeccodes.c
+gcc $CFLAGS -c readgriballwithouteccodes.c
 gcc $CFLAGS -c r3server.c
 
-gcc r3server.o r3util.o r3grib.o readgriballeccodes.o polar.o engine.o -o r3server -lm -leccodes 
+gcc r3server.o r3util.o r3grib.o readgriballwithouteccodes.o polar.o engine.o -o r3server -lm
 rm -f *.o
 mv r3server ../.
 

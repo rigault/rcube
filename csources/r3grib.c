@@ -1,5 +1,4 @@
 /*! compilation: gcc -c grib.c `pkg-config --cflags glib-2.0` */
-#include <glib.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,15 +7,13 @@
 #include <math.h>
 #include <sys/stat.h>
 #include <locale.h>
-#include "eccodes.h"
+#include "glibwrapper.h"
 #include "r3types.h"
 #include "r3util.h"
 #include "inline.h"
-#include <grib_api.h>  // for ProductKind
+#include "readgriball.h"
 
-#define  EPSILON 0.001        // for G_APPROX_VALUE
-
-FlowP *tGribData [2] = {NULL, NULL};   // wind, current
+#define  EPSILON 0.001                 // for approximat value
 
 /*! return difference in hours between two zones (current zone and Wind zone) */
 double zoneTimeDiff (const Zone *zone1, const Zone *zone0) {
@@ -48,7 +45,7 @@ void printGrib (const Zone *zone, const FlowP *gribData) {
             gribData [iGrib].w);
          }
       }
-     printf ("\n");
+      printf ("\n");
    }
 }
 
@@ -166,10 +163,8 @@ bool checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen) {
    int nVal = 0, nLatSuspects, nLonSuspects;
    bool OK = true;
    char str [MAX_SIZE_LINE] = "";
-   char *separator = g_strnfill (78, '-'); 
-   
+   const char *separator = "----------------------------------------------------------------------------------"; 
    snprintf (str, MAX_SIZE_LINE, "\n%s\nCheck Grib Info: %s\n%s\n", separator, (type == WIND) ? "Wind" : "Current", separator);
-   g_free (separator);
    g_strlcat (buffer, str, maxLen);
 
    if (zone->nbLat <= 0) {
@@ -177,7 +172,6 @@ bool checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen) {
       g_strlcat (buffer, str, maxLen);
       return true;
    }
-
    if ((zone->nDataDate != 1) || (zone->nDataTime != 1)) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "Expected nDataDate = 1 and nDataTime = 1. nDataDate: %zu, nDataTime: %zu\n", zone->nDataDate, zone->nDataTime);
@@ -194,13 +188,13 @@ bool checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen) {
          zone->nbLon * zone->nbLat, zone->numberOfValues);
       g_strlcat (buffer, str, maxLen);
    }
-   if (! G_APPROX_VALUE (zone->lonRight - zone->lonLeft, zone->lonStep * (zone->nbLon - 1), EPSILON)) {
+   if (! (fabs ((zone->lonRight - zone->lonLeft) - zone->lonStep * (zone->nbLon - 1)) < EPSILON)) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "Expected difference between lonLeft and lonRight is %.2lf, found: %.2lf\n",\
          (zone->lonStep * (zone->nbLon - 1)), zone->lonRight - zone->lonLeft);
       g_strlcat (buffer, str, maxLen);
    }
-   if (! G_APPROX_VALUE (zone->latMax - zone->latMin, zone->latStep * (zone->nbLat - 1), EPSILON)) {
+   if (! (fabs((zone->latMax - zone->latMin) - (zone->latStep * (zone->nbLat - 1)) ) < EPSILON )) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "Expected difference between latMax and latMin is %.2lf, found: %.2lf\n",\
          (zone->latStep * (zone->nbLat - 1)), zone->latMax - zone->latMin);
@@ -220,7 +214,7 @@ bool checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen) {
       snprintf (str, MAX_SIZE_LINE, "n Val suspect Lon: %d, ratio: %.2lf %% \n", nLonSuspects, 100 * (double)nLonSuspects/(double) (nVal));
       g_strlcat (buffer, str, maxLen);
    }
-      snprintf (str, MAX_SIZE_LINE, "n Val Values: %d\n", nVal); // at least this line
+   snprintf (str, MAX_SIZE_LINE, "n Val Values: %d\n", nVal); // at least this line
    g_strlcat (buffer, str, maxLen);
    snprintf (str, MAX_SIZE_LINE, "%s\n", (zone->wellDefined) ? (zone->allTimeStepOK) ? "Wind Zone Well defined" : "All Zone TimeSteps are not defined" : "Zone Undefined");
    g_strlcat (buffer, str, maxLen);
@@ -485,294 +479,6 @@ void findCurrentGrib (double lat, double lon, double t, double *uCurr,\
    *tcs = fTws (*uCurr, *vCurr);
 }
 
-/*! Modify array with new value if not already in array. Return new array size*/
-static long updateLong (long value, size_t n, size_t maxSize, long array []) {
-   bool found = false;
-   for (size_t i = 0; i < n; i++) {
-      if (value == array [i]) {
-         found = true;
-         break;
-      }
-   } 
-   if ((! found) && (n < maxSize)) { // new time stamp
-      array [n] = value;
-	   n += 1;
-   }
-   return n;
-}
-
-/*! Read lists zone.timeStamp, shortName, zone.dataDate, dataTime before full grib reading */
-static bool readGribLists (const char *fileName, Zone *zone) {
-   FILE* f = NULL;
-   int err = 0;
-   long timeStep, dataDate, dataTime;
-   char shortName [MAX_SIZE_SHORT_NAME];
-   size_t lenName;
-   bool found = false;
-   // Message handle. Required in all the ecCodes calls acting on a message.
-   codes_handle* h = NULL;
-
-   if ((f = fopen (fileName, "rb")) == NULL) {
-       fprintf (stderr, "In readGribLists, ErrorUnable to open file %s\n", fileName);
-       return false;
-   }
-   memset (zone, 0,  sizeof (Zone));
-
-   // Loop on all the messages in a file
-   while ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) != NULL) {
-      if (err != CODES_SUCCESS) CODES_CHECK (err, 0);
-      lenName = MAX_SIZE_SHORT_NAME;
-
-      CODES_CHECK(codes_get_string(h, "shortName", shortName, &lenName), 0);
-      CODES_CHECK(codes_get_long(h, "step", &timeStep), 0);
-      CODES_CHECK(codes_get_long(h, "dataDate", &dataDate), 0);
-      CODES_CHECK(codes_get_long(h, "dataTime", &dataTime), 0);
-      codes_handle_delete (h);
-
-      found = false;
-      for (size_t i = 0; i < zone->nShortName; i++) {
-         if (strcmp (shortName, zone->shortName [i]) == 0) {
-            found = true;
-            break;
-         }
-      } 
-      if ((! found) && (zone->nShortName < MAX_N_SHORT_NAME)) { // new shortName
-         g_strlcpy (zone->shortName [zone->nShortName], shortName, MAX_SIZE_SHORT_NAME); 
-         zone->nShortName += 1;
-      }
-      zone->nTimeStamp = updateLong (timeStep, zone->nTimeStamp, MAX_N_TIME_STAMPS, zone->timeStamp); 
-      zone->nDataDate = updateLong (dataDate, zone->nDataDate, MAX_N_DATA_DATE, zone->dataDate); 
-      zone->nDataTime = updateLong (dataTime, zone->nDataTime, MAX_N_DATA_TIME, zone->dataTime); 
-   }
- 
-   fclose (f);
-   // Replace unknown by gust ? (GFS case where gust identified by specific indicatorOfParameter)
-   for (size_t i = 0; i < zone->nShortName; i++) {
-      if (strcmp (zone->shortName[i], "unknown") == 0)
-         g_strlcpy (zone->shortName[i], "gust?", 6);
-   }
-   zone->intervalLimit = 0;
-   if (zone->nTimeStamp > 1) {
-      zone->intervalBegin = zone->timeStamp [1] - zone->timeStamp [0];
-      zone->intervalEnd = zone->timeStamp [zone->nTimeStamp - 1] - zone->timeStamp [zone->nTimeStamp - 2];
-      for (size_t i = 1; i < zone->nTimeStamp; i++) {
-         if ((zone->timeStamp [i] - zone->timeStamp [i-1]) == zone->intervalEnd) {
-            zone->intervalLimit = i;
-            break;
-         }
-      }
-   }
-   else {
-      zone->intervalBegin = zone->intervalEnd = 3;
-      fprintf (stderr, "In readGribLists, Error nTimeStamp = %zu\n", zone->nTimeStamp);
-      //return false;
-   }
-
-   //printf ("intervalBegin: %ld, intervalEnd: %ld, intervalLimit: %zu\n", 
-      //zone->intervalBegin, zone->intervalEnd, zone->intervalLimit -1); 
-   return true;
-}
-
-/*! Read grib parameters in zone before full grib reading */
-static bool readGribParameters (const char *fileName, Zone *zone) {
-   int err = 0;
-   FILE* f = NULL;
-   double lat1, lat2;
-   codes_handle *h = NULL;
- 
-   if ((f = fopen (fileName, "rb")) == NULL) {
-       fprintf (stderr, "In readGribParameters, Error unable to open file %s\n",fileName);
-       return false;
-   }
- 
-   // create new handle from the first message in the file
-   if ((h = codes_handle_new_from_file(0, f, PRODUCT_GRIB, &err)) == NULL) {
-       fprintf (stderr, "In readGribParameters, Error code handle from file : %s Code error: %s\n",\
-         fileName, codes_get_error_message(err)); 
-       fclose (f);
-       return false;
-   }
-   fclose (f);
- 
-   CODES_CHECK(codes_get_long (h, "centre", &zone->centreId),0);
-   CODES_CHECK(codes_get_long (h, "editionNumber", &zone->editionNumber),0);
-   CODES_CHECK(codes_get_long (h, "stepUnits", &zone->stepUnits),0);
-   CODES_CHECK(codes_get_long (h, "numberOfValues", &zone->numberOfValues),0);
-   CODES_CHECK(codes_get_long (h, "Ni", &zone->nbLon),0);
-   CODES_CHECK(codes_get_long (h, "Nj", &zone->nbLat),0);
-
-   CODES_CHECK(codes_get_double (h,"latitudeOfFirstGridPointInDegrees",&lat1),0);
-   CODES_CHECK(codes_get_double (h,"longitudeOfFirstGridPointInDegrees",&zone->lonLeft),0);
-   CODES_CHECK(codes_get_double (h,"latitudeOfLastGridPointInDegrees",&lat2),0);
-   CODES_CHECK(codes_get_double (h,"longitudeOfLastGridPointInDegrees",&zone->lonRight),0);
-   CODES_CHECK(codes_get_double (h,"iDirectionIncrementInDegrees",&zone->lonStep),0);
-   CODES_CHECK(codes_get_double (h,"jDirectionIncrementInDegrees",&zone->latStep),0);
-
-   if ((lonCanonize (zone->lonLeft) > 0.0) && (lonCanonize (zone->lonRight) < 0.0)) {
-      zone -> anteMeridian = true;
-   }
-   else {
-      zone -> anteMeridian = false;
-      zone->lonLeft = lonCanonize (zone->lonLeft);
-      zone->lonRight = lonCanonize (zone->lonRight);
-   }
-   zone->latMin = MIN (lat1, lat2);
-   zone->latMax = MAX (lat1, lat2);
-
-   codes_handle_delete (h);
-   return true;
-}
-
-/*! find index in gribData table */
-static inline long indexOf (int timeStep, double lat, double lon, const Zone *zone) {
-   long iLat = indLat (lat, zone);
-   long iLon = indLon (lon, zone);
-   int iT = -1;
-   for (iT = 0; iT < (int) zone->nTimeStamp; iT++) {
-      if (timeStep == zone->timeStamp [iT])
-         break;
-   }
-   if (iT == -1) {
-      fprintf (stderr, "In indexOf, Error Cannot find index of time: %d\n", timeStep);
-      return -1;
-   }
-   //printf ("iT: %d iLon :%d iLat: %d\n", iT, iLon, iLat); 
-   return  (iT * zone->nbLat * zone->nbLon) + (iLat * zone->nbLon) + iLon;
-}
-
-/*! read grib file using eccodes C API 
-   return true if OK */
-bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
-   FILE* f = NULL;
-   int err = 0;
-   long iGrib;
-   long bitmapPresent  = 0, timeStep, oldTimeStep;
-   double lat, lon, val, indicatorOfParameter;
-   char shortName [MAX_SIZE_SHORT_NAME];
-   size_t lenName;
-   const long GUST_GFS = 180;
-   char str [MAX_SIZE_LINE];
-   zone->wellDefined = false;
-   if (! readGribLists (fileName, zone)) {
-      return false;
-   }
-   if (! readGribParameters (fileName, zone)) {
-      return false;
-   }
-   if (zone -> nDataDate > 1) {
-      fprintf (stderr, "In readGribAll, Error Grib file with more than 1 dataDate not supported nDataDate: %zu\n", 
-         zone -> nDataDate);
-      return false;
-   }
-
-   if (tGribData [iFlow] != NULL) {
-      free (tGribData [iFlow]); 
-      tGribData [iFlow] = NULL;
-   }
-   if ((tGribData [iFlow] = calloc ((zone->nTimeStamp + 1) * zone->nbLat * zone->nbLon, sizeof (FlowP))) == NULL) { // nTimeStamp + 1
-      fprintf (stderr, "In readGribAll, Error calloc tGribData [iFlow]\n");
-      return false;
-   }
-   printf ("In readGribAll.: %s allocated\n", 
-      formatThousandSep (str, sizeof (str), sizeof(FlowP) * (zone->nTimeStamp + 1) * zone->nbLat * zone->nbLon));
-   
-   // Message handle. Required in all the ecCodes calls acting on a message.
-   codes_handle* h = NULL;
-   // Iterator on lat/lon/values.
-   codes_iterator* iter = NULL;
-   if ((f = fopen (fileName, "rb")) == NULL) {
-      free (tGribData [iFlow]); 
-      tGribData [iFlow] = NULL;
-      fprintf (stderr, "In readGribAll, Error Unable to open file %s\n", fileName);
-      return false;
-   }
-   zone->nMessage = 0;
-   zone->allTimeStepOK = true;
-   timeStep = zone->timeStamp [0];
-   oldTimeStep = timeStep;
-
-   // Loop on all the messages in a file
-   while ((h = codes_handle_new_from_file (0, f, PRODUCT_GRIB, &err)) != NULL) {
-      if (err != CODES_SUCCESS) CODES_CHECK (err, 0);
-
-      // Check if a bitmap applies
-      CODES_CHECK (codes_get_long (h, "bitmapPresent", &bitmapPresent), 0);
-      if (bitmapPresent) {
-          CODES_CHECK(codes_set_double (h, "missingValue", MISSING), 0);
-      }
-
-      lenName = MAX_SIZE_SHORT_NAME;
-      CODES_CHECK(codes_get_string (h, "shortName", shortName, &lenName), 0);
-      CODES_CHECK(codes_get_long (h, "step", &timeStep), 0);
-
-      long progressTime = timeStep - oldTimeStep;
-
-      // check timeStep move well. This test is not very useful.
-      if ((timeStep != 0) && (progressTime > 0) &&  // progressTime may regress. ARPEGE case
-          (progressTime != zone->intervalBegin) && 
-          (progressTime != zone->intervalEnd)
-         ) { // check timeStep progress well 
-
-         zone->allTimeStepOK = false;
-         fprintf (stderr, "In readGribAll: All time Step Are Not defined message: %d, timeStep: %ld, oldTimeStep: %ld, shortName: %s\n", 
-            zone->nMessage, timeStep, oldTimeStep, shortName);
-      }
-      oldTimeStep = timeStep;
-
-      err = codes_get_double(h, "indicatorOfParameter", &indicatorOfParameter);
-      if (err != CODES_SUCCESS) 
-         indicatorOfParameter = -1;
- 
-      // A new iterator on lat/lon/values is created from the message handle h.
-      iter = codes_grib_iterator_new(h, 0, &err);
-      if (err != CODES_SUCCESS) CODES_CHECK(err, 0);
- 
-      // Loop on all the lat/lon/values.
-      while (codes_grib_iterator_next(iter, &lat, &lon, &val)) {
-         if (! (zone -> anteMeridian))
-            lon = lonCanonize (lon);
-         // printf ("lon : %.2lf\n", lon);
-         iGrib = indexOf (timeStep, lat, lon, zone);
-   
-         if (iGrib == -1) {
-            fprintf (stderr, "In readGribAll: Error iGrib : %ld\n", iGrib); 
-            free (tGribData [iFlow]); 
-            tGribData [iFlow] = NULL;
-            codes_handle_delete (h);
-            codes_grib_iterator_delete (iter);
-            iter = NULL;
-            h = NULL;
-            fclose (f);
-            return false;
-         }
-         // printf("%.2f %.2f %.2lf %ld %ld %s\n", lat, lon, val, timeStep, iGrib, shortName);
-         tGribData [iFlow] [iGrib].lat = lat; 
-         tGribData [iFlow] [iGrib].lon = lon; 
-         if ((strcmp (shortName, "10u") == 0) || (strcmp (shortName, "ucurr") == 0))
-            tGribData [iFlow] [iGrib].u = val;
-         else if ((strcmp (shortName, "10v") == 0) || (strcmp (shortName, "vcurr") == 0))
-            tGribData [iFlow] [iGrib].v = val;
-         else if (strcmp (shortName, "gust") == 0)
-            tGribData [iFlow] [iGrib].g = val;
-         else if (strcmp (shortName, "swh") == 0)     // waves
-            tGribData [iFlow] [iGrib].w = val;
-         else if (indicatorOfParameter == GUST_GFS)   // find gust in GFS file specific parameter = 180
-            tGribData [iFlow] [iGrib].g = val;
-      }
-      codes_grib_iterator_delete (iter);
-      codes_handle_delete (h);
-      iter = NULL;
-      h = NULL;
-      // printf ("nMessage: %d\n", zone->nMessage);
-      zone->nMessage += 1;
-   }
-   // printf ("readGribAll:%s done.\n", fileName);
- 
-   fclose (f);
-   zone->wellDefined = true;
-   return true;
-}
-
 /*! write Grib information in string */
 char *gribToStr (const Zone *zone, char *str, size_t maxLen) {
    char line [MAX_SIZE_LINE] = "";
@@ -829,37 +535,37 @@ char *gribToStr (const Zone *zone, char *str, size_t maxLen) {
    return str;
 }
 
-/*! write grib meta information in GString */
-GString *gribToJson (const char *fileName) {
+/*! write grib meta information in string */
+char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
    char gribName [MAX_SIZE_FILE_NAME];
+   char str [MAX_SIZE_TEXT] = "";
    char infoStr [MAX_SIZE_LINE] = "";
    struct stat st;
    char str0 [MAX_SIZE_NAME] = "";
    char str1 [MAX_SIZE_NAME] = "";
    char centreName [MAX_SIZE_NAME] = "";
    Zone gZone;
-   GString *jString = g_string_new ("");
    buildRootName (fileName, gribName, sizeof (gribName));
 
    if (stat (gribName, &st) != 0) {
       fprintf (stderr, "In gribToJson Error stat: %s\n", gribName);
-      g_string_append_printf (jString, "{}\n");
-      return jString;
+      snprintf (out, maxLen, "{}\n");
+      return out;
    }
    if (! readGribLists (gribName, &gZone)) {
       fprintf (stderr, "In gribToJson Error reading: %s\n", gribName);
-      g_string_append_printf (jString, "{}\n");
-      return jString;
+      snprintf (out, maxLen, "{}\n");
+      return out;
    }
    if (! readGribParameters (gribName, &gZone)) {
       fprintf (stderr, "In gribToJson Error reading: %s\n", gribName);
-      g_string_append_printf (jString, "{}\n");
-      return jString;
+      snprintf (out, maxLen, "{}\n");
+      return out;
    }
    if (gZone.nbLat == 0) {
       fprintf (stderr, "In gribToJson Error no value available in: %s\n", gribName);
-      g_string_append_printf (jString, "{}\n");
-      return jString;
+      snprintf (out, maxLen, "{}\n");
+      return out;
    }
    for (size_t i = 0; i < N_METEO_ADMIN; i++) {// search name of center
       if (meteoTab [i].id == gZone.centreId) {
@@ -867,42 +573,45 @@ GString *gribToJson (const char *fileName) {
          break;
       }
    }
-   g_string_append_printf (jString, "{\"centreID\": %ld, \"centreName\": \"%s\", \"edNumber\": %ld, \n", 
-                           gZone.centreId, centreName, gZone.editionNumber);
-   
    newDate (gZone.dataDate [0], gZone.dataTime [0]/100, str0, sizeof (str0));
    newDate (gZone.dataDate [0], gZone.dataTime [0]/100 + gZone.timeStamp [gZone.nTimeStamp -1], str1, sizeof (str1));
-   g_string_append_printf (jString, "\"runStart\": \"%s\", \"runEnd\": \"%s\", \n", str0, str1);
 
-   g_string_append_printf (jString, "\"topLat\": %.6f, \"leftLon\": %.6f, \"bottomLat\": %.6f, \"rightLon\": %.6f, \n",  
-                           gZone.latMax, gZone.lonLeft, gZone.latMin, gZone.lonRight);
+   snprintf (out, maxLen, 
+      "{\"centreID\": %ld, \"centreName\": \"%s\", \"edNumber\": %ld, \n"
+      "\"runStart\": \"%s\", \"runEnd\": \"%s\", \n"
+      "\"topLat\": %.6f, \"leftLon\": %.6f, \"bottomLat\": %.6f, \"rightLon\": %.6f, \n"
+      "\"latStep\": %.4f, \"lonStep\": %.4f, \n"
+      "\"nLat\": %ld, \"nLon\": %ld, \"nValues\": %ld, \"nTimeStamp\": %zu, \"timeStamps\": \n[",
+      gZone.centreId, centreName, gZone.editionNumber,
+      str0, str1,
+      gZone.latMax, gZone.lonLeft, gZone.latMin, gZone.lonRight,
+      gZone.latStep, gZone.lonStep,
+      gZone.nbLat, gZone.nbLon, gZone.numberOfValues, gZone.nTimeStamp
+   );
 
-   g_string_append_printf (jString, "\"latStep\": %.4f, \"lonStep\": %.4f, \n", 
-                           gZone.latStep, gZone.lonStep);
-
-   g_string_append_printf (jString, "\"nLat\": %ld, \"nLon\": %ld, \"nValues\": %ld, \"nTimeStamp\": %ld, \"timeStamps\": \n[", 
-                           gZone.nbLat, gZone.nbLon, gZone.numberOfValues, gZone.nTimeStamp);
-
-   for (size_t i = 0; i < gZone.nTimeStamp; i += 1) {
-      g_string_append_printf (jString, "%ld%s", gZone.timeStamp [i], (i < gZone.nTimeStamp -1) ? ", " : ""); // no comma for last
+  for (size_t i = 0; i < gZone.nTimeStamp; i += 1) {
+      snprintf (str, sizeof (str), "%ld%s", gZone.timeStamp [i], (i < gZone.nTimeStamp -1) ? ", " : ""); // no comma for last
+      g_strlcat (out, str, maxLen);
    }
-   g_string_append_printf (jString, "],\n");
+   g_strlcat (out, "],\n", maxLen);
 
-   g_string_append_printf (jString, "\"nShortName\": %zu, \"shortNames\": \n[", gZone.nShortName);
+   snprintf (str, sizeof (str), "\"nShortName\": %zu, \"shortNames\": [", gZone.nShortName);
+   g_strlcat (out, str, maxLen);
+
    for (size_t i = 0; i < gZone.nShortName; i += 1) {
-      g_string_append_printf (jString, "\"%s\"%s", gZone.shortName [i], (i < gZone.nShortName -1) ? ", " : ""); // no comma for last
+      snprintf (str, sizeof (str), "\"%s\"%s", gZone.shortName [i], (i < gZone.nShortName -1) ? ", " : ""); // no comma for last
+      g_strlcat (out, str, maxLen);
    }
-   g_string_append_printf (jString, "],\n");
-   g_string_append_printf (jString, "\"fileName\": \"%s\", \"fileSize\": %ld,\n", gribName, st.st_size);
+   g_strlcat (out, "],\n", maxLen);
+   snprintf (str, sizeof (str),  "\"fileName\": \"%s\", \"fileSize\": %ld,\n", gribName, st.st_size);
+   g_strlcat (out, str, maxLen);
 
    if ((gZone.nDataDate != 1) || (gZone.nDataTime != 1)) {
-      snprintf (infoStr, MAX_SIZE_LINE, "Warning number of Date: %zu, number of Time: %zu", gZone.nDataDate, gZone.nDataTime);
+      snprintf (infoStr, sizeof (infoStr), "Warning number of Date: %zu, number of Time: %zu", gZone.nDataDate, gZone.nDataTime);
    }
 
-   g_string_append_printf (jString, "\"Info\": \"%s\"\n", infoStr);
-   g_string_append_printf (jString, "}\n");
-   
-   return jString;
+   snprintf (str, sizeof (str), "\"Info\": \"%s\"\n}\n", infoStr);
+   g_strlcat (out, str, maxLen);
+   return out;
 }
-
 

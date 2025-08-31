@@ -2,6 +2,7 @@
  to be included in source files */
 
 #include <math.h>
+#include <time.h>
 
 /*! say if point is in sea */
 static inline bool isSea (char * isSeaArray, double lat, double lon) {

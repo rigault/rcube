@@ -1,7 +1,6 @@
 /*! compilation: gcc -c rutil.c `pkg-config --cflags glib-.0` */
 #define MAX_N_SHIP_TYPE 2       // for Virtual Regatta Stamina calculation
 
-#include <glib.h>
 #include <float.h>   
 #include <ctype.h>
 #include <stdio.h>
@@ -14,6 +13,7 @@
 #include <time.h>
 #include <math.h>
 #include <locale.h>
+#include "glibwrapper.h"
 #include "r3types.h"
 #include "inline.h"
 struct tm;
@@ -172,6 +172,7 @@ bool mostRecentFile (const char *directory, const char *pattern0, const char *pa
 
 /*! true if name contains a number */
 bool isNumber (const char *name) {
+    if (name == NULL) return NULL;
     return strpbrk (name, "0123456789") != NULL;
 }
 
@@ -219,7 +220,7 @@ double getCoord (const char *str, double minLimit, double maxLimit) {
  * @param maxLen    The maximum length of the buffer `rootName`.
  * @return          A pointer to `rootName`, or NULL on error.
  */
-char *buildRootName (const char *fileName, char *rootName, size_t maxLen) {
+/*char *buildRootName (const char *fileName, char *rootName, size_t maxLen) {
    const char *workingDir = par.workingDir[0] != '\0' ? par.workingDir : WORKING_DIR;
    char *fullPath = (g_path_is_absolute (fileName)) ? g_strdup (fileName) : g_build_filename (workingDir, fileName, NULL);
    if (!fullPath) return NULL;
@@ -227,6 +228,32 @@ char *buildRootName (const char *fileName, char *rootName, size_t maxLen) {
    g_free (fullPath);
    return rootName;
 }
+*/
+/*! abolute path POSIX : begin with '/' */ 
+static inline bool is_absolute_path(const char *p) {
+   return p && p[0] == '/';
+}
+
+char *buildRootName(const char *fileName, char *rootName, size_t maxLen) {
+   if (!fileName || !rootName || maxLen == 0) return NULL;
+   const char *workingDir = (par.workingDir[0] != '\0') ? par.workingDir : WORKING_DIR;
+   int n;
+   if (is_absolute_path(fileName)) {
+      n = snprintf(rootName, maxLen, "%s", fileName);
+   } else {
+      const char *sep = "";
+      size_t wlen = strlen(workingDir);
+      if (wlen > 0 && workingDir[wlen - 1] != '/') sep = "/";
+      n = snprintf(rootName, maxLen, "%s%s%s", workingDir, sep, fileName);
+   }
+   if (n < 0 || (size_t)n >= maxLen) {
+      // overflow or writing error
+      if (maxLen) rootName[0] = '\0';
+      return NULL;
+   }
+   return rootName;
+}
+
 
 /*! return tm struct equivalent to date hours found in grib (UTC time) */
 struct tm gribDateToTm (long intDate, double nHours) {
@@ -402,12 +429,12 @@ time_t wronggribDateTimeToEpoch (long date, long time) {
 }
 
 /*! convert long date found in grib file in seconds time_t */
-time_t gribDateTimeToEpoch (long date, long time) {
-   gint year = date / 10000;
-   gint month = (date % 10000) / 100;
-   gint day = date % 100;
-   gint hour = time / 100;
-   gint minute = time % 100;
+/*time_t gribDateTimeToEpoch (long date, long time) {
+   int year = date / 10000;
+   int month = (date % 10000) / 100;
+   int day = date % 100;
+   int hour = time / 100;
+   int minute = time % 100;
 
    GDateTime *dt = g_date_time_new_utc(year, month, day, hour, minute, 0.0);
    if (!dt) {
@@ -418,6 +445,51 @@ time_t gribDateTimeToEpoch (long date, long time) {
 
    time_t t = g_date_time_to_unix (dt);
    g_date_time_unref (dt);
+   return t;
+}*/
+
+/*! convert long date found in grib file in seconds time_t (UTC, via timegm) */
+time_t gribDateTimeToEpoch (long date, long timehhmm) {
+   int year   = (int)(date / 10000);
+   int month  = (int)((date % 10000) / 100);
+   int day    = (int)(date % 100);
+   int hour   = (int)(timehhmm / 100);
+   int minute = (int)(timehhmm % 100);
+
+   /* garde-fous rapides */
+   if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31 ||
+      hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      fprintf(stderr, "Invalid date/time: %04d-%02d-%02d %02d:%02d UTC\n",
+             year, month, day, hour, minute);
+      return (time_t)-1;
+   }
+
+   struct tm tm_utc;
+   memset(&tm_utc, 0, sizeof tm_utc);
+   tm_utc.tm_year  = year - 1900;
+   tm_utc.tm_mon   = month - 1;
+   tm_utc.tm_mday  = day;
+   tm_utc.tm_hour  = hour;
+   tm_utc.tm_min   = minute;
+   tm_utc.tm_sec   = 0;
+   tm_utc.tm_isdst = 0;   // UTC 
+
+   time_t t = timegm(&tm_utc);  
+   if (t == (time_t)-1) {
+      fprintf(stderr, "Invalid date/time: %04d-%02d-%02d %02d:%02d UTC\n",
+             year, month, day, hour, minute);
+      return (time_t)-1;
+   }
+
+   // strict validation
+   struct tm back;
+   if (!gmtime_r(&t, &back) ||
+      back.tm_year != year - 1900 || back.tm_mon != month - 1 ||
+      back.tm_mday != day || back.tm_hour != hour || back.tm_min != minute) {
+      fprintf(stderr, "Invalid date/time: %04d-%02d-%02d %02d:%02d UTC\n",
+             year, month, day, hour, minute);
+      return (time_t)-1;
+   }
    return t;
 }
 
@@ -431,6 +503,7 @@ double getDepartureTimeInHour (struct tm *start) {
 
 /*! find name, lat and lon */
 bool analyseCoord (const char *strCoord, double *lat, double *lon) {
+   if (!strCoord || !lat || !lon) return false; 
    char *pt = NULL;
    char *str = g_strdup (strCoord);
    g_strstrip (str);
@@ -439,10 +512,10 @@ bool analyseCoord (const char *strCoord, double *lat, double *lon) {
       *lon = getCoord (pt + 1, MIN_LON, MAX_LON);
       *pt = '\0'; // cut str in two parts
       *lat = getCoord (str, MIN_LAT, MAX_LAT);
-      g_free (str);
+      free (str);
       return true;
    }
-   g_free (str);
+   free (str);
    return false;
 }
 
@@ -951,40 +1024,48 @@ double fTimeToRecupOnePoint (double tws) {
    return 60 * (timeToRecupLow + fTws * (timeToRecupHigh - timeToRecupLow) / 2.0);
 }
 
-/*! Return json formated subset of parameters */
-GString *paramToJson (Par *par) {
-   GString *jsonString = g_string_new ("{\n");
-   gchar *fileName;
-   g_string_append_printf (jsonString, "   \"wd\": \"%s\",\n", par->workingDir); 
+/*! Return JSON formatted subset of parameters into 'out'.
+    Returns out on success, NULL on error or truncation. */
+char *paramToStrJson (Par *par, char *out, size_t maxLen) {
+   if (!par || !out || maxLen == 0) return NULL;
 
-   fileName = g_path_get_basename (par->gribFileName);
-   g_string_append_printf (jsonString, "   \"grib\": \"%s\",\n", fileName); 
-   g_free (fileName);
+   char *fileName         = path_get_basename (par->gribFileName);
+   char *fileNameCurrent  = path_get_basename (par->currentGribFileName);
+   char *polarFileName    = path_get_basename (par->polarFileName);
+   char *wavePolarFileName= path_get_basename (par->wavePolFileName);
+   char *isSeaFileName    = path_get_basename (par->isSeaFileName);
 
-   g_string_append_printf (jsonString, "   \"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf,\n",
-            zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight);
+   int n = snprintf(out, maxLen,
+      "{\n"
+      "  \"wd\": \"%s\",\n"
+      "  \"grib\": \"%s\",\n"
+      "  \"bottomLat\": %.2f, \"leftLon\": %.2f, \"topLat\": %.2f, \"rightLon\": %.2f,\n"
+      "  \"currentGrib\": \"%s\",\n"
+      "  \"polar\": \"%s\",\n"
+      "  \"wavePolar\": \"%s\",\n"
+      "  \"issea\": \"%s\"\n"
+      "}\n",
+      par->workingDir,
+      fileName,
+      zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight,
+      fileNameCurrent,
+      polarFileName,
+        wavePolarFileName,
+      isSeaFileName
+   );
 
-   fileName = g_path_get_basename (par->currentGribFileName);
-   g_string_append_printf (jsonString, "   \"currentGrib\": \"%s\",\n", fileName); 
-   g_free (fileName);
+   free(fileName);
+   free(fileNameCurrent);
+   free(polarFileName);
+   free(wavePolarFileName);
+   free(isSeaFileName);
 
-   fileName = g_path_get_basename (par->polarFileName);
-   g_string_append_printf (jsonString, "   \"polar\": \"%s\",\n", fileName); 
-   g_free (fileName);
-
-   fileName = g_path_get_basename (par->wavePolFileName);
-   g_string_append_printf (jsonString, "   \"wavePolar\": \"%s\",\n", fileName); 
-   g_free (fileName);
-
-   fileName = g_path_get_basename (par->isSeaFileName);
-   g_string_append_printf (jsonString, "   \"issea\": \"%s\"\n", fileName); 
-   g_free (fileName);
-
-   g_string_append_printf (jsonString, "}\n"); 
-   return jsonString;
+   if (n < 0) return NULL;                
+   if ((size_t)n >= maxLen) return NULL;  // Trunc
+   return out;
 }
 
-/*! return id and name  of nearest port found in file fileName from lat, lon. return empty string if not found */
+/*! return id and name of nearest port found in file fileName from lat, lon. return empty string if not found */
 int nearestPort (double lat, double lon, const char *fileName, char *res, size_t maxLen) {
    const double minShomLat = 42.0;
    const double maxShomLat = 52.0;
@@ -1012,11 +1093,19 @@ int nearestPort (double lat, double lon, const char *fileName, char *res, size_t
             g_strstrip (portName);
             g_strlcpy (res, portName, maxLen);
             bestId = id;
-               // printf ("%s %.2lf %.2lf %.2lf %.2lf %.2lf \n", portName, d, lat, lon, latPort, lonPort);
+            //printf ("%s %.2lf %.2lf %.2lf %.2lf %.2lf \n", portName, d, lat, lon, latPort, lonPort);
          }
       }
    }
    fclose (f);
    return bestId;
 }
+
+/*! return secondes with decimals */
+double monotonic (void) {
+   struct timespec ts;
+   clock_gettime(CLOCK_MONOTONIC, &ts);
+   return (double) ts.tv_sec + (double) ts.tv_nsec * 1e-9;
+}
+
 

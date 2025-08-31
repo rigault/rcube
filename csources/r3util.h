@@ -56,7 +56,7 @@ extern bool   mostRecentFile (const char *directory, const char *pattern0, const
 extern double fPenalty (int shipIndex, int type, double tws, double energy, double *cStamina);
 extern double fPointLoss (int shipIndex, int type, double tws, bool fullPack);
 extern double fTimeToRecupOnePoint (double tws);
-extern GString *paramToJson (Par *par);
+extern char   *paramToStrJson (Par *par, char *buffer, size_t maxLen);
 extern int    nearestPort (double lat, double lon, const char *fileName, char *str, size_t maxLen);
-
+extern double monotonic (void);
 

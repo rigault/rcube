@@ -1,4 +1,7 @@
 #include <stdbool.h>
+#include <dirent.h>   // DIR, opendir, readdir, closedir
+#include <errno.h>
+#include <stdarg.h>
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,17 +10,16 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include "eccodes.h"
-#include <glib.h>
+#include <limits.h>
 #include <locale.h>
+#include "glibwrapper.h"
 #include "r3types.h"
 #include "r3util.h"
 #include "engine.h"
 #include "grib.h"
+#include "readgriball.h"
 #include "polar.h"
 #include "inline.h"
-#include "mailutil.h"
-#include <curl/curl.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
@@ -28,6 +30,11 @@
 #define MAX_SIZE_FEED_BACK     1024
 #define FEED_BACK_FILE_NAME    "feedback.log"
 #define FEED_BACK_OBJECT       "rCubeFeedBack"
+#define ADMIN_LEVEL            10          // level of authorization for administrator
+#define BIG_BUFFER_SIZE        (10*MILLION)
+#define MAX_SIZE_MESS          100000
+char *bigBuffer = NULL;
+
 
 const char *filter[] = {".csv", ".pol", ".grb", ".grb2", ".log", ".txt", ".par", NULL}; // global filter for REQ_DIR request
 
@@ -35,10 +42,14 @@ enum {REQ_KILL = -1793, REQ_TEST = 0, REQ_ROUTING = 1, REQ_BEST_DEP = 2, REQ_RAC
       REQ_GRIB = 5, REQ_DIR = 6, REQ_PAR_RAW = 7, REQ_PAR_JSON = 8, 
       REQ_INIT = 9, REQ_FEEDBACK = 10, REQ_DUMP_FILE = 11, REQ_NEAREST_PORT = 12}; // type of request
 
+// level of authorization
+const int typeLevel [13] = {0, 0, ADMIN_LEVEL, ADMIN_LEVEL, 0, 0, 0, ADMIN_LEVEL, 0, ADMIN_LEVEL, 0, ADMIN_LEVEL, 0};        
+ 
 char parameterFileName [MAX_SIZE_FILE_NAME];
 
 /*! Client Request description */
 typedef struct {
+   int level;                                // level of authorization
    int type;                                 // type of request
    int cogStep;                              // step of cog in degrees
    int rangeCog;                             // range of cog from x - RANGE_GOG, x + RAGE_COG+1
@@ -99,6 +110,154 @@ typedef struct {
    time_t mtime;
 } FileInfo;
 
+/*! generate json description of isochrones. Concatenate it to res */
+static char *isochronesToStrCatJson (char *res, size_t maxLen) {
+   Pp pt;
+   char str [MAX_SIZE_TEXT];
+   int index;
+   g_strlcat (res, "[\n", maxLen);
+   Pp *newIsoc = NULL; // array of points
+   if ((newIsoc = malloc (MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
+      fprintf (stderr, "In isochronesToStrJson: error in memory newIsoc allocation\n");
+      return NULL;
+   }
+   
+   for (int i = 0; i < nIsoc; i += 1) {
+      g_strlcat (res, "   [\n", maxLen);
+      index = (isoDesc [i].size <= 1) ?  0 : isoDesc [i].first;
+      for (int j = 0; j < isoDesc [i].size; j++) {
+         newIsoc [j] = isocArray [i * MAX_SIZE_ISOC + index];
+         index += 1;
+         if (index == isoDesc [i].size) index = 0;
+      }
+      int max = isoDesc [i].size;
+      for (int k = 0; k < max; k++) {
+         pt = newIsoc [k];
+         snprintf (str, sizeof (str), "      [%.6lf, %.6lf, %d, %d, %d]%s\n", 
+            pt.lat, pt.lon, pt.id, pt.father, k, (k < max - 1) ? ","  : ""); 
+         g_strlcat (res, str, maxLen);
+      }
+      snprintf (str, sizeof (str),  "   ]%s\n", (i < nIsoc -1) ? "," : ""); // no comma for last value 
+      g_strlcat (res, str, maxLen);
+   }
+   g_strlcat (res, "]\n", maxLen); 
+   free (newIsoc);
+   return res;
+}
+
+/*! generate json description of isochrones decriptor. Conatenate te description to res */
+static char *isoDescToStrCatJson (char *res, size_t maxLen) {
+   char str [MAX_SIZE_TEXT];
+   g_strlcat (res, "[\n", maxLen);
+
+   for (int i = 0; i < nIsoc; i++) {
+      //double distance = isoDesc [i].distance;
+      //if (distance >= DBL_MAX) distance = -1;
+      snprintf (str, sizeof (str), "   [%d, %d, %d, %d, %d, %.2lf, %.2lf, %.6lf, %.6lf]%s\n",
+         i, isoDesc [i].toIndexWp, isoDesc[i].size, isoDesc[i].first, isoDesc[i].closest, 
+         isoDesc[i].bestVmc, isoDesc[i].biggestOrthoVmc, 
+         isoDesc [i].focalLat, 
+         isoDesc [i].focalLon,
+         (i < nIsoc - 1) ? "," : "");
+      g_strlcat (res, str, maxLen);
+   }
+   g_strlcat (res, "]\n", maxLen); 
+   return res;
+}
+
+/*! generate json description of track boats */
+static char  *routeToStrJson (SailRoute *route, int index, bool isoc, bool isoDesc, char *res, size_t maxLen) {
+   char str [MAX_SIZE_MESS] = "";
+   char strSail [MAX_SIZE_NAME] = "";
+   double twa = 0.0, hdg = 0.0, twd = 0.0;
+   if (route->n <= 0) return NULL;
+
+   int iComp = (route->competitorIndex < 0) ? 0 : route->competitorIndex;
+   char *gribBaseName = path_get_basename (par.gribFileName);
+   char *gribCurrentBaseName = path_get_basename (par.currentGribFileName);
+   char *wavePolarBaseName = path_get_basename (par.wavePolFileName);
+
+   snprintf (res, maxLen, 
+      "{\n" 
+      "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"duration\": %d, \"totDist\": %.2lf, \n"
+      "\"routingRet\": %d,\n"
+      "\"isocTimeStep\": %.2lf,\n"
+      "\"calculationTime\": %.4lf,\n"
+      "\"destinationReached\": %s,\n"
+      "\"lastStepDuration\": [",
+      competitors.t[iComp].name, route->t [index].lCap, 0, (int) (route->duration * 3600), route->totDist,
+      route->ret,
+      route->isocTimeStep * 3600,
+      route->calculationTime,
+      (route->destinationReached) ? "true" : "false"
+   );
+
+   for (int i = 0; i < route->nWayPoints; i += 1) {
+      snprintf (str, sizeof (str), "%.4lf, ", route->lastStepWpDuration [i] * 3600.0);
+      g_strlcat (res, str, maxLen);
+   }
+   snprintf (str, sizeof (str),
+         "%.4f],\n"
+         "\"motorDist\": %.2lf, \"starboardDist\": %.2lf, \"portDist\": %.2lf,\n"
+         "\"nSailChange\": %d, \"nAmureChange\": %d,\n" 
+         "\"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf,\n"
+          "\"polar\": \"%s\", \"wavePolar\": \"%s\", \"grib\": \"%s\", \"currentGrib\": \"%s\", \"track\": [\n",
+         route->lastStepDuration * 3600.0,
+         route->motorDist, route->tribordDist, route->babordDist,
+         route->nSailChange, route->nAmureChange,
+         zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight,
+         route->polarFileName, wavePolarBaseName, gribBaseName, gribCurrentBaseName
+   );
+   g_strlcat (res, str, maxLen);
+   free (wavePolarBaseName);
+   free (gribBaseName);
+   free (gribCurrentBaseName);
+
+   for (int i = 0; i < route->n; i++) {
+      if (route->t[i].sog > LIMIT_SOG)
+         fprintf (stderr, "In routeToStrJson sog > LIMIT_SOG, lat = %.6lf, lon = %.6lf, sog = %.6lf, od = %.6lf; ld = %.6lf\n",
+            route->t[i].lat, route->t[i].lon, route->t[i].sog, route->t[i].od, route->t[i].ld);
+
+      twa = fTwa (route->t[i].lCap, route->t[i].twd);
+      hdg = route->t [i].oCap;
+      if (hdg < 0) hdg += 360;
+      twd = route->t[i].twd;
+      if (twd < 0) twd += 360;
+      fSailName (route->t[i].sail, strSail, sizeof (strSail));
+      if ((route->t[i].toIndexWp < -1) || (route->t[i].toIndexWp >= route->nWayPoints)) {
+         printf ("In routeToStrJson, Error: toIndexWp outside range; %d\n", route->t[i].toIndexWp);
+      } 
+      snprintf (str, sizeof (str), 
+         "   [%d, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, \"%s\", %s, %d, %d]%s\n", 
+         route->t[i].toIndexWp,
+         route->t[i].lat, route->t[i].lon,
+         route->t[i].time * 3600.0,
+         route->t[i].od, route->t[i].sog, 
+         twd ,route->t[i].tws, 
+         hdg, twa,
+         route->t[i].g, route->t[i].w ,route->t[i].stamina, 
+         strSail, (route->t[i].motor) ? "true" : "false",
+         route->t[i].id, route->t[i].father,
+         //(route->destinationReached || i < route-> n - 1) ? "," :"");
+         (i < route-> n - 1) ? "," :""
+      );
+      g_strlcat (res, str, maxLen);
+   }
+
+   g_strlcat (res, "]\n}\n", maxLen);
+
+   if (isoc) {
+      g_strlcat (res, ",\n\"_isoc\": \n", maxLen);
+      isochronesToStrCatJson (res, maxLen); // concat in res the isochrones
+   }
+   if (isoDesc) {
+      g_strlcat (res, ",\n\"_isodesc\": \n", maxLen);
+      isoDescToStrCatJson (res, maxLen); // concat in res des descriptors
+   }
+   g_strlcat (res, "}\n", maxLen);
+   return res;
+}
+
 /**
  * @brief Retrieves the real client IP address from HTTP headers.
  * 
@@ -109,13 +268,13 @@ typedef struct {
  */
 bool getRealIPAddress (const char* headers, char* clientAddress, size_t bufferSize) {
    const char* headerName = "X-Real-IP: ";
-   const char* headerStart = g_strstr_len (headers, -1, headerName);
+   const char* headerStart = strstr (headers, headerName);
 
    if (headerStart) {
       headerStart += strlen (headerName);
       while (*headerStart == ' ') headerStart++;  // Skip any whitepaces
         
-      const char* headerEnd = g_strstr_len(headerStart, -1, "\r\n");
+      const char* headerEnd = strstr(headerStart, "\r\n");
       if (headerEnd) {
          size_t ipLength = headerEnd - headerStart;
          if (ipLength < bufferSize) {
@@ -135,31 +294,48 @@ bool getRealIPAddress (const char* headers, char* clientAddress, size_t bufferSi
 /*! extract user agent */
 char* extractUserAgent (const char* saveBuffer) {
    const char* headerName = "User-Agent: ";
-   const char* userAgentStart = g_strstr_len(saveBuffer, -1, headerName);
+   const char* userAgentStart = strstr (saveBuffer, headerName);
    if (userAgentStart) {
       userAgentStart += strlen (headerName);
-      const char* userAgentEnd = g_strstr_len (userAgentStart, -1, "\r\n");
-       if (userAgentEnd) {
-          return g_strndup(userAgentStart, userAgentEnd - userAgentStart);
-       }
+      const char* userAgentEnd = strstr  (userAgentStart, "\r\n");
+      if (userAgentEnd) {
+         return strndup (userAgentStart, userAgentEnd - userAgentStart);
+      }
    }
-   return NULL;  // No user agent gound
+   return NULL;  // No user agent found
 }
 
+/*! extract level */
+int extractLevel (const char* buffer) {
+   const char* headerName = "X-User-Level:";
+   const char* levelStart = strstr (buffer, headerName);
+   if (levelStart) return atoi (levelStart + strlen (headerName));
+   return 0;  // No X_User-Level found
+}
+
+/*! compare level of authorization with request */
+bool allowedLevel (ClientRequest *clientReq) {
+   return true; // ATTENTION
+   if (clientReq->type == 1) {
+      return strstr (clientReq->gribName, "GFS") != NULL || clientReq->type > 1; // GFS allowed to anyone
+   }
+   if (clientReq->level >= 0)
+      return typeLevel [clientReq->type] <= clientReq->level;
+   else return clientReq->level == ADMIN_LEVEL;
+} 
+
 /*! Comparator to sort by name (ascending order) */
-static gint compareByName (gconstpointer a, gconstpointer b) {
-   const FileInfo *fa = a;
-   const FileInfo *fb = b;
-   return g_strcmp0(fa->name, fb->name);
+static int compareByName (const void *a, const void *b) {
+    const FileInfo *fa = (const FileInfo*) a, *fb = (const FileInfo*) b;
+    return strcmp (fa->name, fb->name);
 }
 
 /*! Comparator to sort by modification date (most recent first) */
-static gint compareByMtime (gconstpointer a, gconstpointer b) {
-   const FileInfo *fa = a;
-   const FileInfo *fb = b;
-   if (fa->mtime < fb->mtime) return 1;
-   else if (fa->mtime > fb->mtime) return -1;
-   else return 0;
+static int compareByMtime (const void *a, const void *b) {
+    const FileInfo *fa = (const FileInfo*)a, *fb = (const FileInfo*)b;
+    if (fa->mtime > fb->mtime) return -1;
+    if (fa->mtime < fb->mtime) return  1;
+    return strcmp(fa->name, fb->name);    // tie-breaker stable-ish
 }
 
 /*! Checks if the filename matches one of the suffixes in the filter */
@@ -174,108 +350,192 @@ static bool matchFilter (const char *filename, const char **filter) {
 /*! 
  * return neareAst port to lat, lon
  */
-GString *nearestPortToJson (double lat, double lon) {
+static char *nearestPortToStrJson (double lat, double lon, char *out, size_t maxLen) {
    char selectedPort [MAX_SIZE_NAME];
-   GString *json = g_string_new("");
    int idPort = nearestPort (lat, lon, par.tidesFileName, selectedPort, sizeof (selectedPort));
    if (idPort != 0) {
-      g_string_append_printf (json, "{\"nearestPort\": \"%s\", \"idPort\": %d}\n", selectedPort, idPort);
+      snprintf (out, maxLen, "{\"nearestPort\": \"%s\", \"idPort\": %d}\n", selectedPort, idPort);
    }
-   else g_string_append_printf (json, "{\"error\": \"Tide File %s not found\"}\n", par.tidesFileName);
-   return json;
+   else snprintf (out, maxLen, "{\"error\": \"Tide File %s not found\"}\n", par.tidesFileName);
+   return out;
+}
+
+/*! Concatenatz two path part managing '/' ; malloc() result */
+static char *path_join(const char *a, const char *b) {
+   if (!a || !*a) return b ? strdup(b) : strdup("");
+   if (!b || !*b) return strdup(a);
+   if (b[0] == '/') return strdup(b); // absolute  b => like g_build_filename */
+   size_t la = strlen(a);
+   bool a_has_slash = (la > 0 && a[la-1] == '/');
+   size_t len = la + (a_has_slash ? 0 : 1) + strlen(b) + 1;
+   char *out = (char*)malloc(len);
+   if (!out) return NULL;
+   if (a_has_slash) snprintf(out, len, "%s%s", a, b);
+   else             snprintf(out, len, "%s/%s", a, b);
+   return out;
+}
+
+/*! Small secure string builder to fill 'out' */
+static bool sb_appendf (char *out, size_t maxLen, size_t *used, const char *fmt, ...) {
+   if (*used >= maxLen) return false;
+   size_t avail = maxLen - *used;
+   va_list ap; va_start(ap, fmt);
+   int n = vsnprintf(out + *used, avail, fmt, ap);
+   va_end(ap);
+   if (n < 0) return false;
+   if ((size_t)n >= avail) { // trunked-> false
+      *used = maxLen - 1;
+      return false;
+   }
+   *used += (size_t)n;
+   return true;
+}
+
+/*! Escape JSON string ; malloc(), to free() */
+static char *json_escape_strdup(const char *s) {
+   if (!s) return strdup("");
+   size_t len = strlen(s);
+   // worst case: every byte become \u00XX (6 chars) */
+   size_t cap = len * 6 + 1;
+   char *out = (char*)malloc(cap);
+   if (!out) return NULL;
+   char *p = out;
+
+   for (size_t i = 0; i < len; i++) {
+      unsigned char c = (unsigned char)s[i];
+      switch (c) {
+         case '\"': *p++='\\'; *p++='\"'; break;
+         case '\\': *p++='\\'; *p++='\\'; break;
+         case '\b': *p++='\\'; *p++='b';  break;
+         case '\f': *p++='\\'; *p++='f';  break;
+         case '\n': *p++='\\'; *p++='n';  break;
+         case '\r': *p++='\\'; *p++='r';  break;
+         case '\t': *p++='\\'; *p++='t';  break;
+         default:
+            if (c < 0x20) { // control -> \u00XX
+               static const char hex[] = "0123456789ABCDEF";
+               *p++='\\'; *p++='u'; *p++='0'; *p++='0';
+               *p++=hex[(c>>4)&0xF]; *p++=hex[c&0xF];
+            } else {
+               *p++=(char)c;
+            }
+     }
+   }
+   *p = '\0';
+   return out;
 }
 
 /*!
  * Function: listDirToJson
  * -----------------------
  * Lists the regular files in the directory constructed from root/dir,
- * applies a suffix filter if provided, sorts the list either by name or by
+ * applies a pattern filter ans a suffix filter if provided, sorts the list either by name or by
  * modification date (most recent first), and generates a JSON string containing
  * an array of arrays in the format [filename, size, modification date].
  *
  * In case of an error (e.g., unable to open the directory), the error is printed
  * to the console and a corresponding JSON error response is returned.
  */
-GString *listDirToJson (char *root, char *dir, bool sortByName, const char **filter) {
-   GString *json = g_string_new("");
-   GError *error = NULL;
+static char *listDirToStrJson (char *root, char *dir, bool sortByName, const char *pattern, const char **filter, char *out, size_t maxLen) {
+   size_t used = 0;
+   if (maxLen == 0) return out;
+   out[0] = '\0';
 
-   // Build the full directory path.
-   gchar *full_path = g_build_filename(root, dir, NULL);
-   GDir *gdir = g_dir_open(full_path, 0, &error);
-   if (!gdir) {
-      fprintf (stderr, "In listDirToJson Error opening directory '%s': %s", full_path, error->message);
-      g_string_assign (json, "{\"error\": \"Error opening directory\"}");
-      g_error_free (error);
-      g_free (full_path);
-      return json;
+   // Path directory
+   char *fullPath = path_join(root ? root : "", dir ? dir : "");
+   if (!fullPath) {
+      fprintf(stderr, "listDirToStrJson: mémoire insuffisante pour le chemin\n");
+      sb_appendf(out, maxLen, &used, "{\"error\":\"Out of memory\"}");
+      return out;
    }
 
-   // List to store each file's information.
-   GList *filesList = NULL;
-   const gchar *filename;
-   while ((filename = g_dir_read_name(gdir)) != NULL) {
-      // Apply the suffix filter.
-      if (!matchFilter (filename, filter))
-         continue;
+   DIR *d = opendir(fullPath);
+   if (!d) {
+      fprintf(stderr, "In listDirToStrJson Error opening directory '%s': %s\n",
+            fullPath, strerror(errno));
+      sb_appendf(out, maxLen, &used, "{\"error\":\"Error opening directory\"}");
+      free(fullPath);
+      return out;
+   }
 
-      // Build the full file path.
-      gchar *file_path = g_build_filename (full_path, filename, NULL);
+   // file  Collect
+   FileInfo *arr = NULL;
+   size_t n = 0, cap = 0;
+
+   struct dirent *ent;
+   while ((ent = readdir(d)) != NULL) {
+      const char *fileName = ent->d_name;
+      if (strcmp(fileName, ".") == 0 || strcmp(fileName, "..") == 0) continue;
+
+      // suffix filter
+      if (!matchFilter(fileName, filter)) continue;
+      // prefix (pattern) filter
+      if (pattern && ! g_str_has_prefix(fileName, pattern)) continue;
+
+      // Stat on file
+      char *filePath = path_join(fullPath, fileName);
+      if (!filePath) {
+         fprintf(stderr, "In listDirToStrJson OOM building path for '%s'\n", fileName);
+         continue;
+      }
       struct stat st;
-      if (stat (file_path, &st) != 0) {
-         fprintf (stderr, "In listDirToJson Error retrieving information for '%s'", file_path);
-         g_free (file_path);
+      if (stat(filePath, &st) != 0) {
+         fprintf(stderr, "In listDirToStrJson Error retrieving information for '%s': %s\n",
+               filePath, strerror(errno));
+         free(filePath);
          continue;
       }
-      // Process only regular files.
-      if (!S_ISREG (st.st_mode)) {
-         g_free (file_path);
-         continue;
+      free(filePath);
+
+      if (!S_ISREG(st.st_mode)) continue;
+
+      /* push_back */
+      if (n == cap) {
+         size_t newcap = cap ? cap * 2 : 32;
+         FileInfo *tmp = (FileInfo*)realloc(arr, newcap * sizeof(*arr));
+         if (!tmp) {
+            fprintf(stderr, "listDirToStrJson: realloc échouée\n");
+            break;
+         }
+         arr = tmp; cap = newcap;
       }
-      // Allocate and fill the FileInfo structure.
-      FileInfo *info = g_new (FileInfo, 1);
-      info->name = g_strdup (filename);
-      info->size = st.st_size;
-      info->mtime = st.st_mtime;
-      filesList = g_list_append (filesList, info);
-      g_free (file_path);
+      arr[n].name  = strdup(fileName);
+      arr[n].size  = st.st_size;
+      arr[n].mtime = st.st_mtime;
+      if (!arr[n].name) { fprintf(stderr, "OOM on strdup\n"); continue; }
+      n++;
    }
-   g_dir_close (gdir);
-   g_free (full_path);
+   closedir(d);
+   free(fullPath);
 
-   // Sort the list based on the requested criteria.
-   if (sortByName)
-      filesList = g_list_sort (filesList, compareByName);
-   else
-      filesList = g_list_sort (filesList, compareByMtime);
+   if (n > 1) qsort(arr, n, sizeof(*arr), sortByName ? compareByName : compareByMtime);
 
-   // Construct the JSON string.
-   g_string_assign (json, "[\n");
-   for (GList *l = filesList; l != NULL; l = l->next) {
-      FileInfo *info = (FileInfo *)l->data;
-      // Convert the modification date to a string (format "YYYY-MM-DD HH:MM:SS").
-      struct tm *tm_info = localtime (&(info->mtime));
-      char time_str [20];
-      strftime (time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", tm_info);
-      // Escape the filename for JSON.
-      char *escaped_name = g_strescape (info->name, NULL);
-      // Add a JSON array for this file.
-      g_string_append_printf (json, "   [\"%s\", %ld, \"%s\"]", escaped_name, info->size, time_str);
-      g_free (escaped_name);
-      if (l->next != NULL)
-         g_string_append (json, ",\n");
+   /* JSON */
+   sb_appendf(out, maxLen, &used, "[\n");
+   for (size_t i = 0; i < n; i++) {
+      /* locale date "YYYY-MM-DD HH:MM:SS" */
+      struct tm tm_buf, *tm_info;
+      tm_info = localtime_r(&arr[i].mtime, &tm_buf);
+      char time_str[20] = "1970-01-01 00:00:00";
+      if (tm_info) strftime(time_str, sizeof time_str, "%Y-%m-%d %H:%M:%S", tm_info);
+
+      char *escaped = json_escape_strdup(arr[i].name);
+      bool ok = sb_appendf(out, maxLen, &used,
+                "   [\"%s\", %lld, \"%s\"]%s\n",
+                escaped ? escaped : "",
+                (long long)arr[i].size, time_str,
+                (i + 1 < n) ? "," : "");
+      free(escaped);  
+      if (!ok) { // full 
+         break;
+      }
    }
-   g_string_append (json, "\n]\n");
+   sb_appendf(out, maxLen, &used, "]\n");
 
-   // Free allocated memory.
-   for (GList *l = filesList; l != NULL; l = l->next) {
-      FileInfo *info = (FileInfo *)l->data;
-      g_free (info->name);
-      g_free (info);
-   }
-   g_list_free (filesList);
+   for (size_t i = 0; i < n; i++) free(arr[i].name);
+   free(arr);
 
-   return json;
+   return out;
 }
 
 /*! Make initialization  
@@ -344,7 +604,7 @@ static const char* getCurrentDate () {
    return dateBuffer;
 }
 
-/*! store feeed back information */
+/*! store ck information */
 static void handleFeedbackRequest (const char *fileName, const char *date, const char *clientIPAddress, const char *string) {
    FILE *file = fopen (fileName, "a");
    if (file == NULL) {
@@ -392,6 +652,7 @@ static bool decodeHttpReq (const char *req, ClientRequest *clientReq) {
    clientReq->maxWind = 100.0;
 
    char **parts = g_strsplit (req, "&", -1);
+   if (parts == NULL) return false;
 
    for (int i = 0; parts[i]; i++) {
       // printf ("part %d %s\n", i, parts [i]);
@@ -596,7 +857,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    par.startTimeInHours = (clientReq->epochStart - theTime0) / 3600.0;
    printf ("Start Time Epoch: %ld, theTime0: %ld\n", clientReq->epochStart, theTime0);
    printf ("Start Time in Hours after Grib: %.2lf\n", par.startTimeInHours);
-   gchar *gribBaseName = g_path_get_basename (par.gribFileName);
+   char *gribBaseName = path_get_basename (par.gribFileName);
 
    competitors.n = clientReq->nBoats;
    for (int i = 0; i < clientReq->nBoats; i += 1) {
@@ -610,7 +871,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
          snprintf (checkMessage, maxLen, 
             "\"6: Competitor not in Grib wind zone.\",\n\"grib\": \"%s\", \"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf\n",
             gribBaseName, zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight);
-         g_free (gribBaseName);
+         free (gribBaseName);
          return false;
       }
       g_strlcpy (competitors.t [i].name, clientReq -> boats [i].name, MAX_SIZE_NAME);
@@ -630,7 +891,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
          snprintf (checkMessage, maxLen, 
             "\"8: WP or Dest. not in Grib wind zone.\",\n\"grib\": \"%s\", \"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf\n",
             gribBaseName, zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight);
-         g_free (gribBaseName);
+         free (gribBaseName);
          return false;
       }
    }
@@ -737,173 +998,169 @@ int memoryUsage (void) {
    return mem;  // in KB
 }
 
-/*! Raw dump of file fileName */
-GString *dumpFile (const char * fileName) {
-   GString *res = g_string_new ("");
-   char fullFileName [MAX_SIZE_FILE_NAME];
-   buildRootName (fileName, fullFileName, sizeof (fullFileName));
-   GError *error = NULL;
-   char *content = NULL;
-   gsize length;
-   if (g_file_get_contents (fullFileName, &content, &length, &error)) {
-      g_string_append_printf (res, "%s", content);
-      g_free (content);
-   }
-   else {
-      g_string_append_printf (res, "{\"_Error\": \"%s\"}\n", error->message);
-      g_clear_error (&error);
-   }
-   return res;
-}  
+/*! Raw dump of file fileName into 'out' (NULL-terminated). Truncates if needed. */
+static char *dumpFileToStr(const char *fileName, char *out, size_t maxLen) {
+   char fullFileName[MAX_SIZE_FILE_NAME];
+   buildRootName(fileName, fullFileName, sizeof fullFileName);
 
-/*! launch action and returns GString after execution */
-static GString *launchAction (int serverPort, ClientRequest *clientReq, const char *date, const char *clientIPAddress) {
+   if (maxLen == 0) return out;
+   out[0] = '\0';
+
+   FILE *fp = fopen (fullFileName, "rb");  // b = binaire, no CR/LF translation
+   if (!fp) {
+      snprintf(out, maxLen, "{\"_Error\": \"%s\"}\n", strerror(errno));
+      return out;
+   }
+
+   size_t total = 0;
+   while (total + 1 < maxLen) {
+      size_t n = fread(out + total, 1, maxLen - 1 - total, fp);
+      total += n;
+      if (n == 0) break;            // EOF or error
+   }
+   out[total] = '\0';
+
+   if (ferror(fp)) {
+      snprintf(out, maxLen, "{\"_Error\": \"%s\"}\n", strerror(errno));
+   } else if (!feof(fp)) {
+      fprintf (stderr, "dumpFileToStr: output buffer truncated to %zu bytes\n", maxLen - 1);
+   }
+
+   fclose(fp);
+   return out;
+}
+
+/*! launch action and returns outBuffer after execution */
+static char *launchAction (int serverPort, ClientRequest *clientReq, 
+                           const char *date, const char *clientIPAddress, char *outBuffer, size_t maxLen) {
    char tempFileName [MAX_SIZE_FILE_NAME];
-   GString *res = g_string_new ("");
-   GString *polString;
    char checkMessage [MAX_SIZE_TEXT];
    char sailPolFileName [MAX_SIZE_NAME] = "";
+   char str[MAX_SIZE_TEXT_FILE] = "";
+   char strSail [MAX_SIZE_TEXT_FILE] = "";
+   char legendStr[MAX_SIZE_LINE] = "";
    char body [2048] = "";
+   bigBuffer [0] = '\0';
    // printf ("client.req = %d\n", clientReq->type);
    switch (clientReq->type) {
    case REQ_KILL:
       printf ("Killed on port: %d, At: %s, By: %s\n", serverPort, date, clientIPAddress);
-      g_string_append_printf (res, "{\n   \"killed_on_port\": %d, \"date\": %s, \"by\": %s\"\n}\n", serverPort, date, clientIPAddress);
+      snprintf (outBuffer, maxLen, "{\n   \"killed_on_port\": %d, \"date\": %s, \"by\": %s\"\n}\n", serverPort, date, clientIPAddress);
       break;
    case REQ_TEST:
-      g_string_append_printf (res, "{\n   \"Prog-version\": \"%s, %s, %s\",\n", PROG_NAME, PROG_VERSION, PROG_AUTHOR);
-      g_string_append_printf (res, "   \"API server port\": %d,\n", serverPort);
-      g_string_append_printf (res, "   \"Compilation-date\": \"%s\",\n", __DATE__);
-      g_string_append_printf (res, "   \"GLIB-version\": \"%d.%d.%d\",\n   \"ECCODES-version\": \"%s\",\n   \"CURL-version\": \"%s\",\n",
-            GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION, GLIB_MICRO_VERSION, ECCODES_VERSION_STR, LIBCURL_VERSION);
-      g_string_append_printf (res, "   \"PID\": %d,\n", getpid ());
-      g_string_append_printf (res, "   \"Memory usage in KB\": %d\n}\n", memoryUsage ());
+      snprintf (outBuffer, maxLen,
+         "{\n   \"Prog-version\": \"%s, %s, %s\",\n"
+         "   \"API server port\": %d,\n"
+         "   \"Grib Reader\": \"%s\",\n"
+         "   \"Compilation-date\": \"%s\",\n"
+         "   \"PID\": %d,\n"
+         "   \"Memory usage in KB\": %d,\n"
+         "   \"Authorization-Level\": %d\n}\n",
+         PROG_NAME, PROG_VERSION, PROG_AUTHOR, serverPort, gribReaderVersion (str, sizeof (str)), 
+         __DATE__, getpid (), memoryUsage (), clientReq->level
+      );
       break;
    case REQ_ROUTING:
       if (checkParamAndUpdate (clientReq, checkMessage, sizeof (checkMessage))) {
          competitors.runIndex = 0;
          routingLaunch ();
-         GString *jsonRoute = routeToJson (&route, 0, clientReq->isoc, clientReq->isoDesc); // only most recent route with isochrones 
-         g_string_append_printf (res, "{\n%s}\n", jsonRoute->str);
-         g_string_free (jsonRoute, TRUE);
+         routeToStrJson (&route, 0, clientReq->isoc, clientReq->isoDesc, outBuffer, maxLen); 
       }
       else {
-         g_string_append_printf (res,"{\"_Error\":\n%s\n}\n", checkMessage);
-      }
-      break;
-   case REQ_BEST_DEP:
-      if (checkParamAndUpdate (clientReq, checkMessage, sizeof (checkMessage))) {
-         competitors.runIndex = 0;
-         printf ("Launch bestTimeDesparture\n");
-         printf ("begin: %d, end: %d\n", chooseDeparture.tBegin, chooseDeparture.tEnd);
-         bestTimeDeparture ();
-         GString *bestTimeReport = bestTimeReportToJson (&chooseDeparture, clientReq->isoc, clientReq->isoDesc);
-         g_string_append_printf (res, "%s", bestTimeReport->str);
-         g_string_free (bestTimeReport, TRUE);
-      }
-      else {
-         g_string_append_printf (res,"{\"_Error\":\n%s\n}\n", checkMessage);
-      }
-      break;
-   case REQ_RACE:
-      historyRoute.n = 0;
-      if (checkParamAndUpdate (clientReq, checkMessage, sizeof (checkMessage))) {
-         printf ("Launch AllCompetitors\n");
-         allCompetitors ();
-         GString *jsonRoutes = allCompetitorsToJson (competitors.n, clientReq->isoc, clientReq->isoDesc);
-         g_string_append_printf (res, "%s", jsonRoutes->str);
-         g_string_free (jsonRoutes, TRUE);
-      }
-      else {
-         g_string_append_printf (res,"{\"_Error\":\n%s\n}\n", checkMessage);
+         snprintf (outBuffer, maxLen, "{\"_Error\":\n%s\n}\n", checkMessage);
       }
       break;
    case REQ_POLAR:
+      str [0] = '\0'; strSail [0] = '\0'; legendStr [0] = '\0';
       printf ("polarName: %s\n", clientReq->polarName);
       if (strstr (clientReq->polarName, "wavepol") != NULL) {
-         polString = polToJson (clientReq->polarName, "wavePolarName");
-         g_string_append_printf (res, "[%s, %s, %s]\n", polString->str, "{}", "{}");
-         g_string_free (polString, TRUE);
+         polToStrJson (clientReq->polarName, "wavePolarName", str, sizeof (str));
+         g_strlcat (outBuffer, "[", maxLen);
+         g_strlcat (outBuffer, str, maxLen);
+         g_strlcat (outBuffer, ",\n {}, {}]\n", maxLen);
          break;
       }
 
       if (clientReq->polarName [0] != '\0') {
-         polString = polToJson (clientReq->polarName, "polarName");
+         polToStrJson (clientReq->polarName, "polarName", str, sizeof (str));
          newFileNameSuffix (clientReq->polarName, "sailpol", sailPolFileName, sizeof (sailPolFileName));
       }
       else {
-         polString = polToJson (par.polarFileName, "polarName");
+         polToStrJson (par.polarFileName, "polarName", str, sizeof (str));
          newFileNameSuffix (par.polarFileName, "sailpol", sailPolFileName, sizeof (sailPolFileName));
       }
-      GString *sailString = polToJson (sailPolFileName, "sailName");
-      GString *legendString = g_string_new ("");
-      if (g_str_has_prefix (sailString->str, "{}"))
-         g_string_assign (legendString, "{}");
+      polToStrJson (sailPolFileName, "sailName", strSail, sizeof (strSail));
+      if (g_str_has_prefix (strSail, "{}"))
+         g_strlcpy (legendStr, "{}", sizeof (legendStr));
       else 
-         legendString = sailLegendToJson (sailName, MAX_N_SAIL);
-      g_string_append_printf (res, "[%s, %s, %s]\n", polString->str, sailString->str, legendString->str);
-      g_string_free (legendString, TRUE);
-      g_string_free (sailString, TRUE);
-      g_string_free (polString, TRUE);
+         sailLegendToStrJson (sailName, MAX_N_SAIL, legendStr, sizeof (legendStr));
+
+      g_strlcat (outBuffer, "[", maxLen);
+      g_strlcat (outBuffer, str, maxLen);
+      g_strlcat (outBuffer, ", ", maxLen);
+      g_strlcat (outBuffer, strSail, maxLen);
+      g_strlcat (outBuffer, ", ", maxLen);
+      g_strlcat (outBuffer, legendStr, maxLen);
+      g_strlcat (outBuffer, "]\n", maxLen);
       break;
    case REQ_GRIB:
-      res = gribToJson (clientReq->gribName);
+      gribToStrJson (clientReq->gribName, outBuffer, maxLen);
       break;
    case REQ_DIR:
-      res = listDirToJson (par.workingDir, clientReq->dirName, clientReq->sortByName, filter);
+      if ((strstr (clientReq->dirName, "grib") != NULL) && (clientReq->level == 0))
+         listDirToStrJson (par.workingDir, clientReq->dirName, clientReq->sortByName, "GFS", filter, outBuffer, maxLen);
+      else
+         listDirToStrJson (par.workingDir, clientReq->dirName, clientReq->sortByName, NULL, filter, outBuffer, maxLen);
       break;
    case REQ_PAR_RAW:
       writeParam (buildRootName (TEMP_FILE_NAME, tempFileName, sizeof (tempFileName)), true, false);
-      res = dumpFile (TEMP_FILE_NAME);
+      dumpFileToStr (TEMP_FILE_NAME, outBuffer, maxLen);
       break;
    case REQ_PAR_JSON:
-      res = paramToJson (&par);
+      paramToStrJson (&par, outBuffer, maxLen);
       break;
    case REQ_INIT:
       if (! initContext (parameterFileName, PATTERN))
-         g_string_append_printf (res, "{\"_Error\": \"%s\"}\n", "Init Routing failed");
+         snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", "Init Routing failed");
       else
-         g_string_append_printf (res, "{\"_Message\": \"%s\"}\n", "Init done");
+         snprintf (outBuffer, maxLen, "{\"_Message\": \"%s\"}\n", "Init done");
       break;
    case REQ_FEEDBACK:
          snprintf (body, sizeof (body), "%s; %s\n%s\n", date, clientIPAddress, clientReq->feedback);
          handleFeedbackRequest (FEED_BACK_FILE_NAME, date, clientIPAddress, clientReq->feedback);
-         if (smtpSend (par.smtpTo, FEED_BACK_OBJECT, body))
-            g_string_append_printf (res, "{\"_Feedback\": \"%s\"}\n", "OK");
-         else
-            g_string_append_printf (res, "{\"_Feedback\": \"%s\"}\n", "KO");
+         snprintf (outBuffer, maxLen, "{\"_Feedback\": \"%s\"}\n", "OK");
       break;
    case REQ_DUMP_FILE:  // raw dump
-      res = dumpFile (clientReq->fileName);
+      dumpFileToStr (clientReq->fileName, outBuffer, maxLen);
       break;
    case REQ_NEAREST_PORT:
       if (clientReq->nWp > 0)
-         res = nearestPortToJson (clientReq->wp[0].lat, clientReq->wp[0].lon);
-      else g_string_append_printf (res, "{\"_Error\": \"%s\"}\n", "No coordinates found");
-      printf ("%s", res->str);
+         nearestPortToStrJson (clientReq->wp[0].lat, clientReq->wp[0].lon, outBuffer, maxLen);
+      else snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", "No coordinates found");
       break;
    default:;
    }
-   return res;
+   return outBuffer;
 }
 
-/*! Check authorised */
-bool authorized (const char *buffer) {
-   return true;
-   /*const char *expected_token = "ABC123SECRET";
-   if (strstr(buffer, "X-API-Key:") != NULL) {
-      char *found = strstr(buffer, "X-API-Key: ");
-      if (found) {
-         found += strlen("X-API-Key: ");
-         return (strncmp(found, expected_token, strlen(expected_token)) == 0);
+/*! robust send */
+static int sendAll (int fd, const void *buf, size_t len) {
+   const unsigned char *p = buf;
+   while (len > 0) {
+      ssize_t n = send(fd, p, len, 0);
+      if (n < 0) {
+         if (errno == EINTR) continue;
+         if (errno == EAGAIN || errno == EWOULDBLOCK) continue; // or poll/select
+         return -1;
       }
-      else return false;
+      p   += (size_t)n;
+      len -= (size_t)n;
    }
-   return false;*/
+   return 0;
 }
 
 /*! Handle client connection and launch actions */
-static void handleClient (int serverPort, int clientFd, struct sockaddr_in *client_addr) {
+static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *client_addr) {
    char saveBuffer [MAX_SIZE_REQUEST];
    char buffer [MAX_SIZE_REQUEST] = "";
    char clientIPAddress [MAX_SIZE_LINE];
@@ -911,26 +1168,11 @@ static void handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
    // read HTTP request
    int bytes_read = recv (clientFd, buffer, sizeof(buffer) - 1, 0);
    if (bytes_read <= 0) {
-     return;
+     return false;
    }
    buffer [bytes_read] = '\0'; // terminate string
    // printf ("Client Request: %s\n", buffer);
-   g_strlcpy (saveBuffer, buffer, MAX_SIZE_BUFFER);
-
-   if (!authorized(buffer)) {
-       const char *errorResponse =
-         "HTTP/1.1 401 Unauthorized\r\n"
-         "Content-Type: application/json; charset=UTF-8\r\n"
-         "Content-Length: 30\r\n"
-         "Connection: close\r\n"
-         "WWW-Authenticate: Bearer realm=\"API\"\r\n"
-         "\r\n"
-         "{\"_error\": \"401 Unauthorized\"}";
-
-      fprintf(stderr, "In handleClient, Error: %s\n", errorResponse);
-      send(clientFd, errorResponse, strlen(errorResponse), 0);
-      return;
-   }
+   g_strlcpy (saveBuffer, buffer, sizeof (buffer));
 
    if (! getRealIPAddress (buffer, clientIPAddress, sizeof (clientIPAddress))) { // try if proxy 
       // Get client IP address if IP address not found with proxy
@@ -942,7 +1184,7 @@ static void handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
    // Extract HTTP first line request
    char *requestLine = strtok (buffer, "\r\n");
    if (!requestLine) {
-     return;
+     return false;
    }
    printf ("Request line: %s\n", requestLine);
 
@@ -952,7 +1194,7 @@ static void handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
       // static file
       const char *requested_path = strchr (requestLine, ' '); // space after "GET"
       if (!requested_path) {
-        return;
+        return false;
       }
       requested_path++; // Pass space
 
@@ -966,53 +1208,61 @@ static void handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
       }
 
       serveStaticFile (clientFd, requested_path);
-      return; // stop
+      return false; // stop
    }
 
    // Extract request body
    char *postData = strstr (saveBuffer, "\r\n\r\n");
    if (postData == NULL) {
-      return;
+      return false;
    }
 
    char* userAgent = extractUserAgent (saveBuffer);
-
    postData += 4; // Ignore HTTP request separators
    printf ("POST Request:\n%s\n", postData);
-   bool ok = decodeHttpReq (postData, &clientReq);
-   
+
    // data for log
-   gint64 start = g_get_monotonic_time (); 
+   double start = monotonic (); 
    const char *date = getCurrentDate ();
 
-   if (! ok) {
+   if (! decodeHttpReq (postData, &clientReq)) {
       const char *errorResponse = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nError";
       fprintf (stderr, "In handleClient, Error: %s\n", errorResponse);
       send (clientFd, errorResponse, strlen(errorResponse), 0);
-      return;
+      return false;
    }
-   GString *res = launchAction (serverPort, &clientReq, date, clientIPAddress);
+   clientReq.level = extractLevel (saveBuffer);
+   clientReq.level = 1; // ATTENTION
+   printf ("user level: %d\n", clientReq.level);
+
    const char *cors_headers = "Access-Control-Allow-Origin: *\r\n"
               "Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n"
               "Access-Control-Allow-Headers: Content-Type\r\n";
-   GString *response = g_string_new ("");
 
-   g_string_append_printf (response,
+   if (! allowedLevel (&clientReq)) {
+      g_strlcpy (bigBuffer, "{\"_Error\": \"Too low level of authorization\"}\n", BIG_BUFFER_SIZE);
+   }
+   else {
+      launchAction (serverPort, &clientReq, date, clientIPAddress, bigBuffer, BIG_BUFFER_SIZE);
+   }
+   char header [512];
+   size_t bigBufferLen = strlen (bigBuffer);
+   int headerLen = snprintf (header, sizeof (header),
       "HTTP/1.1 200 OK\r\n"
       "Content-Type: application/json\r\n"
       "%s"
       "Content-Length: %zu\r\n"
-      "\r\n"
-      "%s",
-      cors_headers, strlen(res->str), res->str);
-   g_string_free (res, TRUE);
-   //printf ("response on port %d: %s\n", serverPort, response->str);
-   send (clientFd, response->str, strlen(response->str), 0);
-   printf ("Response sent to client\n\n");
-   g_string_free (response, TRUE);
-   double duration = (g_get_monotonic_time () - start) / 1e6; 
+      "\r\n",
+      cors_headers, bigBufferLen);
+
+   if (sendAll (clientFd, header, (size_t) headerLen) < 0) return false;
+   if (sendAll (clientFd, bigBuffer, bigBufferLen) < 0) return false;
+   printf ("Response sent to client. Size: %zu\n\n", headerLen + bigBufferLen);
+
+   double duration = monotonic () - start; 
    logRequest (par.logFileName, date, serverPort, clientIPAddress, postData, userAgent, &clientReq, duration);
-   if (userAgent) g_free (userAgent);
+   if (userAgent) free (userAgent);
+   return true;
 }
 
 /*! main server 
@@ -1024,7 +1274,12 @@ int main (int argc, char *argv[]) {
    struct sockaddr_in address;
    int addrlen = sizeof (address);
    int serverPort, opt = 1;
-   gint64 start = g_get_monotonic_time (); 
+   double start = monotonic (); 
+
+   if ((bigBuffer =malloc (BIG_BUFFER_SIZE)) == NULL) {
+      fprintf (stderr, "In main, Error: Malloc: %d,", BIG_BUFFER_SIZE);
+      return EXIT_FAILURE;
+   }
 
    if (setlocale (LC_ALL, "C") == NULL) {                // very important for printf decimal numbers
       fprintf (stderr, "In main, Error: setlocale failed");
@@ -1081,7 +1336,7 @@ int main (int argc, char *argv[]) {
       close (serverFd);
       return EXIT_FAILURE;
    }
-   double elapsed = (g_get_monotonic_time () - start) / 1e6; 
+   double elapsed = monotonic () - start; 
    printf ("✅ Loaded in...: %.2lf seconds. Server listen on port: %d, Pid: %d\n", elapsed, serverPort, getpid ());
 
    while (clientReq.type != REQ_KILL) {
@@ -1103,7 +1358,7 @@ int main (int argc, char *argv[]) {
    freeHistoryRoute ();
    free (tGribData [WIND]); 
    free (tGribData [CURRENT]); 
-   curl_global_cleanup();
+   free (bigBuffer);
    return EXIT_SUCCESS;
 }
 

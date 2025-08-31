@@ -3,10 +3,10 @@
 . Type definitions with typedef
 */
 
-#define STAMINA_SHIP 0                        // Virtual Regatta shop index
-#define STAMINA_SAIL 2                        // Virtual Regatta index for sail change
-#define STAMINA_TACK 0                        // Virtual Regatta intex for tack or Gybe
-#define STAMINA_FULL_PACK 1                   // Virtual regatta full pack 
+#define STAMINA_SHIP 0                          // Virtual Regatta shop index
+#define STAMINA_SAIL 2                          // Virtual Regatta index for sail change
+#define STAMINA_TACK 0                          // Virtual Regatta intex for tack or Gybe
+#define STAMINA_FULL_PACK 1                     // Virtual regatta full pack 
 #define N_MAX_NMEA_PORTS      3
 #define CSV_SEP_POLAR         ";\t"             // for polar no comma because decimal separator may be comma 
 #define WORKING_DIR           "" //ATT          // Default Working Dir if nothing specified in routing.par file
@@ -44,6 +44,7 @@
 #define MAX_SIZE_STD          1024		         // Max size of lines standard
 #define MAX_SIZE_LINE_BASE64  1024              // Max size of line in base64 mail file
 #define MAX_SIZE_TEXT         2048		         // Max size of text
+#define MAX_SIZE_TEXT_FILE    50000		         // Max size of text file
 #define MAX_SIZE_MESSAGE      2048		         // Max size of a mail message
 #define MAX_SIZE_URL          1024		         // Max size of a URL
 #define MAX_SIZE_DATE         32                // Max size of a string with date inside
@@ -68,12 +69,13 @@
 #define MAX_N_COMPETITORS     10                // Number Max of competitors
 #define MAX_N_SAIL            8                 // Max number of sails in sailName table
 #define MAX_N_SECTORS         3600              // Max number of sectors for optimization of sectors
+#define LIMIT_SOG             100               // for SOG error detection
 
 enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
 enum {WIND_POLAR, WAVE_POLAR, SAIL_POLAR};      // for polar information, either WIND or WAVE or SAIL
 enum {BASIC, DD, DM, DMS};                      // degre, degre decimal, degre minutes, degre minutes seconds
 enum {TRIBORD, BABORD};                         // amure
-enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION};          // for chooseDeparture.ret values and allCompetitors check
+enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION};                   // for chooseDeparture.ret values and allCompetitors check
 enum {ROUTING_STOPPED = -2, ROUTING_ERROR = -1, ROUTING_RUNNING = 0};   // for routingLaunch
 struct MeteoElmt {
    int id; 
@@ -152,7 +154,7 @@ typedef struct {
    size_t nTimeStamp;
    size_t nDataDate;
    size_t nDataTime;
-   double time0Grib;          // time of the first forecast in grib in hours
+   //double time0Grib;          // time of the first forecast in grib in hours
    size_t nShortName;
    char   shortName [MAX_N_SHORT_NAME][MAX_SIZE_SHORT_NAME];
    long   timeStamp [MAX_N_TIME_STAMPS];

@@ -1,27 +1,37 @@
 /*! compilation: gcc -c polar.c `pkg-config --cflags glib-2.0` */
-#include <glib.h>
+//#include <glib.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <math.h>
 #include <locale.h>
+#include <math.h>
+#include "glibwrapper.h"
 #include "r3types.h"
 #include "inline.h"
 #include "r3util.h"
 
-/* str to double accepting both . or , as decimal separator */
-static bool strtodNew (const char *str, double *v) {
-   if ((str == NULL) || (!isNumber (str))) return false;
-   char *mutableStr = g_strdup (str);
-   g_strdelimit (mutableStr, ",", '.');
 
-   char *endptr;
-   *v = strtod (mutableStr, &endptr);
-   if (endptr == mutableStr) return false;
-   g_free (mutableStr);
-   
-   return true;
+/* str to double accepting both . or , as decimal separator */
+static bool strtodNew(const char *str, double *v){
+   if (str == NULL || v == NULL || (!isNumber(str))) return false;
+
+   size_t len = strlen(str);
+   char *mutableStr = (char *)malloc(len + 1);
+   if (!mutableStr) return false;
+
+   // Replace comma with dots
+   for (size_t i = 0; i <= len; ++i) {
+      char c = str[i];
+      mutableStr[i] = (c == ',') ? '.' : c;  // copy also '\0'
+   }
+
+   char *endptr = NULL;
+   *v = strtod(mutableStr, &endptr);
+
+   bool ok = (endptr != mutableStr); // at least one character
+   free(mutableStr);
+   return ok;
 }
 
 /*! Check polar and return false and a report if something to say */
@@ -146,7 +156,7 @@ double maxValInPol (const PolMat *mat) {
    return max;
 }
 
-/*! return VMG: angle and speed at TWS : pres */
+/*! return VMG: angle and speed at TWS: pres */
 void bestVmg (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed) {
    *vmgSpeed = -1;
    int bidon;
@@ -161,7 +171,7 @@ void bestVmg (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed) {
    }
 }
 
-/*! return VMG back: angle and speed at TWS : vent arriere */
+/*! return VMG back: angle and speed at TWS: vent arriere */
 void bestVmgBack (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed) {
    *vmgSpeed = -1;
    int bidon;
@@ -196,45 +206,49 @@ char *polToStr (const PolMat *mat, char *str, size_t maxLen) {
    return str;
 }
 
-/*! write polar information in GString Json format */
-GString *polToJson (const char *fileName, const char *objName) {
+/*! write polar information in string Json format */
+char *polToStrJson (const char *fileName, const char *objName, char *out, size_t maxLen) {
    char polarName [MAX_SIZE_FILE_NAME];
    char errMessage [MAX_SIZE_LINE];
+   char str [MAX_SIZE_TEXT];
    PolMat mat;
-   GString *jString = g_string_new ("");
    buildRootName (fileName, polarName, sizeof (polarName));
 
    if (!readPolar (false, polarName, &mat, errMessage, sizeof (errMessage))) {
       fprintf (stderr, "In polToJson Error: %s\n", errMessage);
-      g_string_append_printf (jString, "{}\n");
-      return jString;
+      snprintf (out, maxLen, "{}\n");
+      return out;
    }
    if ((mat.nLine < 2) || (mat.nCol < 2)) {
       fprintf (stderr, "In polToJson Error: no value in: %s\n", polarName);
-      g_string_append_printf (jString, "{}\n");
-      return jString;
+      snprintf (out, maxLen, "{}\n");
+      return out;
    }
-   g_string_append_printf (jString, "{\"%s\": \"%s\", \"nLine\": %d, \"nCol\":%d, \"max\":%.2lf, \"array\":\n[\n", 
-                           objName, polarName, mat.nLine, mat.nCol, maxValInPol (&mat));
+   snprintf (out, maxLen, "{\"%s\": \"%s\", \"nLine\": %d, \"nCol\":%d, \"max\":%.2lf, \"array\":\n[\n", 
+                objName, polarName, mat.nLine, mat.nCol, maxValInPol (&mat));
 
    for (int i = 0; i < mat.nLine ; i++) {
-      g_string_append_printf (jString, "   [");
+      g_strlcat (out, "   [", maxLen);
       for (int j = 0; j < mat.nCol - 1; j++) {
-         g_string_append_printf (jString, "%.4f, ", mat.t [i][j]);
+         snprintf (str, sizeof (str), "%.4f, ", mat.t [i][j]);
+         g_strlcat (out, str, maxLen);
       }
-      g_string_append_printf (jString, "%.4f]%s\n", mat.t [i][mat.nCol -1], (i < mat.nLine - 1) ? "," : "");
+      snprintf (str, sizeof (str), "%.4f]%s\n", mat.t [i][mat.nCol -1], (i < mat.nLine - 1) ? "," : "");
+      g_strlcat (out, str, maxLen);
    }
-   g_string_append_printf (jString, "]}\n");
-   return jString;
+   g_strlcat (out, "]}\n", maxLen);
+   return out;
 }
 
-/*! write legend about sail in Gstring Json format */
-GString *sailLegendToJson (const char *sailName [], size_t len) {
-   GString *jString = g_string_new ("{\"legend\": [");
+/*! write legend about sail in string Json format */
+char *sailLegendToStrJson (const char *sailName [], size_t len, char *out, size_t maxLen) {
+   char str [MAX_SIZE_TEXT];
+   snprintf (out, maxLen, "{\"legend\": [");
    for (size_t i = 0; i < len; i += 1) {
-      g_string_append_printf (jString, "\"%s\"%s", sailName [i], (i < len -1) ? ", " : "");
+      snprintf (str, sizeof (str), "\"%s\"%s", sailName [i], (i < len -1) ? ", " : "");
+      g_strlcat (out, str, maxLen);
    }
-   g_string_append_printf (jString, "]}\n");
-   return jString;
+   g_strlcat (out, "]}\n", maxLen);
+   return out;
 }
 

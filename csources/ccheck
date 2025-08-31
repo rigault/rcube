@@ -1,0 +1,15 @@
+#!/bin/bash
+echo "cppcheck"
+cppcheck --enable=warning,performance,portability *.h
+cppcheck --enable=warning,performance,portability *.c
+
+echo "gcc analyser"
+gcc -fanalyzer -c engine.c
+gcc -fanalyzer -c r3util.c
+gcc -fanalyzer -c r3grib.c
+gcc -fanalyzer -c readgriballeccodes.c
+gcc -fanalyzer -c readgriballwithouteccodes.c
+gcc -fanalyzer -c polar.c 
+gcc -fanalyzer -c r3server.c
+
+rm *.o
