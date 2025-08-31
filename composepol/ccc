@@ -1,8 +1,8 @@
 #!/bin/bash
-gcc -Wall -Wextra -pedantic -Werror -std=c11 -O2 -c ../csources/polar.c `pkg-config --cflags glib-2.0` 
-gcc -Wall -Wextra -pedantic -Werror -std=c11 -O2 -c ../csources/r3util.c `pkg-config --cflags glib-2.0` 
-gcc -c composepol.c `pkg-config --cflags glib-2.0`
+gcc -Wall -Wextra -pedantic -Werror -O2 -c ../csources/polar.c
+gcc -Wall -Wextra -pedantic -Werror -O2 -c ../csources/r3util.c  
+gcc -c composepol.c
 
-gcc composepol.o polar.o r3util.o -o composepol -std=c11 -lm `pkg-config --cflags --libs glib-2.0`
+gcc composepol.o polar.o r3util.o -o composepol -lm
 
 rm *.o

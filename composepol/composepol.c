@@ -1,4 +1,3 @@
-#include <glib.h>
 #include <ctype.h>
 #include <time.h>
 #include <stdbool.h>
@@ -52,12 +51,12 @@ static void polWrite (const char *fileName, const PolMat *mat) {
 
 /*! check and analyse  polar information  */
 static void analyse (const PolMat *mat) {
-   double diffH, diffV, diffMax = -1, perc;
+   double diffH, diffV, diffMax = -1.0, perc;
    for (int i = 1; i < mat->nLine; i++) {
       diffMax = -1;
       for (int j = 2; j < mat->nCol; j++) {
          diffH = fabs (mat->t [i][j] - mat->t [i] [j - 1]);
-         diffMax = MAX (diffMax, diffH);
+         diffMax = fmax (diffMax, diffH);
          perc = diffH / mat->t [i] [j - 1];
       }
       printf ("Row: %2d has diffMax: %5.2lf, Percentage:%5.2lf%%\n", i, diffMax, 100 * perc);
@@ -66,7 +65,7 @@ static void analyse (const PolMat *mat) {
       diffMax = -1;
       for (int i = 2; i < mat->nLine; i++) {
          diffV = fabs (mat->t [i][j] - mat->t [i-1] [j]);
-         diffMax = MAX (diffMax, diffV); 
+         diffMax = fmax (diffMax, diffV); 
          perc = diffV / mat->t [i-1] [j];
       }
       printf ("Column: %2d has diffMax: %5.2lf, Percentage:%5.2lf%%\n", j, diffMax, 100 * perc);
