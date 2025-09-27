@@ -74,7 +74,7 @@ function getLocalUtcOffsetInSeconds() {
  * Formats a duration given in seconds into a human-readable string.
  * 
  * @param {number} seconds - The duration in seconds.
- * @returns {string} - The formatted duration as "Xj HH:MM:SS".
+ * @returns {string} - The formatted duration as "X Days HH:MM:SS".
  */
 function formatDuration (seconds) {
    let sign = "";
@@ -190,12 +190,9 @@ function findNearestPort(lat, lon) {
    if (lat < LAT_MIN || lat > LAT_MAX || lon < LON_MIN || lon > LON_MAX) {
       return { idPort: 115, namePort: "LE_POULIGUEN" };
    }
-
-   let nearest = ports[0];
-   let minDistance = orthoDist([lat, lon], [nearest.lat, nearest.lon]);
-
-   for (let i = 1; i < ports.length; i++) {
-      const p = ports[i];
+   let minDistance =Infinity;
+   let nearest = null;
+   for (let p of ports) {
       const dist = orthoDist([lat, lon], [p.lat, p.lon]);
       if (dist < minDistance) {
          minDistance = dist;

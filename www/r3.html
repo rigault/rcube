@@ -41,6 +41,7 @@
       <div class="dropdown">
          <button class="menu">Grib</button>
          <div class="dropdown-content">
+            <button class="menu-link" onclick="selectModel ();">Grib Model  </button>
             <button class="menu-link" onclick="chooseGrib ('grib', gribLimits.name);">Grib  </button>
             <button class="menu-link" onclick="chooseGrib ('currentgrib', '');">Current</button>
          </div>
@@ -65,7 +66,7 @@
       <div class="dropdown">
          <button class="menu">Tech</button>
          <div class="dropdown-content">
-            <button class="menu-link" onclick="displayWayPoints(competitors, myWayPoints);">Way Points</button>
+            <button class="menu-link" onclick="displayWayPoints(competitors, myWayPoints);">Waypoints</button>
             <button class="menu-link" onclick="changeParam (routeParam);">Change</button>
             <button class="menu-link" onclick="manageCompetitors (competitors);">Manage Competitors</button>
             <button class="menu-link" onclick="stamina ();">Stamina</button>
@@ -74,7 +75,8 @@
       <div class="dropdown">
          <button class="menu">Help</button>
          <div class="dropdown-content">
-            <a href="doc/r3help.html" target="_blank">Help</a>
+            <a href="doc/Er3help.html" target="_blank">🇬🇧 Help</a>
+            <a href="doc/Fr3help.html" target="_blank">🇫🇷 Aide</a>
             <button class="menu-link" onclick="helpInfo ();">About...</button>
             <button class="menu-link" onclick="feedback (apiUrl);">Feedback</button>
          </div>
@@ -92,6 +94,9 @@
             <button class="menu-link" onclick="showOpenSeaMap(competitors[0].lat, competitors[0].lon)">OpenSeaMap</button>
          </div>
       </div>
+      <div class="dropdown">
+         <button class="menu" id = "cadenas" onclick="promptForCreds()" title="Connexion">
+             <i class="fas fa-user"></i> <i class="fas fa-lock"></i></div>
       <div class="dropdown" id="devMenu" style="display: none;">
          <button class="menu">Developper</button>
          <div class="dropdown-content">
@@ -101,6 +106,8 @@
             <button class="menu-link" onclick="chooseFile ();">File Dump</button>
             <button class="menu-link" onclick="aisDump(aisData);">AIS Dump</button>
             <button class="menu-link" onclick="replay ();">Replay</button>
+            <a href="doc/clihelp.md" target="_blank">CLI Help</a>
+            <a href="doc/README.md" target="_blank">README</a>
             <a href="doc/r3ServerTechDoc.html" target="_blank">Server side Tech Doc</a>
             <a href="doc/r3ClientTechDoc.html" target="_blank">Client side Tech Doc</a>
          </div>
@@ -115,20 +122,37 @@
    <div id="tools" style="display: none;">
       <button class="btn" onclick="goBegin();"><i class="fas fa-step-backward"></i></button>
       <button class="btn" onclick="backWard();"><i class="fas fa-backward"></i></button>
+      <button class="btn" id="playPauseBtn" onclick="animation ? stopAnim(): playAnim()"> 
+         <i id="playPauseIcon" class="fas fa-play"></i></button>
       <button class="btn" onclick="forWard();"><i class="fas fa-forward"></i></button>
+      <button class="btn" onclick="goEnd();"><i class="fas fa-step-forward"></i></button>
       <button class="btn" onclick="clearRoutes();"><i class="fas fa-times"></i></button>
+      <label for="timeline">Time Line %</label>
+      <input type="range" id="timeLine" min="1" max="100" value="1" oninput="updateTimeLine(this.value);">
+      <span id="timeLineValue">001%</span>
 
       <span id="infoTime"></span>
-   <span class="isocContainer">
-      <label>
-         Isoc <input type="checkbox" id="isocCheckbox" class="isocCheckbox" checked>
-      </label>
-      <label for="slider">Period</label>
-      <input type="range" id="slider" min="1" max="20" value="1" oninput="updateValue(this.value);">
-      <span id="sliderValue">1</span>
-   </span>
+      <span class="isocContainer">
+         <label>
+            Isoc <input type="checkbox" id="isocCheckbox" class="isocCheckbox" checked>
+         </label>
+         <label for="slider">Period</label>
+         <input type="range" id="slider" min="1" max="20" value="1" oninput="updateValue(this.value);">
+         <span id="sliderValue">1</span>
+      </span>
 
    <script>
+      function updateTimeLine(val) {
+         document.getElementById("timeLineValue").textContent = String(val).padStart(3, '0') + "%";
+         const boatName = Object.keys(route)[0];  // Extract first key from response
+         index = Math.round (val / 100 * (route[boatName].track.length - 1)); 
+         console.log (`length: ${route[boatName].track.length}, index: ${index}`);
+         if (route != null) {
+            //updateWindyMap(route);
+            updateAllBoats ();
+         }
+      }
+
       function updateValue(val) {
          document.getElementById("sliderValue").textContent = val;
          const isIsocChecked = document.getElementById("isocCheckbox").checked;
@@ -161,6 +185,17 @@
          if (menu) {
             menu.style.display = (menu.style.display === "none") ? "inline-block" : "none";
          }
+      }
+   });
+
+   /* listen CTRL S to switch betwwen Windy and OSM */
+   document.addEventListener("keydown", (e) => {
+      if (e.ctrlKey && e.key === "s") {
+         e.preventDefault(); // éviter le marque-page sur certains navigateurs
+         windyPlay = ! windyPlay;
+         // alert (`windyplay: ${windyPlay}`);
+         saveAppState ();
+         location.reload ();
       }
    });
 
@@ -227,6 +262,42 @@
       window.open(url, '_blank');
    }
 
+   // Initialize map
+   if (clearAppState) localStorage.clear(); else loadAppState ();
+   if (windyPlay == "false") windyPlay = false; else windyPlay = true;
+   /**
+   * Initializes the Windy API and retrieves the map and store objects.
+   *
+   * This function initializes the Windy API with the given options and assigns the 
+   * `windy`, `map`, and `store` objects for further interactions.
+   *
+   * @param {Object} options - Configuration options for Windy API initialization.
+   * @param {function(Object): void} callback - Callback function that receives the Windy API instance.
+   */
+   if (windyPlay)
+   windyInit (options, windyAPI => {
+      windy = windyAPI;
+      map = windy.map;
+      store = windy.store;
+
+      // Correct initial date & time
+      let initialTimestamp = store.get ('timestamp');
+      if (initialTimestamp > 1e10) {
+         initialTimestamp = Math.floor (initialTimestamp / 1000);
+      }
+
+      // Listen to timestamp changes
+      store.on ('timestamp', (newTimestamp) => {
+         if (newTimestamp > 1e10) {
+            newTimestamp = Math.floor(newTimestamp / 1000);
+         }
+         // updateRouteDisplay (newTimestamp);
+      });
+      additionalInit ();
+   });
+   else {
+      initMap('windy');
+   };
 </script>
 </body>
 </html>

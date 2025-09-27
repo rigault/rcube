@@ -4,6 +4,8 @@
  * condense list of time stamps in concise way 
  * @param {Object} list of timesStamps
  */
+const models = ["GFS", "ECMWF", "ARPEGE", "AROME", "METEOCONSULT"];
+
 function condenseTimeStamps (timeStamps) {
    let result = [];
    if (timeStamps.length === 0) return "[]";
@@ -58,18 +60,23 @@ function condenseTimeStamps (timeStamps) {
  * @param {string} directory
  * @param {string} current grib name
  */
-function gribInfo(dir, gribName) {
-   const formData = `type=${REQ.GRIB}&grib=${dir}/${gribName}`;
+function gribInfo(dir, model, gribName) {
+   const gribParam = model ? `model=${model}` : `grib=${dir}/${gribName}`;
+   const formData = `type=${REQ.GRIB}&${gribParam}`;
    console.log ("Request sent:", formData);
    const formatLat = x => (x < 0) ? -x + "°S" : x + "°N";
    const formatLon = x => (x < 0) ? -x + "°W" : x + "°E";
+   const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+   const token = btoa(`${userId}:${password}`);
+   const auth = `Basic ${token}`;
+   // console.log ("token: " + token);
+   if (auth && userId !== "") headers.Authorization = auth;     // else stay anonymous level 0
 
    fetch(apiUrl, {
       method: "POST",
-      headers: {
-         "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: formData
+      headers,
+      body: formData,
+      cache: "no-store"
    })
    .then(response => {
       if (!response.ok) {
@@ -79,16 +86,25 @@ function gribInfo(dir, gribName) {
    })
    .then(data => {
       console.log ("JSON received:", JSON.stringify(data));
+      if (data._Error) {
+         Swal.fire({ icon: 'error', title: 'Error', text: `Error: ${data._Error}` });
+         return;
+      }
       if (Object.keys(data).length === 0) {
          Swal.fire({ icon: 'error', title: 'Error', text: 'Empty Grib or format error' });
          return;
       }
-
       if (dir === "grib") {
+         if (model) {
+            gribLimits.name = model;
+            updateStatusBar ();
+         }
          gribLimits.bottomLat = data.bottomLat;
          gribLimits.leftLon = data.leftLon;
          gribLimits.topLat = data.topLat;
          gribLimits.rightLon = data.rightLon;
+         const bounds = [[gribLimits.bottomLat, gribLimits.leftLon],[gribLimits.topLat, gribLimits.rightLon]];
+         map.fitBounds(bounds);
       }
 
       let shortNames = Array.isArray(data.shortNames) ? data.shortNames.join(", ") : "Not present";
@@ -140,6 +156,24 @@ function gribInfo(dir, gribName) {
    });
 }
 
+async function selectModel() {
+   let options = {};
+   models.forEach(m => {
+      options[m] = m; // key = value
+   });
+
+   // Affiche la modale
+   const { value: model } = await Swal.fire({
+      title: 'Model selection',
+      input: 'select',
+      inputOptions: options,
+      inputPlaceholder: 'Choose Model',
+      showCancelButton: true
+   });
+   if (!model) return;
+   gribInfo ("grib", model);
+}
+
 /**
  * choose a grib file then launch gribInfo 
  * @param {string} directory
@@ -147,13 +181,17 @@ function gribInfo(dir, gribName) {
  */
 function chooseGrib (dir, fileName) {
    const formData = `type=${REQ.DIR}&dir=${dir}`;
-   console.log ("Reqquest sent:", formData);
+   console.log ("Request sent:", formData);
+   const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+   const token = btoa(`${userId}:${password}`);
+   const auth = `Basic ${token}`;
+   console.log ("token: " + token);
+   if (auth && userId !== "") headers.Authorization = auth;     // else stay anonymous level 0
    fetch(apiUrl, {
       method: "POST",
-      headers: {
-         "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: formData
+      headers,
+      body: formData,
+      cache: "no-store"
    })
    .then(response => response.json())
    .then(data => {
@@ -192,12 +230,11 @@ function chooseGrib (dir, fileName) {
          if (result.isConfirmed) {
             if (dir === "grib") {
                gribLimits.name = result.value; // update file selected for wind grib only
-               drawGribLimits (gribLimits);
             }  
             else // current
                gribLimits.currentName = result.value;
 
-            gribInfo (dir, result.value);
+            gribInfo (dir, "", result.value);
             updateStatusBar ();
             console.log ("gribLimits: " + gribLimits);
             let currentZoom = map.getZoom();

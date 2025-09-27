@@ -60,6 +60,13 @@ function launchRouting() {
       <label for="swal-boatSelect">Boat:</label>
       <select id="swal-boatSelect">${boatOptions}</select>
 
+      <label for="swal-model">Model:</label>
+      <select id="swal-model">
+         <option value="GFS">GFS</option>
+         <option value="ECMWF">ECMWF</option>
+         <option value="ARPEGE">ARPEGE</option>
+         <option value="METEOCONSULT">METEOCONSULT</option>
+      </select>
       <label for="swal-forbidZones">Forbid Zones:</label>
       <div><input type="checkbox" id="swal-forbidZones" ${current.forbid ? "checked" : ""}></div>
 
@@ -119,6 +126,7 @@ function launchRouting() {
          document.getElementById("resetBtn").addEventListener("click", () => {
             document.getElementById("swal-startTime").value = getNowISOString();
             document.getElementById("swal-isoStep").value = "1800";
+            document.getElementById("swal-model").value = "GFS";
             document.getElementById("swal-boatSelect").value = (boatNames.length <= 1) ? "1" : "0";
             document.getElementById("swal-forbidZones").checked = true;
             document.getElementById("swal-isoc").checked = false;
@@ -139,6 +147,7 @@ function launchRouting() {
                const startTimeStr = document.getElementById("swal-startTime").value;
                const isoStep = parseInt(document.getElementById("swal-isoStep").value, 10);
                const iBoat = parseInt(document.getElementById("swal-boatSelect").value, 10);
+               const model = document.getElementById("swal-model").value;
                const forbid = document.getElementById("swal-forbidZones").checked;
                const isoc = document.getElementById("swal-isoc").checked;
                const withWaves = document.getElementById("swal-withWaves").checked;
@@ -164,6 +173,7 @@ function launchRouting() {
                routeParam.withCurrent = withCurrent;
                routeParam.timeInterval = timeInterval;
                routeParam.nTry = nTry;
+               routeParam.model = model;
 
                updateStatusBar();
                console.log ("Updated Route Parameters:", routeParam);

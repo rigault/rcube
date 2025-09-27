@@ -127,7 +127,7 @@ function showPolarTable (polType, polarName, data, sailData, legend) {
    });
 }
 
-/** interpolate speeds */
+/** interpolate */
 function interpolate (value, x0, y0, x1, y1) {
    return x1 === x0 ? y0 : y0 + ((value - x0) * (y1 - y0)) / (x1 - x0);
 }

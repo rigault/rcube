@@ -103,20 +103,19 @@ function switchTab (event, tabId) {
 function parDump() {
    const formData = `type=${REQ.PAR_RAW} `;
    console.log("Request sent:", formData);
-
+   const headers = { "Content-Type": "application/x-www-form-urlencoded" };
    fetch (apiUrl, {
       method: "POST",
-      headers: {
-         "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: formData
+      headers,
+      body: formData,
+      cache: "no-store"
    })
    .then(response => {
       console.log ("Raw response:", response);
       if (!response.ok) {
          throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
-      return response.text(); // Convertir la réponse en texte
+      return response.text();
    })
    .then(data => {
       console.log("Server Response:", data);

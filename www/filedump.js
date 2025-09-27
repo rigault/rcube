@@ -37,20 +37,20 @@ function escapeHtml(unsafe) {
 function dumpFile(dir, fileName) {
    if (dir !== "") dir = dir + "/";
    const formData = `type=${REQ.DUMP_FILE}&file=${dir}${fileName}`;
+   const headers = { "Content-Type": "application/x-www-form-urlencoded" };
    console.log("Request sent:", formData);
 
    fetch(apiUrl, {
       method: "POST",
-      headers: {
-         "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: formData
+      headers,
+      body: formData,
+      cache: "no-store"
    })
    .then(response => {
       if (!response.ok) {
          throw new Error(`HTTP error! Status: ${response.status}`);
       }
-      return response.text(); // ATTENTION ici c'est .text() car c'est du texte brut !
+      return response.text(); // raw text
    })
    .then(text => {
       let parsed;
@@ -106,7 +106,7 @@ function downloadTextFile(filename, content) {
    a.click();
    document.body.removeChild(a);
 
-   URL.revokeObjectURL(url); // Nettoyage
+   URL.revokeObjectURL(url); // cleaning
 }
 
 

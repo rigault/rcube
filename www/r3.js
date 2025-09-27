@@ -1,4 +1,6 @@
 /* jshint esversion: 6 */
+let animation = false;
+let windyPlay = true;
 let clipBoard = false; // to set request in clipBoard
 let gribLimits = {
    bottomLat: 0,
@@ -40,8 +42,8 @@ window.routeParam = {
    penalty0: 180,
    penalty1: 180,
    penalty2: 0,
-   motorSpeed: 0,
-   threshold: 0,
+   motorSpeed: 2,
+   threshold: 2,
    dayEfficiency: 1.0,
    nightEfficiency: 1.0,
    cogStep: 2,
@@ -49,6 +51,7 @@ window.routeParam = {
    jFactor: 50,
    kFactor: 40,
    nSectors: 720,
+   model: "GFS",
    constWindTws: 0, constWindTwd:0, constWave:0, constCurrentS:0, constCurrentD: 0
 };
 
@@ -116,17 +119,26 @@ function getDateFromIndex (index, boatName) {
    let theTime = new Date(routeParam.startTime.getTime() + time * 1000);
    return theTime;
 }
+
 /**
  * Give visibility to tool bars only when route is active.
  */
 function updateToolsVisibility() {
   const toolsDiv = document.getElementById('tools');
-
   if (route && Object.keys(route).length > 0) {
     toolsDiv.style.display = 'block';
   } else {
     toolsDiv.style.display = 'none';
   }
+}
+
+/*
+ * to display or not display windy timeline 
+ */ 
+function setTimelineVisible(visible) {
+   const windyEl = document.getElementById('windy');
+   if (!windyEl) return;
+    windyEl.classList.toggle('no-timeline', !visible);
 }
 
 /**
@@ -145,21 +157,25 @@ function saveAppState() {
    localStorage.setItem("polarName", polarName);
    localStorage.setItem("POIs", JSON.stringify(getSerializablePOIs()));
    localStorage.setItem("myWayPoints", JSON.stringify(myWayPoints));
+   localStorage.setItem("windyPlay", windyPlay);
 }
 
 /**
  * Show point waypoints and destination
- * Give the right direction to boats toward first waypoint
+ * Give the right direction to boats toward first waypoin if requested
  * @param {Array} wayPoints - List of waypoints as [latitude, longitude].
  */
-function showWayPoint (wayPoints) {
+function showWayPoint (wayPoints, headingRequested = true) {
    if (wayPoints.length > 0) {
       for (let boat of competitors) {
          drawOrtho (boat, wayPoints);
-         let heading = orthoCap ([boat.lat, boat.lon], wayPoints [0]);
-         boat.marker.setLatLng ([boat.lat, boat.lon]);                   // Move the mark
-         boat.marker._icon.setAttribute ('data-heading', heading); 
-         updateIconStyle (boat.marker);
+         if (headingRequested) {
+            let heading = orthoCap ([boat.lat, boat.lon], wayPoints [0]);
+            // alert (`name: ${boat.name}, heading: ${heading}`);
+            boat.marker.setLatLng ([boat.lat, boat.lon]);                   // Move the mark
+            boat.marker._icon.setAttribute ('data-heading', heading); 
+            updateIconStyle (boat.marker);
+         }
       }
       const lat = myWayPoints [myWayPoints.length - 1][0];
       const lon = myWayPoints [myWayPoints.length - 1][1];
@@ -291,6 +307,7 @@ function loadAppState() {
    const savedPolar = localStorage.getItem ("polarName");
    const savedPOIs = localStorage.getItem ("POIs");
    const savedWaypoints = localStorage.getItem ("myWayPoints");
+   const savedWindyPlay = localStorage.getItem ("windyPlay");
    if (saved) {
       const parsed = JSON.parse(saved);
       competitors = parsed.map(c => ({
@@ -305,6 +322,7 @@ function loadAppState() {
    if (savedPolar) polarName = savedPolar;
    if (savedPOIs) POIs = JSON.parse (savedPOIs);
    if (savedWaypoints) myWayPoints = JSON.parse(savedWaypoints);
+   if (savedWindyPlay) windyPlay = savedWindyPlay;
 }
 
 /**
@@ -367,6 +385,7 @@ function popup4Comp (competitor) {
 /**
  * Draw grib limits
  * @param {Object} Grib limis
+ * @returns {Array}. Bounds of grib
  */
 function drawGribLimits (gribLimits) {
    if (!gribLimits || gribLimits.name === "") return;
@@ -387,6 +406,7 @@ function drawGribLimits (gribLimits) {
    }).addTo(map);
 
    map.invalidateSize(); // Force Leaflet to recompute drawings
+   return bounds;
 }
 
 /**
@@ -596,6 +616,7 @@ function buildBodyRequest (reqType, competitors, myWayPoints, routeParam) {
       jFactor: isNaN(routeParam.jFactor ?? NaN) ? 0 : routeParam.jFactor,
       kFactor: isNaN(routeParam.kFactor ?? NaN) ? 0 : routeParam.kFactor,
       nSectors: isNaN(routeParam.nSectors ?? NaN) ? 1 : routeParam.nSectors,
+      model: routeParam.model,
       constWindTws: isNaN(routeParam.constWindTws ?? NaN) ? 0 : routeParam.constWindTws,
       constWindTwd: isNaN(routeParam.constWindTwd ?? NaN) ? 0 : routeParam.constWindTwd,
       constWave: isNaN(routeParam.constWave ?? NaN) ? 0 : routeParam.constWave,
@@ -608,7 +629,7 @@ function buildBodyRequest (reqType, competitors, myWayPoints, routeParam) {
       .join("&");
    
    if (gribLimits.name && typeof gribLimits.name === "string" && gribLimits.name.trim().length > 1) {
-      requestBody += `&grib=grib/${gribLimits.name}`;
+      // requestBody += `&grib=grib/${gribLimits.name}`; // name of grib can be deduced by the sever thanks to model specification
       if (gribLimits.currentName.trim().length > 1)
          requestBody +=`&currentGrib=currentgrib/${gribLimits.currentName}`;
    }
@@ -624,14 +645,18 @@ function buildBodyRequest (reqType, competitors, myWayPoints, routeParam) {
  */
 async function handleRequest (requestBody) {
    console.log ("handleRequest: " + requestBody);
-
+   const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+   const token = btoa(`${userId}:${password}`);
+   const auth = `Basic ${token}`;
+   console.log ("token: " + token);
+   if (auth && userId !== "") headers.Authorization = auth;     // else stay anonymous level 0
+   //alert ("UserId: " + userId + " password: " + password);
    try {
-      const response = await fetch(apiUrl, {
+      const response = await fetch (apiUrl, {
          method: "POST",
-         headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-         },
-         body: requestBody
+         headers,
+         body: requestBody,
+         cache: "no-store"
       });
 
       const data = await response.json();
@@ -998,6 +1023,7 @@ async function replay () {
          jFactor: parseFloat(get('jFactor') || 80),
          kFactor: parseFloat(get('kFactor') || 60),
          nSectors: parseInt(get('nSectors') || 720),
+         model: get(model),
          constWindTws: parseFloat(get('constWindTws') || 0),
          constWindTwd: parseFloat(get('constWindTwd') || 0),
          constWave: parseFloat(get('constWave') || 0),
@@ -1251,7 +1277,7 @@ function move (iComp, firstTrack, index) {
       return;
    }
    if (index < 0) {
-      index = firstTrack.length - 1;
+      index = Math.max (firstTrack.length - 1, 0);
    }
    let time = getDateFromIndex (index, competitors [iComp].name );
    let newLatLng = firstTrack[index].slice(1, 3);     // New position
@@ -1260,8 +1286,9 @@ function move (iComp, firstTrack, index) {
 
    // Center map on new boat position
    // map.setView(newLatLng, map.getZoom());
-   store.set ('timestamp', time);                     // update Windy time
+   if (windyPlay) store.set ('timestamp', time);                     // update Windy time
    updateHeading (competitors [iComp], firstTrack);
+   updateStatusBar (route); 
 }
 
 /**
@@ -1318,6 +1345,7 @@ function updateAllBoats () {
       if ((iComp >= 0) && (! name.startsWith("_"))) {
          console.log ("boatName: ", name, "iComp = ", iComp);
          move (iComp, route[name].track, index);
+         updateBindPopup (competitors [iComp]);
       }
    });
 }
@@ -1330,6 +1358,7 @@ function updateAllBoats () {
 function goBegin () {
    index = 0;
    updateAllBoats ();
+   stopAnim ();
 }
 
 /**
@@ -1338,16 +1367,67 @@ function goBegin () {
  */
 function backWard () {
    index -= 1;
+   if (index < 0) index = 0;
    updateAllBoats ();
+   stopAnim ();
 }
 
+/**
+ * Moves the boat continuously along its track.
+ */
+function playAnim() {
+   if (animation) return;                    // avoid double animation
+   const boatName = Object.keys(route)[0];   // Extract first key from response
+   const len = route[boatName].track.length;
+   const icon = document.getElementById('playPauseIcon');
+   icon.classList.remove('fa-play');
+   icon.classList.add('fa-pause');
+   animation = setInterval(() => {
+      if (index >= len) {
+         stopAnim();
+         return;
+      }
+      // if (index >= len || index < 0) index = 0;
+      index += 1;
+      updateAllBoats ();
+   }, 500); // Intervalle de mise à jour en ms
+}
+
+/**
+ * Stops boatsboat 
+ */
+function stopAnim() {
+    const icon = document.getElementById('playPauseIcon');
+    icon.classList.remove('fa-pause');
+    icon.classList.add('fa-play');
+    clearInterval(animation);
+    animation = false;
+}
+
+/**
 /**
  * Moves the boat one step forward along its track.
  * Calls `move()` with a positive step value to shift the boat to the next waypoint.
  */
 function forWard () {
    index += 1;
+   const boatName = Object.keys(route)[0]; // Extract first key from response
+   const len = route[boatName].track.length;
+   if (index > len) index = len - 1;
    updateAllBoats ();
+   stopAnim ();
+}
+
+/**
+ * Moves the boat to tthe end its track.
+ * Calls `move()` with final index to mùove the boat the the end of track.
+ */
+function goEnd () {
+   const boatName = Object.keys(route)[0];  // Extract first key from response
+   index = route[boatName].track.length - 1; // the end of the main boat track
+   console.log ("in goEnd, last:" + index);
+   updateAllBoats ();
+   stopAnim ();
 }
 
 /**
@@ -1359,7 +1439,7 @@ function forWard () {
  */
 function formatLocalDate (date) {
     // Get individual date components
-   const dayName = date.toLocaleString('en-US', { weekday: 'long' });
+   const dayName = date.toLocaleString('en-US', { weekday: 'short' });
    const year = date.getFullYear();
    const month = String(date.getMonth() + 1).padStart(2, '0'); // Ensure two-digit format
    const day = String(date.getDate()).padStart(2, '0');
@@ -1376,8 +1456,8 @@ function formatLocalDate (date) {
  * @param {Object|null} [route=null] - The route object containing navigation data, or `null` to update global info.
  */
 function updateStatusBar (route = null) {
-   findBounds (myWayPoints);
    updateToolsVisibility();
+   setTimelineVisible(! route);
    let time = " "; // important to keep space
    let polar = "", wavePolar = "", grib = "", currentGrib = "";
    if (route === null) {
@@ -1393,6 +1473,9 @@ function updateStatusBar (route = null) {
       grib = route[boatName].grib;
       currentGrib = route[boatName].currentGrib;
       time = " 📅 " + formatLocalDate (getDateFromIndex (index, boatName));
+      const p =  Math.round((index * 100) / (route[boatName].track.length -1));
+      document.getElementById("timeLine").value = String(p);
+      document.getElementById("timeLineValue").textContent = String(p).padStart(3, '0') + "%";
    }
    document.getElementById("infoRoute").innerHTML = "";
    if (time.length > 0) document.getElementById("infoTime").innerHTML = time; 
@@ -1422,6 +1505,7 @@ function findBounds (wayPoints) {
       [Math.ceil (Math.max (lat0, lat1)), Math.ceil (Math.max (lon0, lon1))]     // Sup right
    ];
    console.log ("bounds: " + bounds);
+   return bounds;
 } 
 
 /**
@@ -1551,7 +1635,6 @@ function showContextMenu(e) {
 
    menu.innerHTML = buttons;
    document.body.appendChild(menu);
-
    document.addEventListener("click", closeContextMenu, { once: true });
 }
 
@@ -1631,43 +1714,9 @@ function refreshMarker (competitor, iComp) {
    }
 }
 
-/**
- * Initializes the Windy API and retrieves the map and store objects.
- *
- * This function initializes the Windy API with the given options and assigns the 
- * `windy`, `map`, and `store` objects for further interactions.
- *
- * @param {Object} options - Configuration options for Windy API initialization.
- * @param {function(Object): void} callback - Callback function that receives the Windy API instance.
- */
-windyInit (options, windyAPI => {
-   windy = windyAPI;
-   map = windy.map;
-   store = windy.store;
-   //map.fitBounds (bounds); // ajust recenter
-
-   // Correct initial date & time
-   let initialTimestamp = store.get ('timestamp');
-   if (initialTimestamp > 1e10) {
-      initialTimestamp = Math.floor (initialTimestamp / 1000);
-   }
-   updateRouteDisplay (initialTimestamp); // update initial display
-
-   if (clearAppState)
-      localStorage.clear();
-   else 
-      loadAppState ();
+function additionalInit () {
    updateBoatSelect ();
    competitors.forEach (addMarker); // show initial position of boats
-
-   // Listen to timestamp changes
-   store.on ('timestamp', (newTimestamp) => {
-      if (newTimestamp > 1e10) {
-         newTimestamp = Math.floor(newTimestamp / 1000);
-      }
-      updateRouteDisplay (newTimestamp);
-   });
-
    isochroneLayerGroup = L.layerGroup().addTo(map);
    orthoRouteGroup = L.layerGroup().addTo(map);
    
@@ -1679,7 +1728,7 @@ windyInit (options, windyAPI => {
       if (isContextMenuOpen) return; // Do not open several contect menus
          let touch = event.touches [0];
 
-	   // check if userr touch <header>, #tool ou <footer>
+	   // check if user touch <header>, #tool ou <footer>
       let targetElement = event.target.closest("header, #tool, footer");
       if (targetElement) return; // Ignore one of these elem
 
@@ -1737,9 +1786,8 @@ windyInit (options, windyAPI => {
    });
    getServerInit ();
    updateStatusBar ();
-   showWayPoint (myWayPoints);
+   showWayPoint (myWayPoints, windyPlay);
    showPOI (POIs);
-   // Initial fetch and auto-refresh
    
    if (gpsActivated && gpsTimer > 0) {
       fetchGpsPosition();
@@ -1749,4 +1797,42 @@ windyInit (options, windyAPI => {
       fetchAisPosition();
       setInterval (fetchAisPosition, aisTimer * 1000);
    }
-});
+}
+
+// Initializes a Leaflet map with OpenStreetMap base and OpenSeaMap seamarks overlay,
+function initMap(containerId) {
+  // --- Map setup ---
+  map = L.map(containerId, { zoomControl: true /* preferCanvas: true */ });
+
+  // Base layer: OpenStreetMap
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  // OpenSeaMap seamarks overlay (on top of the base map)
+  const seamark = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    opacity: 1.0,
+    attribution: 'Seamarks &copy; OpenSeaMap contributors'
+  }).addTo(map);
+
+  // Layers control to toggle overlay/route
+  L.control.layers(
+    { 'OpenStreetMap': osm },
+    { 'OpenSeaMap Seamarks': seamark},
+    { collapsed: false }
+  ).addTo(map);
+
+   // Scale bar (optional)
+   L.control.scale({
+      position: 'topleft', 
+      imperial: false     
+   }).addTo(map);
+
+   // Tip: If you prefer to fit to the route instead of the bbox, use:
+   // map.fitBounds(routeLine.getBounds());
+   additionalInit();   // 
+   // updateRouteDisplay (0);
+}
+
