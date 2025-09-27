@@ -533,9 +533,8 @@ static void fetchMeteoConsult (int type, int region) {
          snprintf (url, sizeof (url), METEO_CONSULT_CURRENT_URL [region *2 + 1], METEO_CONSULT_ROOT_GRIB_URL, hhInt, mmInt, ddInt);
       printf ("url: %s\n", url);
 
-      char *baseName= path_get_basename (url);
+      char *baseName= g_path_get_basename (url);
       snprintf (finalFile, sizeof(finalFile), "%s/%s", gribDir, baseName);
-      printf ("finalFile: %s\n", finalFile);
       snprintf (uncompressedFile, sizeof(uncompressedFile), "%s/UC_%s", gribDir, baseName);
       free (baseName);
 
@@ -550,10 +549,13 @@ static void fetchMeteoConsult (int type, int region) {
 
    if (nTry >=  MAX_N_TRY)
       fprintf (stderr, "⚠️ Download failed after: %d try\n", nTry);
-   else  // creation of uncompressed file
+   else  {// creation of uncompressed file
       if (!uncompress(finalFile, uncompressedFile)) {
         fprintf(stderr, "⚠️ Uncompress failed for: %s\n", finalFile);
       }
+      printf ("finalFile Uncompressed: %s\n", uncompressedFile);
+      remove (finalFile);
+   }
 }
 
 int main (int argc, char *argv[]) {
