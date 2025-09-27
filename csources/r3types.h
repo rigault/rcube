@@ -303,6 +303,7 @@ typedef struct {
 
 /*! Parameters */
 typedef struct {
+   int authent;                              // 1 if Authentication is enabled   
    int allwaysSea;                           // if 1 (true) then isSea is allways true. No earth avoidance !
    int dashboardUTC;                         // true if VR Dashboard provide time in UTC. false if local time.
    int maxPoiVisible;                        // poi visible if <= maxPoiVisible

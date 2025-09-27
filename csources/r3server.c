@@ -1,3 +1,10 @@
+/*! RCube is a routing software for sailing. 
+ * It computes the optimal route from a starting point (pOr) to a destination point (pDest) 
+ * at a given START_TIME, using GRIB weather data and a boat polar diagram.
+ * to launch : r3server <port number> [parameter file]
+ */
+  
+
 #include <stdbool.h>
 #include <dirent.h>   // DIR, opendir, readdir, closedir
 #include <errno.h>
@@ -29,12 +36,11 @@
 #define PATTERN                "GFS"
 #define MAX_SIZE_FEED_BACK     1024
 #define FEED_BACK_FILE_NAME    "feedback.log"
-#define FEED_BACK_OBJECT       "rCubeFeedBack"
 #define ADMIN_LEVEL            10          // level of authorization for administrator
 #define BIG_BUFFER_SIZE        (10*MILLION)
 #define MAX_SIZE_MESS          100000
-char *bigBuffer = NULL;
 
+char *bigBuffer = NULL;
 
 const char *filter[] = {".csv", ".pol", ".grb", ".grb2", ".log", ".txt", ".par", NULL}; // global filter for REQ_DIR request
 
@@ -43,7 +49,7 @@ enum {REQ_KILL = -1793, REQ_TEST = 0, REQ_ROUTING = 1, REQ_BEST_DEP = 2, REQ_RAC
       REQ_INIT = 9, REQ_FEEDBACK = 10, REQ_DUMP_FILE = 11, REQ_NEAREST_PORT = 12}; // type of request
 
 // level of authorization
-const int typeLevel [13] = {0, 0, ADMIN_LEVEL, ADMIN_LEVEL, 0, 0, 0, ADMIN_LEVEL, 0, ADMIN_LEVEL, 0, ADMIN_LEVEL, 0};        
+const int typeLevel [13] = {0, 1, ADMIN_LEVEL, ADMIN_LEVEL, 0, 0, 0, 0, 0, ADMIN_LEVEL, 0, 0, 0};        
  
 char parameterFileName [MAX_SIZE_FILE_NAME];
 
@@ -92,6 +98,7 @@ typedef struct {
       double lat;                            // latitude
       double lon;                            // longitude
    } wp [MAX_N_WAY_POINT];                   // way points
+   char model     [MAX_SIZE_RESOURCE_NAME];        // grib model
    char dirName   [MAX_SIZE_RESOURCE_NAME];        // remote directory name
    char wavePolName [MAX_SIZE_RESOURCE_NAME];      // polar file name
    char polarName [MAX_SIZE_RESOURCE_NAME];        // polar file name
@@ -173,19 +180,19 @@ static char  *routeToStrJson (SailRoute *route, int index, bool isoc, bool isoDe
    if (route->n <= 0) return NULL;
 
    int iComp = (route->competitorIndex < 0) ? 0 : route->competitorIndex;
-   char *gribBaseName = path_get_basename (par.gribFileName);
-   char *gribCurrentBaseName = path_get_basename (par.currentGribFileName);
-   char *wavePolarBaseName = path_get_basename (par.wavePolFileName);
+   char *gribBaseName = g_path_get_basename (par.gribFileName);
+   char *gribCurrentBaseName = g_path_get_basename (par.currentGribFileName);
+   char *wavePolarBaseName = g_path_get_basename (par.wavePolFileName);
 
    snprintf (res, maxLen, 
       "{\n" 
-      "\"%s\": {\n\"heading\": %.0lf, \"rank\": %d, \"duration\": %d, \"totDist\": %.2lf, \n"
+      "\"%s\": {\n\"heading\": %.0lf, \"duration\": %d, \"totDist\": %.2lf, \n"
       "\"routingRet\": %d,\n"
       "\"isocTimeStep\": %.2lf,\n"
       "\"calculationTime\": %.4lf,\n"
       "\"destinationReached\": %s,\n"
       "\"lastStepDuration\": [",
-      competitors.t[iComp].name, route->t [index].lCap, 0, (int) (route->duration * 3600), route->totDist,
+      competitors.t[iComp].name, route->t [index].lCap, (int) (route->duration * 3600), route->totDist,
       route->ret,
       route->isocTimeStep * 3600,
       route->calculationTime,
@@ -307,6 +314,7 @@ char* extractUserAgent (const char* saveBuffer) {
 
 /*! extract level */
 int extractLevel (const char* buffer) {
+   if (!par.authent) return ADMIN_LEVEL; // No autentication, get highest level
    const char* headerName = "X-User-Level:";
    const char* levelStart = strstr (buffer, headerName);
    if (levelStart) return atoi (levelStart + strlen (headerName));
@@ -315,13 +323,18 @@ int extractLevel (const char* buffer) {
 
 /*! compare level of authorization with request */
 bool allowedLevel (ClientRequest *clientReq) {
-   return true; // ATTENTION
-   if (clientReq->type == 1) {
-      return strstr (clientReq->gribName, "GFS") != NULL || clientReq->type > 1; // GFS allowed to anyone
+   if ((clientReq->type == REQ_KILL) && (clientReq->level == ADMIN_LEVEL)) {
+      return true;
    }
-   if (clientReq->level >= 0)
-      return typeLevel [clientReq->type] <= clientReq->level;
-   else return clientReq->level == ADMIN_LEVEL;
+   if ((clientReq->type == 1) && (strstr (clientReq->model, "GFS") != NULL)) {
+      printf ("GFS allowed whatever the level for  type 1 request\n");    
+      return true; // GFS allowed to anyone
+   }
+   if ((clientReq->level >= 0) && (clientReq->level <= ADMIN_LEVEL)) {
+      printf ("Allowed associated to typeLevel: %d\n", typeLevel [clientReq->type]);    
+      return clientReq->level >= typeLevel [clientReq->type]; 
+   }
+   return false; // Level out of range
 } 
 
 /*! Comparator to sort by name (ascending order) */
@@ -712,7 +725,8 @@ static bool decodeHttpReq (const char *req, ClientRequest *clientReq) {
       else if (sscanf (parts[i], "polar=%255s", clientReq->polarName) == 1);                    // polar name
       else if (sscanf (parts[i], "wavePolar=%255s", clientReq->wavePolName) == 1);              // wave polar name
       else if (sscanf (parts[i], "file=%255s",  clientReq->fileName) == 1);                     // file name
-      else if (sscanf (parts[i], "grib=%255s",  clientReq->gribName) == 1);                     // grib name
+      else if (sscanf (parts[i], "model=%255s", clientReq->model) == 1);                       // grib model
+      else if (sscanf (parts[i], "grib=%255s", clientReq->gribName) == 1);                     // grib name
       else if (sscanf (parts[i], "currentGrib=%255s", clientReq->currentGribName) == 1);        // current grib name
       else if (sscanf (parts[i], "dir=%255s",   clientReq->dirName) == 1);                      // directory name
       else if (g_str_has_prefix (parts[i], "dir=")) 
@@ -754,6 +768,7 @@ static bool decodeHttpReq (const char *req, ClientRequest *clientReq) {
 static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, size_t maxLen) {
    char strPolar [MAX_SIZE_FILE_NAME];
    char strGrib [MAX_SIZE_FILE_NAME];
+   char directory [MAX_SIZE_DIR_NAME];
    char sailPolFileName [MAX_SIZE_NAME] = "";
    char errMessage [MAX_SIZE_TEXT] = "";
    // printf ("startInfo after: %s, startTime: %lf\n", asctime (&startInfo), par.startTimeInHours);
@@ -818,6 +833,11 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
          }
       }  
    }
+   if (clientReq->model [0] != '\0' && clientReq->gribName [0] == '\0') { // there is a model specified but no grib file
+      snprintf (directory, sizeof (directory), "%s/%s", par.workingDir, "grib"); 
+      mostRecentFile (directory, ".gr", clientReq->model, clientReq->gribName, sizeof (clientReq->gribName));
+   }
+   
    // change grib if requested MAY TAKE TIME !!!!
    if (clientReq->gribName [0] != '\0') {
       buildRootName (clientReq->gribName, strGrib, sizeof (strGrib));
@@ -857,16 +877,16 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    par.startTimeInHours = (clientReq->epochStart - theTime0) / 3600.0;
    printf ("Start Time Epoch: %ld, theTime0: %ld\n", clientReq->epochStart, theTime0);
    printf ("Start Time in Hours after Grib: %.2lf\n", par.startTimeInHours);
-   char *gribBaseName = path_get_basename (par.gribFileName);
+   char *gribBaseName = g_path_get_basename (par.gribFileName);
 
    competitors.n = clientReq->nBoats;
    for (int i = 0; i < clientReq->nBoats; i += 1) {
-      /*if (! par.allwaysSea && ! isSea (tIsSea,  clientReq -> boats [i].lat,  clientReq -> boats [i].lon)) {
+      if (! par.allwaysSea && ! isSea (tIsSea,  clientReq -> boats [i].lat,  clientReq -> boats [i].lon)) {
          snprintf (checkMessage, maxLen, 
             "\"5: Competitor not in sea.\",\n\"name\": \"%s\", \"lat\": %.6lf, \"lon\": %.6lf\n",
             clientReq -> boats [i].name, clientReq -> boats [i].lat, clientReq -> boats [i].lon);
          return false;
-      }*/
+      }
       if (! isInZone (clientReq -> boats [i].lat, clientReq -> boats [i].lon, &zone) && (par.constWindTws == 0)) { 
          snprintf (checkMessage, maxLen, 
             "\"6: Competitor not in Grib wind zone.\",\n\"grib\": \"%s\", \"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf\n",
@@ -881,12 +901,12 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    }
  
    for (int i = 0; i < clientReq->nWp; i += 1) {
-      /*if (! par.allwaysSea && ! isSea (tIsSea, clientReq->wp [i].lat, clientReq->wp [i].lon)) {
+      if (! par.allwaysSea && ! isSea (tIsSea, clientReq->wp [i].lat, clientReq->wp [i].lon)) {
          snprintf (checkMessage, maxLen, 
             "\"7: WP or Dest. not in sea.\",\n\"lat\": %.2lf, \"lon\": %.2lf\n",
             clientReq->wp [i].lat, clientReq->wp [i].lon);
          return false;
-      }*/
+      }
       if (! isInZone (clientReq->wp [i].lat , clientReq->wp [i].lon , &zone) && (par.constWindTws == 0)) {
          snprintf (checkMessage, maxLen, 
             "\"8: WP or Dest. not in Grib wind zone.\",\n\"grib\": \"%s\", \"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf\n",
@@ -1036,9 +1056,13 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
    char tempFileName [MAX_SIZE_FILE_NAME];
    char checkMessage [MAX_SIZE_TEXT];
    char sailPolFileName [MAX_SIZE_NAME] = "";
-   char str[MAX_SIZE_TEXT_FILE] = "";
+   char strWind [MAX_SIZE_LINE] = "";
+   char strCurrent [MAX_SIZE_LINE] = "";
+   char strMem [MAX_SIZE_LINE] = "";
+   char str [MAX_SIZE_TEXT_FILE] = "";
    char strSail [MAX_SIZE_TEXT_FILE] = "";
    char legendStr[MAX_SIZE_LINE] = "";
+   char directory [MAX_SIZE_DIR_NAME];
    char body [2048] = "";
    bigBuffer [0] = '\0';
    // printf ("client.req = %d\n", clientReq->type);
@@ -1048,16 +1072,26 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
       snprintf (outBuffer, maxLen, "{\n   \"killed_on_port\": %d, \"date\": %s, \"by\": %s\"\n}\n", serverPort, date, clientIPAddress);
       break;
    case REQ_TEST:
+      formatThousandSep (strWind, sizeof (strWind), 
+                        sizeof(FlowP) * (zone.nTimeStamp + 1) * zone.nbLat * zone.nbLon);
+
+      formatThousandSep (strCurrent, sizeof (strCurrent), 
+                        sizeof(FlowP) * (currentZone.nTimeStamp + 1) * currentZone.nbLat * currentZone.nbLon);
+      
+      formatThousandSep (strMem, sizeof (strMem), memoryUsage ()); // KB ! 
+      
       snprintf (outBuffer, maxLen,
          "{\n   \"Prog-version\": \"%s, %s, %s\",\n"
          "   \"API server port\": %d,\n"
          "   \"Grib Reader\": \"%s\",\n"
+         "   \"Memory for Grib Wind\": \"%s\",\n"
+         "   \"Memory for Grib Current\": \"%s\",\n"
          "   \"Compilation-date\": \"%s\",\n"
          "   \"PID\": %d,\n"
-         "   \"Memory usage in KB\": %d,\n"
+         "   \"Memory usage in KB\": \"%s\",\n"
          "   \"Authorization-Level\": %d\n}\n",
          PROG_NAME, PROG_VERSION, PROG_AUTHOR, serverPort, gribReaderVersion (str, sizeof (str)), 
-         __DATE__, getpid (), memoryUsage (), clientReq->level
+         strWind, strCurrent, __DATE__, getpid (), strMem, clientReq->level
       );
       break;
    case REQ_ROUTING:
@@ -1104,10 +1138,19 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
       g_strlcat (outBuffer, "]\n", maxLen);
       break;
    case REQ_GRIB:
-      gribToStrJson (clientReq->gribName, outBuffer, maxLen);
+      if (clientReq->model [0] != '\0' && clientReq->gribName [0] == '\0') { // there is a model specified but no grib file
+         printf ("model: %s\n", clientReq->model);
+         if (par.workingDir [strlen (par.workingDir -1 )] == '/')
+            snprintf (directory, sizeof (directory), "%s%s", par.workingDir, "grib"); 
+         else 
+            snprintf (directory, sizeof (directory), "%s/%s", par.workingDir, "grib"); 
+         mostRecentFile (directory, ".gr", clientReq->model, clientReq->gribName, sizeof (clientReq->gribName));
+      }
+      if (clientReq->gribName [0] != '\0') gribToStrJson (clientReq->gribName, outBuffer, maxLen);
+      else snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", "No Grib");
       break;
    case REQ_DIR:
-      if ((strstr (clientReq->dirName, "grib") != NULL) && (clientReq->level == 0))
+      if ((strstr (clientReq->dirName, "grib") != NULL) && (clientReq->level == 0)) // only GFS for level 0
          listDirToStrJson (par.workingDir, clientReq->dirName, clientReq->sortByName, "GFS", filter, outBuffer, maxLen);
       else
          listDirToStrJson (par.workingDir, clientReq->dirName, clientReq->sortByName, NULL, filter, outBuffer, maxLen);
@@ -1153,7 +1196,7 @@ static int sendAll (int fd, const void *buf, size_t len) {
          if (errno == EAGAIN || errno == EWOULDBLOCK) continue; // or poll/select
          return -1;
       }
-      p   += (size_t)n;
+      p += (size_t)n;
       len -= (size_t)n;
    }
    return 0;
@@ -1208,7 +1251,7 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
       }
 
       serveStaticFile (clientFd, requested_path);
-      return false; // stop
+      return true; // stop
    }
 
    // Extract request body
@@ -1232,7 +1275,6 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
       return false;
    }
    clientReq.level = extractLevel (saveBuffer);
-   clientReq.level = 1; // ATTENTION
    printf ("user level: %d\n", clientReq.level);
 
    const char *cors_headers = "Access-Control-Allow-Origin: *\r\n"
@@ -1258,6 +1300,7 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
    if (sendAll (clientFd, header, (size_t) headerLen) < 0) return false;
    if (sendAll (clientFd, bigBuffer, bigBufferLen) < 0) return false;
    printf ("Response sent to client. Size: %zu\n\n", headerLen + bigBufferLen);
+   // printf ("%s%s\n", header, bigBuffer);
 
    double duration = monotonic () - start; 
    logRequest (par.logFileName, date, serverPort, clientIPAddress, postData, userAgent, &clientReq, duration);

@@ -131,6 +131,7 @@ char *formatThousandSep (char *buffer, size_t maxLen, long value) {
       }
    }
    buffer [j] = '\0';
+   if (buffer [j - 1] == ' ') buffer [j - 1] = '\0';
    return buffer;
 }
 
@@ -372,7 +373,7 @@ bool readIsSea (const char *fileName) {
       i += 1;
    }
    fclose (f);
-   printf ("isSea file     : %s, Size: %d, nIsea: %d, Proportion sea: %lf\n", fileName, i, nSea, (double) nSea/ (double) i); 
+   // printf ("isSea file     : %s, Size: %d, nIsea: %d, Proportion sea: %lf\n", fileName, i, nSea, (double) nSea/ (double) i); 
    return true;
 } 
 
@@ -559,7 +560,7 @@ void updateIsSeaWithForbiddenAreas (void) {
 /*! read forbid zone */
 static void forbidZoneAdd (char *line, int n) {
    char *latToken, *lonToken;
-   printf ("Forbid Zone    : %d\n", n);
+   // printf ("Forbid Zone    : %d\n", n);
 
    Point *temp = (Point *) realloc (forbidZones [n].points, MAX_SIZE_FORBID_ZONE * sizeof(Point));
    if (temp == NULL) {
@@ -726,6 +727,7 @@ bool readParam (const char *fileName) {
          if (par.nShpFiles >= MAX_N_SHP_FILES) 
             fprintf (stderr, "In readParam, Error Number max of SHP files reached: %d\n", par.nShpFiles);
       }
+      else if (sscanf (pLine, "AUTHENT:%d", &par.authent) > 0);
       else if (sscanf (pLine, "MOST_RECENT_GRIB:%d", &par.mostRecentGrib) > 0);
       else if (sscanf (pLine, "START_TIME:%lf", &par.startTimeInHours) > 0);
       else if (sscanf (pLine, "T_STEP:%lf", &par.tStep) > 0);
@@ -965,6 +967,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    }
    if (password)
       fprintf (f, "MAIL_PW:         %s\n", par.mailPw);
+   fprintf (f, "AUTHENT:         %d\n", par.authent);
 
    fclose (f);
    return true;
@@ -1029,11 +1032,11 @@ double fTimeToRecupOnePoint (double tws) {
 char *paramToStrJson (Par *par, char *out, size_t maxLen) {
    if (!par || !out || maxLen == 0) return NULL;
 
-   char *fileName         = path_get_basename (par->gribFileName);
-   char *fileNameCurrent  = path_get_basename (par->currentGribFileName);
-   char *polarFileName    = path_get_basename (par->polarFileName);
-   char *wavePolarFileName= path_get_basename (par->wavePolFileName);
-   char *isSeaFileName    = path_get_basename (par->isSeaFileName);
+   char *fileName         = g_path_get_basename (par->gribFileName);
+   char *fileNameCurrent  = g_path_get_basename (par->currentGribFileName);
+   char *polarFileName    = g_path_get_basename (par->polarFileName);
+   char *wavePolarFileName= g_path_get_basename (par->wavePolFileName);
+   char *isSeaFileName    = g_path_get_basename (par->isSeaFileName);
 
    int n = snprintf(out, maxLen,
       "{\n"

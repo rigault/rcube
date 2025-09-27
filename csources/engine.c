@@ -443,8 +443,8 @@ static void statRoute (SailRoute *route) {
    const double epsilonSog = 0.001; // hours
    Pp p = {0};
    if (route->n == 0) return;
-   printf ("route.n = %d\n", route->n);
-   char *polarFileName = path_get_basename (par.polarFileName);
+   fprintf (stdout, "route.n = %d\n", route->n);
+   char *polarFileName = g_path_get_basename (par.polarFileName);
    g_strlcpy (route->polarFileName, polarFileName, sizeof (route->polarFileName));
    free (polarFileName);
    route->dataDate = zone.dataDate [0]; // save Grib origin
@@ -468,7 +468,7 @@ static void statRoute (SailRoute *route) {
       if ((i > 1) && (route->t [i-1].toIndexWp >= 0) && (route->t [i-1].toIndexWp < route->nWayPoints) 
          && (route->t [i-1].toIndexWp != route->t [i].toIndexWp)) {
 
-         printf ("i = %d, WayPoint no: %d\n", i, route-> t[i-1].toIndexWp);
+        fprintf (stdout, "i = %d, WayPoint no: %d\n", i, route-> t[i-1].toIndexWp);
          deltaTime = route->lastStepWpDuration [route-> t[i-1].toIndexWp];
       }
       else if ((i == route->n - 1) && route->destinationReached)
@@ -590,7 +590,8 @@ bool storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest) {
    route->t [route->n - 1].toIndexWp = pDest->toIndexWp;
    route->t [route->n - 1].sail = pDest->sail;
 
-   printf ("pDest with id: %d, father: %d, toIndexWp: %d, route.n: %d\n", pDest->id, pDest->father, pDest->toIndexWp, route->n); 
+   fprintf (stdout, "pDest with id: %d, father: %d, toIndexWp: %d, route.n: %d\n", 
+      pDest->id, pDest->father, pDest->toIndexWp, route->n); 
 
    for (int i = route->n - 3; i >= 0; i--) {
       iFather = findFather (pt.father, i, isoDesc[i].size);
@@ -598,7 +599,7 @@ bool storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest) {
       if (iFather == -1) return false;
       pt = isocArray [i * MAX_SIZE_ISOC + iFather];
       if ((pt.toIndexWp < -1) || pt.toIndexWp > route->nWayPoints) {
-         printf ("In storeRoute: ERROR isoc: %d pt.toIndexWp: %d\n", i, pt.toIndexWp);
+         fprintf (stdout, "In storeRoute: ERROR isoc: %d pt.toIndexWp: %d\n", i, pt.toIndexWp);
       }
       route->t [i+1].lat = pt.lat;
       route->t [i+1].lon = lonCanonize (pt.lon);
@@ -938,7 +939,7 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
       pDest->sail = sail;
       *lastStepDuration = timeToReach;
       free (tempList);
-      printf ("destination reached directly. No isochrone\n");
+      fprintf (stdout, "destination reached directly. No isochrone\n");
       return nIsoc + 1;
    }
    isoDesc [nIsoc].size = buildNextIsochrone (pOr, pDest, tempList, 1, t, dt, 
@@ -981,8 +982,8 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
          isoDesc [nIsoc].closest = fClosest (&isocArray [nIsoc * MAX_SIZE_ISOC], isoDesc[nIsoc].size, pDest, &lastClosest); 
          isoDesc [nIsoc].toIndexWp = toIndexWp; 
          *lastStepDuration = timeLastStep;
-         printf ("In routing, Destination reached to WP %d for %s\n", toIndexWp, competitors.t [competitors.runIndex].name);
-         printf ("pDest.id: %d, pDest.father: %d, pDest.toIndexWP: %d\n", pDest->id, pDest->father, pDest->toIndexWp);
+         fprintf (stdout, "In routing, Destination reached to WP %d for %s\n", toIndexWp, competitors.t [competitors.runIndex].name);
+         fprintf (stdout, "pDest.id: %d, pDest.father: %d, pDest.toIndexWP: %d\n", pDest->id, pDest->father, pDest->toIndexWp);
          free (tempList);
          return nIsoc + 1;
       }
@@ -1037,7 +1038,7 @@ void *routingLaunch () {
    Pp pNext;
    initRouting ();
    route.competitorIndex = competitors.runIndex;
-   printf ("In routingLaunch: competitor index: %d, name: %s\n", competitors.runIndex, competitors.t[competitors.runIndex].name);
+   fprintf (stdout, "In routingLaunch: competitor index: %d, name: %s\n", competitors.runIndex, competitors.t[competitors.runIndex].name);
    int ret = -1;
 
    gettimeofday (&t0, NULL);
@@ -1046,9 +1047,9 @@ void *routingLaunch () {
 
    //Launch routing
    if (wayPoints.n == 0) {
-      printf ("Before Routing, pDest ID: %d, Father: %d\n", par.pDest.id, par.pDest.father);
+      fprintf (stdout, "Before Routing, pDest ID: %d, Father: %d\n", par.pDest.id, par.pDest.father);
       ret = routing (&par.pOr, &par.pDest, -1, wayPointStartTime, par.tStep, &lastStepDuration);
-      printf ("After Routing, pDest ID: %d, Father: %d\n", par.pDest.id, par.pDest.father);
+      fprintf (stdout, "After Routing, pDest ID: %d, Father: %d\n", par.pDest.id, par.pDest.father);
    }
    else {
       for (int i = 0; i < wayPoints.n; i ++) {
@@ -1088,7 +1089,7 @@ void *routingLaunch () {
    }
    route.lastStepDuration = lastStepDuration;
    route.nWayPoints = wayPoints.n;
-   printf ("Number of wayPoints: %d\n", wayPoints.n);
+   fprintf (stdout, "Number of wayPoints: %d\n", wayPoints.n);
 
    gettimeofday (&t1, NULL);
    ut1 = t1.tv_sec * MILLION + t1.tv_usec;
@@ -1131,7 +1132,7 @@ void *bestTimeDeparture () {
             minDuration = route.duration;
             chooseDeparture.bestTime = t;
             chooseDeparture.bestCount = chooseDeparture.count;
-            printf ("Count: %d, time %.2lf, duration: %.2lf, min: %.2lf, bestTime: %.2lf\n", \
+            fprintf (stdout, "Count: %d, time %.2lf, duration: %.2lf, min: %.2lf, bestTime: %.2lf\n", \
                  chooseDeparture.count, t, route.duration, minDuration, chooseDeparture.bestTime);
          }
          if (route.duration > maxDuration) {
@@ -1140,7 +1141,7 @@ void *bestTimeDeparture () {
       }
       else {
          chooseDeparture.tStop = t;
-         printf ("Count: %d, time %.2lf, Unreachable\n", chooseDeparture.count, t);
+         fprintf (stdout, "Count: %d, time %.2lf, Unreachable\n", chooseDeparture.count, t);
          break;
          chooseDeparture.t [chooseDeparture.count] = NIL;
          if (nUnreachable > MAX_UNREACHABLE) {
@@ -1152,7 +1153,7 @@ void *bestTimeDeparture () {
    }
    if (chooseDeparture.bestCount >= 0) {
       par.startTimeInHours = chooseDeparture.bestTime;
-      printf ("Solution exist: best startTime: %.2lf\n", par.startTimeInHours);
+      fprintf (stdout, "Solution exist: best startTime: %.2lf\n", par.startTimeInHours);
       chooseDeparture.minDuration = minDuration;
       chooseDeparture.maxDuration = maxDuration;
       routingLaunch ();
@@ -1160,7 +1161,7 @@ void *bestTimeDeparture () {
    }  
    else {
       g_atomic_int_set (&chooseDeparture.ret, NO_SOLUTION);
-      printf ("No solution\n");
+      fprintf (stdout, "No solution\n");
    }
    return NULL;
 }
@@ -1174,7 +1175,7 @@ void *allCompetitors () {
    
    // we begin by the end in order to keep main (index 0) competitor as last for display route 
    for (int i = competitors.n - 1; i >= 0; i -= 1) {
-      printf ("In allCompetitors: competitor: %d\n", i); 
+      fprintf (stdout, "In allCompetitors: competitor: %d\n", i); 
       competitors.runIndex = i;
       par.pOr.lat = competitors.t [i].lat;
       par.pOr.lon = competitors.t [i].lon;
@@ -1203,26 +1204,6 @@ void *allCompetitors () {
    return NULL;
 }
 
-/*! translate hours in a string */
-/*
-static char *delayToStr (double delay, char *str, size_t maxLen) {
-   const char prefix = (delay < 0) ? '-' : ' ';
-   delay = fabs (delay);
-   int days = (int) (delay / 24);        
-   int hours = ((int) delay) % 24;         
-   int minutes = (int) ((delay - (int) delay) * 60); 
-   int seconds = (int) ((delay * 3600)) % 60;
-
-   if (days > 0)
-      snprintf (str, maxLen, "%c%d day%s %02d:%02d:%02d", 
-              prefix, days, days > 1 ? "s" : "", hours, minutes, seconds);
-   else
-      snprintf (str, maxLen, "%c%02d:%02d:%02d", prefix, hours, minutes, seconds);
-   
-   return str;
-}
-*/
-
 /*! log one CSV line report. n is the number of competitors */
 void logReport (int n) {
    time_t now = time (NULL);
@@ -1250,8 +1231,8 @@ void logReport (int n) {
    newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route.duration, 
       arrivalDate, sizeof (arrivalDate));
 
-   char *polarFileName = path_get_basename (par.polarFileName);
-   char *gribFileName = path_get_basename (par.gribFileName);
+   char *polarFileName = g_path_get_basename (par.polarFileName);
+   char *gribFileName = g_path_get_basename (par.gribFileName);
 
    fprintf (f, "%04d-%02d-%02d %02d:%02d:%02d; %4.2lf; %4d; %c; %d; %s; %s; %s; %s; %s; %s; %.2lf; %3d°; %s; %s\n",
         timeInfos->tm_year+1900, timeInfos->tm_mon+1, timeInfos->tm_mday,
@@ -1273,61 +1254,9 @@ void logReport (int n) {
    free (gribFileName);
    fclose (f);
 }
-   
-/*! translate competitors struct in a string */
-/*void competitorsToStr (CompetitorsList *copyComp, char *buffer, size_t maxLen, char *footer, size_t maxLenFooter) {
-   char strDep [MAX_SIZE_DATE];
-   char strDelay [MAX_SIZE_LINE], strMainDelay [MAX_SIZE_LINE];
-   char line [MAX_SIZE_TEXT];
-   char strLat[MAX_SIZE_NAME], strLon[MAX_SIZE_NAME];
-   double dist;
 
-   Competitor mainCompetitor = copyComp->t [0];
-
-   if (copyComp->n > 1)
-      qsort (copyComp->t, copyComp->n, sizeof (Competitor), compareDuration);
-   // winner index is 0
-
-   g_strlcpy (buffer, "Name;                      Lat.;        Lon.;  Dist To Main;              ETA;     Dist;    To Best Delay;    To Main Delay\n", maxLen);
-
-   for (int i = 0; i < copyComp->n; i++) {
-      latToStr (copyComp->t[i].lat, par.dispDms, strLat, sizeof(strLat));
-      lonToStr (copyComp->t[i].lon, par.dispDms, strLon, sizeof(strLon));
-      
-      if (copyComp->t[i].duration == HUGE_VAL) {
-         g_strlcpy (strDelay, "NA", sizeof (strDelay));
-         g_strlcpy (strMainDelay, "NA", sizeof (strMainDelay));
-      }
-      else {
-         delayToStr (copyComp->t [i].duration - copyComp->t [0].duration, 
-            strDelay, sizeof (strDelay));          // delay with the winner in hours translated in string
-         delayToStr (copyComp->t [i].duration - mainCompetitor.duration, // main player 
-            strMainDelay, sizeof (strMainDelay));  // delay between main and others in hours translated in string
-      }
-      if (strcmp (mainCompetitor.name, copyComp->t [i].name) == 0)
-         dist = 0.0;
-      else
-         dist = orthoDist (copyComp->t [i].lat, copyComp->t [i].lon, mainCompetitor.lat, mainCompetitor.lon);
-
-      char *noAccents = g_str_to_ascii (copyComp->t[i].name, NULL); // replace accents...
-      noAccents [18] = '\0'; // trunc
-      snprintf (line, sizeof (line), "%-19s;%12s; %12s;      %8.2lf; %16s; %8.2lf; %16s; %16s\n", 
-         noAccents, strLat, strLon, dist, copyComp->t[i].strETA, copyComp->t[i].dist, strDelay, strMainDelay);
-      free (noAccents);
-
-      g_strlcat (buffer, line, maxLen);
-   }
-
-   newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours, strDep, sizeof (strDep)); 
-   snprintf (footer, maxLenFooter, "Number of Competitors: %d, Departure Date: %s, Isoc Time Step: %.2lf %s\n", 
-      copyComp->n, strDep, par.tStep, route.polarFileName);
-   g_strlcat (buffer, " \n", maxLen);
-   g_strlcat (buffer, footer, maxLen);
-}
-*/
 /*! export route with GPX format */
-/*
-bool exportRouteToGpx (const SailRoute *route, const gchar *fileName) {
+bool exportRouteToGpx (const SailRoute *route, const char *fileName) {
    FILE *f;
    char strTime [MAX_SIZE_DATE]; 
    time_t theTime0 = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]); // epoch Grib Time
@@ -1370,4 +1299,3 @@ bool exportRouteToGpx (const SailRoute *route, const gchar *fileName) {
    printf ("GPX file:%s generated\n", fileName);
    return true;
 }
-*/

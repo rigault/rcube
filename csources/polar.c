@@ -1,5 +1,5 @@
-/*! compilation: gcc -c polar.c `pkg-config --cflags glib-2.0` */
-//#include <glib.h>
+/*! compilation: gcc -c polar.c */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +12,7 @@
 #include "r3util.h"
 
 
-/* str to double accepting both . or , as decimal separator */
+/*! str to double accepting both . or , as decimal separator */
 static bool strtodNew(const char *str, double *v){
    if (str == NULL || v == NULL || (!isNumber(str))) return false;
 

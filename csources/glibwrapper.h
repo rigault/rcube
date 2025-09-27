@@ -142,8 +142,8 @@ static inline char *g_strdup(const char *s) {
    return s ? strdup(s) : NULL;
 }
 
-/*! close to g_path_get_basename */ 
-static inline char *path_get_basename (const char *path) {
+/*! close to Glib g_path_get_basename */ 
+static inline char *g_path_get_basename (const char *path) {
    if (!path) return NULL;
    if (*path == '\0') return strdup(".");
 

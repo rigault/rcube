@@ -201,7 +201,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    char shortName [MAX_SIZE_SHORT_NAME];
    size_t lenName;
    const long GUST_GFS = 180;
-   char str [MAX_SIZE_LINE];
+   //char str [MAX_SIZE_LINE];
    zone->wellDefined = false;
    if (! readGribLists (fileName, zone)) {
       return false;
@@ -223,8 +223,8 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       fprintf (stderr, "In readGribAll, Error calloc tGribData [iFlow]\n");
       return false;
    }
-   printf ("In readGribAll.: %s allocated\n", 
-      formatThousandSep (str, sizeof (str), sizeof(FlowP) * (zone->nTimeStamp + 1) * zone->nbLat * zone->nbLon));
+   // printf ("In readGribAll.: %s allocated\n", 
+      // formatThousandSep (str, sizeof (str), sizeof(FlowP) * (zone->nTimeStamp + 1) * zone->nbLat * zone->nbLon));
    
    // Message handle. Required in all the ecCodes calls acting on a message.
    codes_handle* h = NULL;
