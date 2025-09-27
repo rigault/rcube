@@ -1140,7 +1140,7 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
    case REQ_GRIB:
       if (clientReq->model [0] != '\0' && clientReq->gribName [0] == '\0') { // there is a model specified but no grib file
          printf ("model: %s\n", clientReq->model);
-         if (par.workingDir [strlen (par.workingDir -1 )] == '/')
+         if ((strlen (par.workingDir) > 1) && (par.workingDir [strlen (par.workingDir) -1 ] == '/'))
             snprintf (directory, sizeof (directory), "%s%s", par.workingDir, "grib"); 
          else 
             snprintf (directory, sizeof (directory), "%s/%s", par.workingDir, "grib"); 

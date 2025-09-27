@@ -11,5 +11,7 @@ gcc -fanalyzer -c readgriballeccodes.c
 gcc -fanalyzer -c readgriballwithouteccodes.c
 gcc -fanalyzer -c polar.c 
 gcc -fanalyzer -c r3server.c
+gcc -fanalyzer -c routing.c
+gcc -fanalyzer -c option.c
 
 rm *.o
