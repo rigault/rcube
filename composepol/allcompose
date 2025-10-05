@@ -35,10 +35,8 @@ done < <(jq -r --arg boat "$idBoat" '.["data_" + $boat][0].sail[].name' "$json")
 
 rm -f "$tmp"
 # Vérifier le contenu
-printf 'sails = %s\n' "${sails[*]}"
+printf 'sails = %s\n\n' "${sails[*]}"
 
 echo "building resulting file"
-echo
-
-/home/rr/routing/csources4/composepol -c "${sails[@]}"
+/home/rr/rcube/composepol/composepol -c "${sails[@]}"
 

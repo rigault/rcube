@@ -155,7 +155,7 @@ static void reportSail () {
 int main (int argc, char *argv []) {
    bool verbose = false;
    char errMessage [MAX_SIZE_TEXT];
-   int deb = 1;
+   int deb = 2;
    int nPol = 0;
    if (argc <= 2) {
       fprintf (stderr, "In main, Synopsys: %s -c <file0> <file1> <file2>...\n", argv [0]);
@@ -170,16 +170,11 @@ int main (int argc, char *argv []) {
       exit (EXIT_SUCCESS);
    }
 
-   if (strcmp (argv [1], "-v") == 0) {
-      verbose = true;
-      deb += 1;
-   }
-
-   if (strcmp (argv [deb], "-c") != 0) {
+   if ((strcmp (argv [1], "-c") != 0) && (strcmp (argv [1], "-v") != 0)) {
       fprintf (stderr, "In main, Synopsys: %s -c <file0> <file1> <file2>...\n", argv [0]);
       exit (EXIT_FAILURE);
    }
-   deb += 1;
+   verbose = (strcmp (argv [1], "-v") == 0);
 
    if ((argc - deb) >= MAX_POLAR_FILES) {
       fprintf (stderr, "In main, Number of polar files exceed limit: %d\n", MAX_POLAR_FILES);
@@ -187,15 +182,15 @@ int main (int argc, char *argv []) {
    }
    for (int i = deb; i < argc; i++) {
       nPol = i - deb ;
-      // printf ("Analyse Polar; %d\n", nPol);
       if (! readPolar (false, argv [nPol + 2], &polMatTab [nPol], errMessage, sizeof (errMessage))) {
          fprintf (stderr, "In main, Impossible to read: %s: %s\n", argv [i], errMessage);
          exit (EXIT_FAILURE);
       }
-      if (verbose)
+      if (verbose) {
          printf ("Manage: %s\n", argv [i]);
-      polToStr (&polMatTab [nPol], buffer, MAX_SIZE_BUFFER);
-      if (verbose) printf ("%s\n", buffer);
+         polToStr (&polMatTab [nPol], buffer, MAX_SIZE_BUFFER);
+         printf ("%s\n", buffer);
+      }
       if (checkConsistency (nPol));
       compose (nPol);
    }
@@ -205,13 +200,9 @@ int main (int argc, char *argv []) {
    }
    countSail (&sailMat);
    reportSail ();
-   //printf ("Resulting Polar:\n");
-   //polPrint (&resMat);
    polWrite (OUTPUT_RES, &resMat);
-   //printf ("Resulting SailPolar:\n");
    polWrite (OUTPUT_SAIL, &sailMat);
    printf ("resulting polar and sail polar names: %s %s\n", OUTPUT_RES, OUTPUT_SAIL);
-
    exit (EXIT_SUCCESS);
 } 
 
