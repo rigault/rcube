@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+idBoat="imoca_60_foils_"
+sails=(Code0 HeavyGnk Jib LightGnk LightJib Spi Staysail)
+
+args=()
+for s in "${sails[@]}"; do
+  args+=( "${idBoat}${s}.csv" )
+done
+
+/home/rr/routing/csources4/composepol -c "${args[@]}"
+

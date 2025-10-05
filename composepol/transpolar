@@ -1,0 +1,3 @@
+#!/bin/bash
+polId="data_imoca_60_foils"
+cat $1 | sed "s/$polId = '/{\"$polId\": /" | sed "s/'$/}/"

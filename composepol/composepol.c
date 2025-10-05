@@ -175,7 +175,7 @@ int main (int argc, char *argv []) {
       deb += 1;
    }
 
-   if (strcmp (argv [1], "-c") != 0) {
+   if (strcmp (argv [deb], "-c") != 0) {
       fprintf (stderr, "In main, Synopsys: %s -c <file0> <file1> <file2>...\n", argv [0]);
       exit (EXIT_FAILURE);
    }
