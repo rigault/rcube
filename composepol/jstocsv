@@ -1,6 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+json="${1:-/dev/stdin}"              # fichier en 1er arg, sinon stdin
+idBoat="${2:-imoca_60_foils}"        # boat id en 2e arg (par défaut imoca_60_foils)
+
 tmp=$(mktemp)
-idBoat="imoca_60_foils"
 
 cat > "$tmp" <<'JQ'
 .["data_" + $boat][0] as $b
@@ -9,12 +13,16 @@ cat > "$tmp" <<'JQ'
 | ($b.sail[] | select(.name == $sail) | .speed) as $spd
 | (["twa"] + $tws) as $header
 | [$header] + ( $twa | to_entries | map([.value] + ($spd[.key] // [])) )
-| map(join(";")) | join("\n")
+| map( map(tostring) | join(";") )
+| join("\n")
 JQ
 
-jq -r --arg boat "$idBoat" '.["data_" + $boat][0].sail[].name' "$1" | while read -r SAIL; do
-  jq -r --arg sail "$SAIL" --arg boat $idBoat -f "$tmp" "$1" > "$idBoat${SAIL}.csv"
-  echo "Write: $idBoat${SAIL}.csv"
+# Liste des voiles présentes et export CSV par voile
+jq -r --arg boat "$idBoat" '.["data_" + $boat][0].sail[].name' "$json" \
+| while IFS= read -r SAIL; do
+  safe=${SAIL//[^[:alnum:]]/_}
+  jq -r --arg sail "$SAIL" --arg boat "$idBoat" -f "$tmp" "$json" > "${idBoat}_${safe}.csv"
+  echo "Écrit : ${idBoat}_${safe}.csv"
 done
 rm -f "$tmp"
 
