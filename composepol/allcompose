@@ -1,0 +1,44 @@
+#!/bin/bash
+
+#set -euo pipefail
+polId="data_imoca_60_foils"
+cat $1 | sed "s/$polId = '/{\"$polId\": /" | sed "s/'$/}/" > "new$1" # new file creation json correct
+
+json="new${1:-/dev/stdin}"              # fichier en 1er arg, sinon stdin
+idBoat="${2:-imoca_60_foils}"           # boat id en 2e arg (par défaut imoca_60_foils)
+
+echo "JSON file: "$json
+echo "Boat ID: "$idBoat
+
+tmp=$(mktemp)
+
+cat > "$tmp" <<'JQ'
+.["data_" + $boat][0] as $b
+| ($b.twa)  as $twa
+| ($b.tws)  as $tws
+| ($b.sail[] | select(.name == $sail) | .speed) as $spd
+| (["twa"] + $tws) as $header
+| [$header] + ( $twa | to_entries | map([.value] + ($spd[.key] // [])) )
+| map( map(tostring) | join(";") )
+| join("\n")
+JQ
+
+# Liste des voiles présentes et export CSV par voile
+while IFS= read -r SAIL; do
+  safe=${SAIL//[^[:alnum:]]/_}
+  out="${idBoat}_${safe}.csv"
+
+  jq -r --arg sail "$SAIL" --arg boat "$idBoat" -f "$tmp" "$json" > "$out"
+  echo "write: $out"
+  sails+=("$out")
+done < <(jq -r --arg boat "$idBoat" '.["data_" + $boat][0].sail[].name' "$json")
+
+rm -f "$tmp"
+# Vérifier le contenu
+printf 'sails = %s\n' "${sails[*]}"
+
+echo "building resulting file"
+echo
+
+/home/rr/routing/csources4/composepol -c "${sails[@]}"
+
