@@ -321,7 +321,7 @@ static void getRunDatetime (int mode, int delay, char *yyyy, char *mm, char *dd,
    time_t adj_time = timegm(&t);
    t = *gmtime (&adj_time);
    
-   // Calculate last run acailable
+   // Calculate last run available
    if (mode == ECMWF || mode == METEO_CONSULT_CURRENT) 
       t.tm_hour = (t.tm_hour / 12) * 12; // ECMWF : 0 ou 12
    else 
