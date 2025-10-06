@@ -26,8 +26,7 @@ static inline double lonCanonize (double lon) {
 /*! if antemeridian -180 < lon < 360. Normal case : -180 < lon <= 180 */
 static inline double lonNormalize (double lon, bool anteMeridian) {
    lonCanonize (lon);
-   if (anteMeridian && lon < 0)
-      lon += 360;
+   if (anteMeridian && lon < 0) lon += 360;
    return lon;
 }
 
@@ -190,17 +189,17 @@ static inline double oldFindPolar (double twa, double w, const PolMat *mat) {
 
 /*! dichotomic search */
 static inline int binarySearch (const double *arr, int size, double val) {
-   int low = 1, high = size; // ✅ Inclure `size` pour être cohérent avec la boucle for
+   int low = 1, high = size;
    while (low < high) {
       int mid = (low + high) / 2;
       if (arr [mid] == val) 
          return mid + 1;
       if (arr[mid] > val) 
-         high = mid;  // ✅ On cherche le premier élément strictement > val
+         high = mid; // look for value stritly greater than val
       else 
          low = mid + 1;
    }
-   return low;  // ✅ `low` est maintenant le premier indice où `arr[low] > val`
+   return low;       // low is first index with arr[low] > val
 }
 
 /*! find in polar boat speed or wave coeff and sail number if sailMat != NULL */

@@ -577,11 +577,12 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
    newDate (gZone.dataDate [0], gZone.dataTime [0]/100 + gZone.timeStamp [gZone.nTimeStamp -1], str1, sizeof (str1));
 
    snprintf (out, maxLen, 
-      "{\"centreID\": %ld, \"centreName\": \"%s\", \"edNumber\": %ld, \n"
-      "\"runStart\": \"%s\", \"runEnd\": \"%s\", \n"
-      "\"topLat\": %.6f, \"leftLon\": %.6f, \"bottomLat\": %.6f, \"rightLon\": %.6f, \n"
-      "\"latStep\": %.4f, \"lonStep\": %.4f, \n"
-      "\"nLat\": %ld, \"nLon\": %ld, \"nValues\": %ld, \"nTimeStamp\": %zu, \"timeStamps\": \n[",
+      "{\n  \"centreID\": %ld, \"centreName\": \"%s\", \"edNumber\": %ld, \n"
+      "  \"runStart\": \"%s\", \"runEnd\": \"%s\", \n"
+      "  \"topLat\": %.6f, \"leftLon\": %.6f, \"bottomLat\": %.6f, \"rightLon\": %.6f, \n"
+      "  \"latStep\": %.4f, \"lonStep\": %.4f, \n"
+      "  \"nLat\": %ld, \"nLon\": %ld, \"nValues\": %ld, \"nTimeStamp\": %zu,\n"
+      "  \"timeStamps\": \n  [",
       gZone.centreId, centreName, gZone.editionNumber,
       str0, str1,
       gZone.latMax, gZone.lonLeft, gZone.latMin, gZone.lonRight,
@@ -595,7 +596,7 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
    }
    g_strlcat (out, "],\n", maxLen);
 
-   snprintf (str, sizeof (str), "\"nShortName\": %zu, \"shortNames\": [", gZone.nShortName);
+   snprintf (str, sizeof (str), "  \"nShortName\": %zu, \"shortNames\": [", gZone.nShortName);
    g_strlcat (out, str, maxLen);
 
    for (size_t i = 0; i < gZone.nShortName; i += 1) {
@@ -603,14 +604,14 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
       g_strlcat (out, str, maxLen);
    }
    g_strlcat (out, "],\n", maxLen);
-   snprintf (str, sizeof (str),  "\"fileName\": \"%s\", \"fileSize\": %ld,\n", gribName, st.st_size);
+   snprintf (str, sizeof (str),  "  \"fileName\": \"%s\", \"fileSize\": %ld,\n", gribName, st.st_size);
    g_strlcat (out, str, maxLen);
 
    if ((gZone.nDataDate != 1) || (gZone.nDataTime != 1)) {
       snprintf (infoStr, sizeof (infoStr), "Warning number of Date: %zu, number of Time: %zu", gZone.nDataDate, gZone.nDataTime);
    }
 
-   snprintf (str, sizeof (str), "\"Info\": \"%s\"\n}\n", infoStr);
+   snprintf (str, sizeof (str), "  \"Info\": \"%s\"\n}\n", infoStr);
    g_strlcat (out, str, maxLen);
    return out;
 }

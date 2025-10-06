@@ -14,8 +14,8 @@
 #include "glibwrapper.h"
 #include "inline.h"
 
-/*! Make initialization following parameter file load */
-static void initScenarioOption (void) {
+/*! Load polar and gribs after parameter file load */
+static bool initScenarioOption (void) {
    char str [MAX_SIZE_LINE];
    char errMessage [MAX_SIZE_TEXT] = "";
    int readGribRet;
@@ -23,7 +23,7 @@ static void initScenarioOption (void) {
       readGribRet = readGribAll (par.gribFileName, &zone, WIND);
       if (readGribRet == 0) {
          fprintf (stderr, "In initScenarioOption, Error: Unable to read grib file: %s\n ", par.gribFileName);
-         return;
+         return false;
       }
       printf ("Grib loaded    : %s\n", par.gribFileName);
       printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (zone.dataDate [0], zone.dataTime [0], str, sizeof (str)));
@@ -34,20 +34,19 @@ static void initScenarioOption (void) {
       printf ("Cur grib loaded: %s\n", par.currentGribFileName);
       printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (currentZone.dataDate [0], currentZone.dataTime [0], str, sizeof (str)));
    }
-   if (readPolar (true, par.polarFileName, &polMat, errMessage, sizeof (errMessage)))
+   if (readPolar (true, par.polarFileName, &polMat, errMessage, sizeof (errMessage))) {
       printf ("Polar loaded   : %s\n", par.polarFileName);
-   else
+   }
+   else {
       fprintf (stderr, "In initScenarioOption, Error readPolar: %s\n", errMessage);
+      return false;
+   }
       
    if (readPolar (true, par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage)))
       printf ("Polar loaded   : %s\n", par.wavePolFileName);
    else
       fprintf (stderr, "In initScenatioOption, Error readPolar: %s\n", errMessage);
-   
-   nIsoc = 0;
-   route.n = 0;
-   route.destinationReached = false;
-   // initWayPoints ();
+   return true;
 }
 
 /*! Manage command line option reduced to one character */
@@ -61,13 +60,11 @@ void optionManage (char option) {
    char errMessage [MAX_SIZE_TEXT] = "";
    char str [MAX_SIZE_LINE] = "";
    clock_t start, end;
-   double result;
    const long iterations = 100000;
    int sail;
 
    struct tm tm0;
    int intRes;
-
 
    if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
       fprintf (stderr, "In optionManage, Error Malloc %d\n", MAX_SIZE_BUFFER); 
@@ -90,39 +87,6 @@ void optionManage (char option) {
       printf ("Orthodist1 : %.2lf,   Orthodist2: %.2lf\n", orthoDist2 (lat, lon, lat2, lon2), orthoDist (lat2, lon2, lat, lon));
       printf ("Loxodist1  : %.2lf,   Loxodist2 : %.2lf\n", loxoDist(lat, lon, lat2, lon2), loxoDist (lat2, lon2, lat, lon));
       break;
-   case 'C': // Perf cap dist
-      lat = 48.8566, lon = 2.3522;   // Paris
-      lat2 = 40.7128, lon2 = -74.0060; // New York
-
-      // Test direct
-      start = clock();
-      for (long i = 0; i < iterations; i++) {
-        result = directCap (lat, lon, lat2, lon2);
-      }
-      end = clock();
-      printf("direct Cap:      %.2f ms, last result = %.2f NM\n", 
-           (double)(end - start) * 1000.0 / CLOCKS_PER_SEC, result);
-
-      // Test orthoCap givry
-      start = clock();
-      for (long i = 0; i < iterations; i++) {
-        result = orthoCap (lat, lon, lat2, lon2);
-      }
-      end = clock();
-      printf("orthoCap givry:      %.2f ms, last result = %.2f NM\n", 
-           (double)(end - start) * 1000.0 / CLOCKS_PER_SEC, result);
-
-
-      // Test orthoCap 
-      start = clock();
-      for (long i = 0; i < iterations; i++) {
-        result = orthoCap2 (lat, lon, lat2, lon2);
-      }
-      end = clock();
-      printf("orthoCap2: %.2f ms, last result = %.2f NM\n", 
-           (double)(end - start) * 1000.0 / CLOCKS_PER_SEC, result);
-      break;
-
    case 'g': // grib
       if (par.mostRecentGrib) {// most recent grib will replace existing grib
          snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir); 
@@ -138,7 +102,7 @@ void optionManage (char option) {
       checkGribToStr (buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       break;
-   case 'G': // grib
+   case 'G': // grib current
       readGribAll (par.currentGribFileName, &currentZone, CURRENT);
       gribToStr (&currentZone, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
@@ -157,9 +121,6 @@ void optionManage (char option) {
       while ((fgets (str, MAX_SIZE_LINE, f) != NULL ))
          printf ("%s", str);
       fclose (f);
-      break;
-   case 'i': // Interest points
-      printf ("Not Implemented\n");
       break;
    case 'p': // polar
       readPolar (true, par.polarFileName, &polMat, errMessage, sizeof (errMessage));
@@ -207,7 +168,10 @@ void optionManage (char option) {
          snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir); 
          mostRecentFile (directory, ".gr", "", par.gribFileName, sizeof (par.gribFileName));
       }
-      initScenarioOption ();
+      if (!initScenarioOption ()) {
+         fprintf (stderr, "Error in Gtib or Polar load\n");
+         break;
+      }
       routingLaunch ();
       routeToStr (&route, buffer, sizeof (buffer), footer, sizeof (footer));
       printf ("%s\n", buffer);

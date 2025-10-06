@@ -35,39 +35,36 @@
 #include "r3types.h"
 #include "r3util.h"
 #include "option.h"
-
-char parameterFileName [MAX_SIZE_FILE_NAME];
+#include "glibwrapper.h"
 
 /*! make initializations and call opionManage () */
 int main (int argc, char *argv[]) {
-   bool ret = true;
+   char parameterFileName [MAX_SIZE_FILE_NAME];
 
    if (setlocale (LC_ALL, "C") == NULL) {              // very important for scanf decimal numbers
       fprintf (stderr, "In main, Error: setlocale failed");
       return EXIT_FAILURE;
    }
 
-   strncpy (parameterFileName, PARAMETERS_FILE, sizeof (parameterFileName) - 1);
+   g_strlcpy (parameterFileName, PARAMETERS_FILE, sizeof (parameterFileName));
    switch (argc) {
       case 1: // no parameter
-         ret = readParam (parameterFileName);
-         optionManage ('h'); // help
+         if (readParam (parameterFileName, false)) optionManage ('h'); // help
          break;
       case 2: // one parameter
-         if (argv [1][0] == '-') {
-            ret = readParam (parameterFileName);
+         if ((argv [1][0] == '-') && (readParam (parameterFileName, false))) {
             optionManage (argv [1][1]);
             exit (EXIT_SUCCESS);
          }
          else { 
-            ret = readParam (argv [1]);
-            strncpy (parameterFileName, argv [1], sizeof (parameterFileName) - 1);
+            if (readParam (argv [1], false)) {
+               g_strlcpy (parameterFileName, argv [1], sizeof (parameterFileName));
+            }
          }
          break;
       case 3: // two parameters
-         if (argv [1][0] == '-') {
-            ret = readParam (argv [2]);
-            strncpy (parameterFileName, argv [2], sizeof (parameterFileName) - 1);
+         if ((argv [1][0] == '-') && readParam (argv [2], false)) {
+            g_strlcpy (parameterFileName, argv [2], sizeof (parameterFileName));
             optionManage (argv [1][1]);
             exit (EXIT_SUCCESS);
          }
@@ -81,6 +78,6 @@ int main (int argc, char *argv[]) {
          exit  (EXIT_FAILURE);
          break;
    }
-   if (!ret) exit (EXIT_FAILURE);
+   exit (EXIT_FAILURE);
 }
 

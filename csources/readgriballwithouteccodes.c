@@ -65,7 +65,7 @@ static int16_t readS16beFlexible(const uint8_t *p){
    return t2;
 }
 
-static inline float    rdIEEE32BE(const uint8_t *p){
+static inline float rdIEEE32BE(const uint8_t *p){
    uint32_t u = rdU32BE(p);
    float f; memcpy(&f, &u, sizeof(float));
    return f;

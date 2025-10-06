@@ -11,7 +11,6 @@
 #include "inline.h"
 #include "r3util.h"
 
-
 /*! str to double accepting both . or , as decimal separator */
 static bool strtodNew(const char *str, double *v){
    if (str == NULL || v == NULL || (!isNumber(str))) return false;

@@ -342,6 +342,7 @@ typedef struct {
    char traceFileName [MAX_SIZE_FILE_NAME];  // trace is a list of point/time
    char midFileName [MAX_SIZE_FILE_NAME];    // list of mid country related to mmsi and AIS
    char tidesFileName [MAX_SIZE_FILE_NAME];  // list of ports witht lat, lon fo tides
+   char feedbackFileName [MAX_SIZE_FILE_NAME];//for user feedback
    char logFileName [MAX_SIZE_FILE_NAME];    // log the runs
    char wpGpxFileName [MAX_SIZE_FILE_NAME];  // To tpre Way Points in GPX format
    char dashboardVR [MAX_SIZE_FILE_NAME];    // Virtual Regatta dashboard thanks to plugin 

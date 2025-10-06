@@ -1,4 +1,4 @@
-/*! compilation: gcc -c rutil.c `pkg-config --cflags glib-.0` */
+/*! compilation: gcc -c r3util.c */
 #define MAX_N_SHIP_TYPE 2       // for Virtual Regatta Stamina calculation
 
 #include <float.h>   
@@ -16,7 +16,6 @@
 #include "glibwrapper.h"
 #include "r3types.h"
 #include "inline.h"
-struct tm;
 
 /* For virtual regatta Stamina calculation */
 struct {
@@ -66,10 +65,8 @@ Zone currentZone;                      // current
 
 /*! return the name of the sail */
 char *fSailName (int val, char *str, size_t maxLen) {
-   if (val >= 0 && val < MAX_N_SAIL)
-      g_strlcpy (str, sailName [val], maxLen);
-   else
-      g_strlcpy (str, "--", maxLen);
+   if (val >= 0 && val < MAX_N_SAIL) g_strlcpy (str, sailName [val], maxLen);
+   else g_strlcpy (str, "--", maxLen);
    return str;
 }
 
@@ -98,12 +95,9 @@ char *newFileNameSuffix (const char *fileName, const char *suffix, char *newFile
 
 /*! return true if str is empty */
 bool isEmpty (const char *str) {
-   if (str == NULL)
-      return true;
+   if (str == NULL) return true;
    while (*str) {
-      if (!g_ascii_isspace(*str)) {
-         return false;
-      }
+      if (!g_ascii_isspace(*str)) return false;
       str++;
    }
    return true;
@@ -135,6 +129,12 @@ char *formatThousandSep (char *buffer, size_t maxLen, long value) {
    return buffer;
 }
 
+/*! true if name terminates with slash */
+bool hasSlash (const char *name) {
+   const int len = strlen (name);
+   return name && (len > 0) && (name [len - 1] == '/');
+}
+
 /*! select most recent file in "directory" that contains "pattern0" and "pattern1" in name 
   return true if found with name of selected file */
 bool mostRecentFile (const char *directory, const char *pattern0, const char *pattern1, char *name, size_t maxLen) {
@@ -150,13 +150,14 @@ bool mostRecentFile (const char *directory, const char *pattern0, const char *pa
    char filepath [MAX_SIZE_DIR_NAME + MAX_SIZE_FILE_NAME];
 
    while ((entry = readdir(dir)) != NULL) {
-      snprintf (filepath, sizeof (filepath), "%s/%s", directory, entry->d_name);
+      snprintf (filepath, sizeof (filepath), "%s%s%s", directory, hasSlash(directory) ? "" : "/", entry->d_name);
       if ((strstr (entry->d_name, pattern0) != NULL) 
          && (strstr (entry->d_name, pattern1) != NULL)
          && (stat(filepath, &statbuf) == 0) 
          && (S_ISREG(statbuf.st_mode) 
          && (statbuf.st_size > 0)  // select file only if not empty
          && statbuf.st_mtime > latestTime)) {
+
          latestTime = statbuf.st_mtime;
          if (strlen (entry->d_name) < maxLen)
             snprintf (name, maxLen, "%s/%s", directory, entry->d_name);
@@ -173,8 +174,7 @@ bool mostRecentFile (const char *directory, const char *pattern0, const char *pa
 
 /*! true if name contains a number */
 bool isNumber (const char *name) {
-    if (name == NULL) return NULL;
-    return strpbrk (name, "0123456789") != NULL;
+   return (name != NULL) && (strpbrk (name, "0123456789") != NULL);
 }
 
 /*! translate str in double for latitude longitude */
@@ -182,10 +182,9 @@ double getCoord (const char *str, double minLimit, double maxLimit) {
    double deg = 0.0, min = 0.0, sec = 0.0;
    bool minFound = false;
    const char *neg = "SsWwOo";            // value returned is negative if south or West
-   int sign = 1;
-   
-   sign = (strpbrk (str, neg) == NULL) ? 1 : -1; // -1 if neg found
+   int sign = (strpbrk (str, neg) == NULL) ? 1 : -1; // -1 if neg found
    char *pt = NULL;
+
    // find degrees
    while (*str && (! (isdigit (*str) || (*str == '-') || (*str == '+')))) 
       str++;
@@ -195,14 +194,11 @@ double getCoord (const char *str, double minLimit, double maxLimit) {
    // find minutes
    if ((strchr (str, '\'') != NULL)) {
       minFound = true;
-      if ((pt = strstr (str, "°")) != NULL) // degree ° is UTF8 coded with 2 bytes
-         pt += 2;
+      if ((pt = strstr (str, "°")) != NULL) pt += 2;// degree ° is UTF8 coded with 2 bytes
       else 
-         if ((pt = strpbrk (str, neg)) != NULL)
-            pt += 1;
+         if ((pt = strpbrk (str, neg)) != NULL) pt += 1;
             
-      if (pt != NULL)
-         min = strtod (pt, NULL);
+      if (pt != NULL) min = strtod (pt, NULL);
    }
    // find seconds
    if (minFound && (strchr (str, '"') != NULL)) {
@@ -231,22 +227,15 @@ double getCoord (const char *str, double minLimit, double maxLimit) {
 }
 */
 /*! abolute path POSIX : begin with '/' */ 
-static inline bool is_absolute_path(const char *p) {
-   return p && p[0] == '/';
-}
 
 char *buildRootName(const char *fileName, char *rootName, size_t maxLen) {
    if (!fileName || !rootName || maxLen == 0) return NULL;
    const char *workingDir = (par.workingDir[0] != '\0') ? par.workingDir : WORKING_DIR;
    int n;
-   if (is_absolute_path(fileName)) {
-      n = snprintf(rootName, maxLen, "%s", fileName);
-   } else {
-      const char *sep = "";
-      size_t wlen = strlen(workingDir);
-      if (wlen > 0 && workingDir[wlen - 1] != '/') sep = "/";
-      n = snprintf(rootName, maxLen, "%s%s%s", workingDir, sep, fileName);
-   }
+
+   if (fileName [0] == '/') n = snprintf(rootName, maxLen, "%s", fileName);
+   else n = snprintf(rootName, maxLen, "%s%s%s", workingDir, hasSlash (workingDir) ? "" : "/", fileName);
+
    if (n < 0 || (size_t)n >= maxLen) {
       // overflow or writing error
       if (maxLen) rootName[0] = '\0';
@@ -254,7 +243,6 @@ char *buildRootName(const char *fileName, char *rootName, size_t maxLen) {
    }
    return rootName;
 }
-
 
 /*! return tm struct equivalent to date hours found in grib (UTC time) */
 struct tm gribDateToTm (long intDate, double nHours) {
@@ -324,7 +312,6 @@ char *lonToStr (double lon, int type, char *str, size_t maxLen) {
       g_strlcpy (str, "Lon Errror", maxLen);
       return str;
    }
-
    switch (type) {
    case BASIC: snprintf (str, maxLen, "%.2lf°", lon); break;
    case DD: snprintf (str, maxLen, "%06.2lf°%c", fabs (lon), c); break;
@@ -343,10 +330,8 @@ char *durationToStr (double duration, char *res, size_t maxLen) {
    nDays = duration / 24;
    nHours = fmod (duration, 24.0);
    nMin = 60 * fmod (duration, 1.0);
-   if (nDays == 0)
-      snprintf (res, maxLen, "%02d:%02d", nHours, nMin); 
-   else
-      snprintf (res, maxLen, "%d Days %02d:%02d", nDays, nHours, nMin);
+   if (nDays == 0) snprintf (res, maxLen, "%02d:%02d", nHours, nMin); 
+   else snprintf (res, maxLen, "%d Days %02d:%02d", nDays, nHours, nMin);
    // printf ("Duration: %.2lf hours, equivalent to %d days, %02d:%02d\n", duration, nDays, nHours, nMin);
    return res;
 } 
@@ -401,8 +386,7 @@ double offsetLocalUTC (void) {
    time_t localTime = mktime (&localTm);
    time_t utcTime = mktime (&utcTm);
    double offsetSeconds = difftime (localTime, utcTime);
-   if (localTm.tm_isdst > 0)
-      offsetSeconds += 3600;  // add one hour if summer time
+   if (localTm.tm_isdst > 0) offsetSeconds += 3600;  // add one hour if summer time
    return offsetSeconds;
 }
 
@@ -539,8 +523,7 @@ static bool isInPolygon (double lat, double lon, const MyPolygon *po) {
 /*! return true if p is in forbid area */ 
 static bool isInForbidArea (double lat, double lon) {
    for (int i = 0; i < par.nForbidZone; i++) {
-      if (isInPolygon (lat, lon, &forbidZones [i]))
-         return true;
+      if (isInPolygon (lat, lon, &forbidZones [i])) return true;
    }
    return false;
 }
@@ -589,7 +572,7 @@ static void forbidZoneAdd (char *line, int n) {
 }
 
 /*! read parameter file and build par struct */
-bool readParam (const char *fileName) {
+bool readParam (const char *fileName, bool initDisp) {
    FILE *f = NULL;
    char *pt = NULL;
    char str [MAX_SIZE_LINE];
@@ -605,13 +588,15 @@ bool readParam (const char *fileName) {
    par.kFactor = 1;
    par.jFactor = 300;
    par.nSectors = MAX_N_SECTORS;
-   par.style = 1;
-   par.showColors =2;
-   par.dispDms = 2;
-   par.windDisp = 1;
+   if (initDisp) {
+      par.style = 1;
+      par.showColors =2;
+      par.dispDms = 2;
+      par.windDisp = 1;
+      par.stepIsocDisp = 1;
+   }
    par.xWind = 1.0;
    par.maxWind = 50.0;
-   par.stepIsocDisp = 1;
    par.staminaVR = 100.0;
    wayPoints.n = 0;
    wayPoints.totOrthoDist = 0.0;
@@ -755,6 +740,8 @@ bool readParam (const char *fileName) {
          buildRootName (str, par.parInfoFileName, sizeof (par.parInfoFileName));
       else if (sscanf (pLine, "LOG:%254s", str) > 0)
          buildRootName (str, par.logFileName, sizeof (par.logFileName));
+      else if (sscanf (pLine, "FEEDBACK:%254s", str) > 0)
+         buildRootName (str, par.feedbackFileName, sizeof (par.feedbackFileName));
       else if ((sscanf (pLine, "WEB:%254s", str) > 0) || (strstr (pLine, "WEB:") != NULL)) {
          buildRootName (str, par.web, sizeof (par.web));
       }
@@ -821,6 +808,15 @@ bool readParam (const char *fileName) {
    return true;
 }
 
+static void fprintfNoNull (FILE *f, const char *fmt, const char *param) {
+   if (!param || ! *param) return;
+   fprintf (f, fmt, param);
+}
+static void fprintfNoZero (FILE *f, const char *fmt, int param) {
+   if (param == 0) return;
+   fprintf (f, fmt, param);
+}
+
 /*! write parameter file from struct par 
    header or not, password or not */
 bool writeParam (const char *fileName, bool header, bool password) {
@@ -833,11 +829,9 @@ bool writeParam (const char *fileName, bool header, bool password) {
    }
    if (header) 
       fprintf (f, "Name             Value\n");
-   fprintf (f, "DESC:            %s\n", par.description);
-   fprintf (f, "WD:              %s\n", par.workingDir);
+   fprintfNoNull (f, "DESC:            %s\n", par.description);
+   fprintfNoNull (f, "WD:              %s\n", par.workingDir);
    fprintf (f, "ALLWAYS_SEA:     %d\n", par.allwaysSea);
-   fprintf (f, "POI:             %s\n", par.poiFileName);
-   fprintf (f, "PORT:            %s\n", par.portFileName);
    
    latToStr (par.pOr.lat, par.dispDms, strLat, sizeof (strLat));
    lonToStr (par.pOr.lon, par.dispDms, strLon, sizeof (strLon));
@@ -847,12 +841,8 @@ bool writeParam (const char *fileName, bool header, bool password) {
    lonToStr (par.pDest.lon, par.dispDms, strLon, sizeof (strLon));
    fprintf (f, "PDEST:           %.2lf,%.2lf #%s,%s\n", par.pDest.lat, par.pDest.lon, strLat, strLon);
 
-      
-
-   if (par.pOrName [0] != '\0')
-      fprintf (f, "POR_NAME:        %s\n", par.pOrName);
-   if (par.pDestName [0] != '\0')
-      fprintf (f, "PDEST_NAME:        %s\n", par.pDestName);
+   fprintfNoNull (f, "POR_NAME:        %s\n", par.pOrName);
+   fprintfNoNull (f, "PDEST_NAME:      %s\n", par.pDestName);
    for (int i = 0; i < wayPoints.n; i++)
       fprintf (f, "WP:              %.2lf,%.2lf\n", wayPoints.t [i].lat, wayPoints.t [i].lon);
 
@@ -861,33 +851,39 @@ bool writeParam (const char *fileName, bool header, bool password) {
       lonToStr (competitors.t [i].lon, par.dispDms, strLon, sizeof (strLon));
       fprintf (f, "COMPETITOR:        %2d; %s,%s; %s\n", competitors.t[i].colorIndex, strLat, strLon, competitors.t[i].name);
    }
-   fprintf (f, "TRACE:           %s\n", par.traceFileName);
-   fprintf (f, "CGRIB:           %s\n", par.gribFileName);
-   if (par.currentGribFileName [0] != '\0')
-      fprintf (f, "CURRENT_GRIB:    %s\n", par.currentGribFileName);
-   fprintf (f, "MOST_RECENT_GRIB:%d\n", par.mostRecentGrib);
-   fprintf (f, "GRIB_RESOLUTION: %.2lf\n", par.gribResolution);
-   fprintf (f, "GRIB_TIME_STEP:  %d\n", par.gribTimeStep);
-   fprintf (f, "GRIB_TIME_MAX:   %d\n", par.gribTimeMax);
-   fprintf (f, "POLAR:           %s\n", par.polarFileName);
-   fprintf (f, "WAVE_POL:        %s\n", par.wavePolFileName);
-   fprintf (f, "ISSEA:           %s\n", par.isSeaFileName);
-   fprintf (f, "MID_COUNTRY:     %s\n", par.midFileName);
-   fprintf (f, "TIDES:           %s\n", par.tidesFileName);
-   fprintf (f, "HELP:            %s\n", par.helpFileName);
-   fprintf (f, "CLI_HELP:        %s\n", par.cliHelpFileName);
-   fprintf (f, "VR_DASHBOARD:    %s\n", par.dashboardVR);
-   fprintf (f, "VR_STAMINA:      %.2lf\n", par.staminaVR);
-   fprintf (f, "VR_DASHB_UTC:    %d\n", par.dashboardUTC);
-
+   fprintfNoNull (f, "WEB:             %s\n", par.web);
    for (int i = 0; i < par.nShpFiles; i++)
       fprintf (f, "SHP:             %s\n", par.shpFileName [i]);
+   fprintfNoNull (f, "POI:             %s\n", par.poiFileName);
+   fprintfNoNull (f, "PORT:            %s\n", par.portFileName);
+   fprintfNoNull (f, "TRACE:           %s\n", par.traceFileName);
+   fprintfNoNull (f, "POLAR:           %s\n", par.polarFileName);
+   fprintfNoNull (f, "WAVE_POL:        %s\n", par.wavePolFileName);
+   fprintfNoNull (f, "ISSEA:           %s\n", par.isSeaFileName);
+   fprintfNoNull (f, "MID_COUNTRY:     %s\n", par.midFileName);
+   fprintfNoNull (f, "TIDES:           %s\n", par.tidesFileName);
+   fprintfNoNull (f, "HELP:            %s\n", par.helpFileName);
+   fprintfNoNull (f, "CLI_HELP:        %s\n", par.cliHelpFileName);
+   fprintfNoNull (f, "VR_DASHBOARD:    %s\n", par.dashboardVR);
+   fprintfNoNull (f, "WP_GPX_FILE:     %s\n", par.wpGpxFileName);
+   fprintfNoNull (f, "DUMPI:           %s\n", par.dumpIFileName);
+   fprintfNoNull (f, "DUMPR:           %s\n", par.dumpRFileName);
+   fprintfNoNull (f, "PAR_INFO:        %s\n", par.parInfoFileName);
+   fprintfNoNull (f, "LOG:             %s\n", par.logFileName);
+   fprintfNoNull (f, "FEEDBACK:        %s\n", par.feedbackFileName);
+   fprintfNoNull (f, "CURRENT_GRIB:    %s\n", par.currentGribFileName);
+   fprintfNoNull (f, "CGRIB:           %s\n", par.gribFileName);
+   fprintf (f, "MOST_RECENT_GRIB:%d\n", par.mostRecentGrib);
+   fprintf (f, "GRIB_RESOLUTION: %.2lf\n", par.gribResolution);
+   fprintfNoZero (f, "GRIB_TIME_STEP:  %d\n", par.gribTimeStep);
+   fprintfNoZero (f, "GRIB_TIME_MAX:   %d\n", par.gribTimeMax);
+   fprintf (f, "VR_STAMINA:      %.2lf\n", par.staminaVR);
+   fprintfNoZero (f, "VR_DASHB_UTC:    %d\n", par.dashboardUTC);
 
    fprintf (f, "START_TIME:      %.2lf\n", par.startTimeInHours);
    fprintf (f, "T_STEP:          %.2lf\n", par.tStep);
    fprintf (f, "RANGE_COG:       %d\n", par.rangeCog);
    fprintf (f, "COG_STEP:        %d\n", par.cogStep);
-   fprintf (f, "SPECIAL:         %d\n", par.special);
    fprintf (f, "PENALTY0:        %d\n", par.penalty0);
    fprintf (f, "PENALTY1:        %d\n", par.penalty1);
    fprintf (f, "PENALTY2:        %d\n", par.penalty2);
@@ -899,6 +895,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
    fprintf (f, "MAX_WIND:        %.2lf\n", par.maxWind);
    fprintf (f, "WITH_WAVES:      %d\n", par.withWaves);
    fprintf (f, "WITH_CURRENT:    %d\n", par.withCurrent);
+   fprintfNoZero (f, "SPECIAL:         %d\n", par.special);
 
    if (par.constWave != 0)
       fprintf (f, "CONST_WAVE:      %.6lf\n", par.constWave);
@@ -912,47 +909,41 @@ bool writeParam (const char *fileName, bool header, bool password) {
       fprintf (f, "CONST_CURRENT_D: %.2lf\n", par.constCurrentD);
    }
 
-   fprintf (f, "WP_GPX_FILE:     %s\n", par.wpGpxFileName);
-   fprintf (f, "DUMPI:           %s\n", par.dumpIFileName);
-   fprintf (f, "DUMPR:           %s\n", par.dumpRFileName);
-   fprintf (f, "PAR_INFO:        %s\n", par.parInfoFileName);
-   fprintf (f, "LOG:             %s\n", par.logFileName);
-   fprintf (f, "OPT:             %d\n", par.opt);
-   fprintf (f, "ISOC_DISP:       %d\n", par.style);
-   fprintf (f, "STEP_ISOC_DISP:  %d\n", par.stepIsocDisp);
-   fprintf (f, "COLOR_DISP:      %d\n", par.showColors);
-   fprintf (f, "DMS_DISP:        %d\n", par.dispDms);
-   fprintf (f, "WIND_DISP:       %d\n", par.windDisp);
-   fprintf (f, "INFO_DISP:       %d\n", par.infoDisp);
-   fprintf (f, "INDICATOR_DISP:  %d\n", par.indicatorDisp);
-   fprintf (f, "CURRENT_DISP:    %d\n", par.currentDisp);
-   fprintf (f, "WAVE_DISP:       %d\n", par.waveDisp);
-   fprintf (f, "GRID_DISP:       %d\n", par.gridDisp);
-   fprintf (f, "LEVEL_POI_DISP:  %d\n", par.maxPoiVisible);
-   fprintf (f, "SPEED_DISP:      %d\n", par.speedDisp);
-   fprintf (f, "AIS_DISP:        %d\n", par.aisDisp);
-   fprintf (f, "SHP_POINTS_DISP: %d\n", par.shpPointsDisp);
-   fprintf (f, "TECHNO_DISP:     %d\n", par.techno);
-   fprintf (f, "CLOSEST_DISP:    %d\n", par.closestDisp);
-   fprintf (f, "FOCAL_DISP:      %d\n", par.focalDisp);
+   fprintfNoZero (f, "OPT:             %d\n", par.opt);
+   fprintfNoZero (f, "ISOC_DISP:       %d\n", par.style);
+   fprintfNoZero (f, "STEP_ISOC_DISP:  %d\n", par.stepIsocDisp);
+   fprintfNoZero (f, "COLOR_DISP:      %d\n", par.showColors);
+   fprintfNoZero (f, "DMS_DISP:        %d\n", par.dispDms);
+   fprintfNoZero (f, "WIND_DISP:       %d\n", par.windDisp);
+   fprintfNoZero (f, "INFO_DISP:       %d\n", par.infoDisp);
+   fprintfNoZero (f, "INDICATOR_DISP:  %d\n", par.indicatorDisp);
+   fprintfNoZero (f, "CURRENT_DISP:    %d\n", par.currentDisp);
+   fprintfNoZero (f, "WAVE_DISP:       %d\n", par.waveDisp);
+   fprintfNoZero (f, "GRID_DISP:       %d\n", par.gridDisp);
+   fprintfNoZero (f, "LEVEL_POI_DISP:  %d\n", par.maxPoiVisible);
+   fprintfNoZero (f, "SPEED_DISP:      %d\n", par.speedDisp);
+   fprintfNoZero (f, "AIS_DISP:        %d\n", par.aisDisp);
+   fprintfNoZero (f, "SHP_POINTS_DISP: %d\n", par.shpPointsDisp);
+   fprintfNoZero (f, "TECHNO_DISP:     %d\n", par.techno);
+   fprintfNoZero (f, "CLOSEST_DISP:    %d\n", par.closestDisp);
+   fprintfNoZero (f, "FOCAL_DISP:      %d\n", par.focalDisp);
    fprintf (f, "J_FACTOR:        %d\n", par.jFactor);
    fprintf (f, "K_FACTOR:        %d\n", par.kFactor);
    fprintf (f, "N_SECTORS:       %d\n", par.nSectors);
-   fprintf (f, "PYTHON:          %d\n", par.python);
-   fprintf (f, "CURL_SYS:        %d\n", par.curlSys);
-   fprintf (f, "SMTP_SCRIPT:     %s\n", par.smtpScript);
-   fprintf (f, "IMAP_TO_SEEN:    %s\n", par.imapToSeen);
-   fprintf (f, "IMAP_SCRIPT:     %s\n", par.imapScript);
-   fprintf (f, "WEB:             %s\n", par.web);
-   fprintf (f, "WINDY_API_KEY:   %s\n", par.windyApiKey);
-   fprintf (f, "GOOGLE_API_KEY:  %s\n", par.googleApiKey);
-   fprintf (f, "WEBKIT:          %s\n", par.webkit);
-   fprintf (f, "SMTP_SERVER:     %s\n", par.smtpServer);
-   fprintf (f, "SMTP_USER_NAME:  %s\n", par.smtpUserName);
-   fprintf (f, "SMTP_TO:         %s\n", par.smtpTo);
-   fprintf (f, "IMAP_SERVER:     %s\n", par.imapServer);
-   fprintf (f, "IMAP_USER_NAME:  %s\n", par.imapUserName);
-   fprintf (f, "IMAP_MAIL_BOX:   %s\n", par.imapMailBox);
+   fprintfNoZero (f, "PYTHON:          %d\n", par.python);
+   fprintfNoZero (f, "CURL_SYS:        %d\n", par.curlSys);
+   fprintfNoNull (f, "SMTP_SCRIPT:     %s\n", par.smtpScript);
+   fprintfNoNull (f, "IMAP_TO_SEEN:    %s\n", par.imapToSeen);
+   fprintfNoNull (f, "IMAP_SCRIPT:     %s\n", par.imapScript);
+   fprintfNoNull (f, "WINDY_API_KEY:   %s\n", par.windyApiKey);
+   fprintfNoNull (f, "GOOGLE_API_KEY:  %s\n", par.googleApiKey);
+   fprintfNoNull (f, "WEBKIT:          %s\n", par.webkit);
+   fprintfNoNull (f, "SMTP_SERVER:     %s\n", par.smtpServer);
+   fprintfNoNull (f, "SMTP_USER_NAME:  %s\n", par.smtpUserName);
+   fprintfNoNull (f, "SMTP_TO:         %s\n", par.smtpTo);
+   fprintfNoNull (f, "IMAP_SERVER:     %s\n", par.imapServer);
+   fprintfNoNull (f, "IMAP_USER_NAME:  %s\n", par.imapUserName);
+   fprintfNoNull (f, "IMAP_MAIL_BOX:   %s\n", par.imapMailBox);
    for (int i = 0; i < par.nNmea; i++)
       fprintf (f, "NMEA:            %s %d\n", par.nmea [i].portName, par.nmea [i].speed); 
 
@@ -1104,7 +1095,7 @@ int nearestPort (double lat, double lon, const char *fileName, char *res, size_t
    return bestId;
 }
 
-/*! return secondes with decimals */
+/*! return seconds with decimals */
 double monotonic (void) {
    struct timespec ts;
    clock_gettime(CLOCK_MONOTONIC, &ts);

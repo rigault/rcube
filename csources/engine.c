@@ -99,12 +99,10 @@ static inline int findFirst (int nIsoc) {
    double dSquare, dSquareMax = 0.0;
    int size = isoDesc[nIsoc].size;
    if (size <= 1) return 0;
-   
    int baseIndex = nIsoc * MAX_SIZE_ISOC;
 
    for (int i = 0; i < size; i++) {
       next = (i >= size -1) ? 0 : i + 1;
-
       double nextLat = isocArray [baseIndex + next].lat;
       double deltaLat = isocArray [baseIndex + i].lat - nextLat;
       double deltaLon = (isocArray [baseIndex + i].lon - isocArray [baseIndex + next].lon) * cos (DEG_TO_RAD * nextLat);
@@ -1030,7 +1028,7 @@ static void initRouting (void) {
    route.destinationReached = false;
 }
 
-/*! launch routing wih parameters */
+/*! launch routing with parameters */
 void *routingLaunch () {
    struct timeval t0, t1;
    long ut0, ut1;
