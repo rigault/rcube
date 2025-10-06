@@ -1,4 +1,5 @@
-/*! compilation: gcc -c aisgpsserver.c `pkg-config --cflags glib-2.0` */
+/*! compilation: gcc -c aisgpsserver.c */
+
 #include <glib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -15,8 +16,8 @@
 #define DESC            "AIS GPS Server by Rene Rigault"
 #define PARAMETERS      "param.par"
 
-extern Par par;                                 // defined in r3util.c
-extern bool readParam (const char *fileName);   // defined in r3util.c
+extern Par par;                                                // defined in r3util.c
+extern bool readParam (const char *fileName, bool dispInit);   // defined in r3util.c
 static char parameterFileName [MAX_SIZE_FILE_NAME];
 
 /*! send to client the response to request */
@@ -108,10 +109,10 @@ int main (int argc, char *argv[]) {
       exit (EXIT_FAILURE);
    }
 
-   if (argc == 3) g_strlcpy (parameterFileName, argv [2], sizeof (parameterFileName));
-   else g_strlcpy (parameterFileName, PARAMETERS, sizeof (parameterFileName));
+   if (argc == 3) strlcpy (parameterFileName, argv [2], sizeof (parameterFileName));
+   else strlcpy (parameterFileName, PARAMETERS, sizeof (parameterFileName));
 
-   if (! readParam (parameterFileName)) {
+   if (! readParam (parameterFileName, false)) {
       fprintf (stderr, "Unable to read parameter file: %s\n", parameterFileName);
       exit (EXIT_FAILURE);
    }
@@ -129,7 +130,7 @@ int main (int argc, char *argv[]) {
    if (par.special) testAisTable ();
    aisToJson (buffer, sizeof (buffer));
    printf ("%s\n", buffer);
-   g_usleep (1000000); // 1000 ms
+   sleep (1); // 1000 ms
    nmeaInfo (strNmea, MAX_SIZE_LINE);
    printf ("%s\n", strNmea);
 
@@ -171,6 +172,6 @@ int main (int argc, char *argv[]) {
       handleClient (clientFd);
    }
    close (serverFd);
-   g_hash_table_destroy (aisTable);
+   // g_hash_table_destroy (aisTable);
    return EXIT_SUCCESS;
 }
