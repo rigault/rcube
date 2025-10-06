@@ -4,8 +4,10 @@ POLAR:           pol/Ultim.csv
 WAVE_POL:        wavepol/polwave.csv
 ISSEA:           geo/issea.txt
 LOG:             routing.log
+FEEDBACK:        feedback.log
 TIDES:           geo/portprinc.csv
 WEB:             rcube/www
+CLI_HELP:        /home/rr/routing/helpdir/clihelp.txt
 MOST_RECENT_GRIB:1
 VR_STAMINA:      100.00
 RANGE_COG:       80
@@ -13,8 +15,8 @@ COG_STEP:        2
 PENALTY0:        3
 PENALTY1:        3
 PENALTY2:        3
-MOTOR_S:         6.00
-THRESHOLD:       0.00
+MOTOR_S:         2.00
+THRESHOLD:       2.00
 DAY_EFFICIENCY:  1.00
 NIGHT_EFFICIENCY:1.00
 X_WIND:          1.00
@@ -23,8 +25,4 @@ OPT:             1
 J_FACTOR:        0
 K_FACTOR:        3
 N_SECTORS:       720
-SMTP_SERVER:     smtps://smtp.orange.fr
-SMTP_USER_NAME:  meteoinfoforrr@orange.fr
-SMTP_TO:         rene.rigault@wanadoo.fr
-MAIL_PW:         Mongouarou$001
 
