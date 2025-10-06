@@ -10,9 +10,7 @@
 <header> 
    <div class="container">
       <div class="menu"></div>
-      <div class="main">
-         <span class=titlename>Rcube</span>
-      </div>
+      <span class=titlename>Rcube</span>
    </div>
    <hr>
 </header>
@@ -30,8 +28,12 @@
    <a href="#chap7">7. Code source</a>
    <a href="#chap8">8. Chargement des Grib</a>
    <a href="#chap9">9. Hébergement</a>
-   <a href="#Annexe1"> Annexe sur serveur AIS GPS</a>
-   <a href="#Annexe2"> Annexe sur composition de polaires</a>
+   <a href="#chap10">10. Authentification</a>
+   <a href="#chap11">11. Comportements bizarres</a>
+   <a href="#Annexe1"> Annexe 1, Serveur AIS GPS</a>
+   <a href="#Annexe2"> Annexe 2, Composition de polaires</a>
+   <a href="#Annexe3"> Annexe 3, Transformations de Grib</a>
+   <a href="#Annexe4"> Annexe 3, Exemple de session MAJ serveur</a>
    <p></p>
 
    <table>
@@ -99,7 +101,7 @@ recommandé d'utiliser Nginx pour&nbsp;:
 <ul>
 <li>décharger le logiciel <code>r3server</code> afin qu'il ne se consacre qu'à la gestion de l'API et au calcul de routes,</li>
 <li>autoriser du load balancing,</li>
-<li>gérer HTTPS et le chiffrement associé</li>.
+<li>gérer HTTPS et le chiffrement associé.</li>
 </ul>
 
 <p>Un utilitaire <code>r3gribget</code> doit être lancé périodiquement pour récupérer les grib (NOAA, ECMWF, autres). </p>
@@ -112,7 +114,7 @@ recommandé d'utiliser Nginx pour&nbsp;:
 
 <ul>
 <li>La disponibilité d'un serveur accessible d'Internet,</li>
-<lI>l'installation de l'environnement (gcc, ecodes, glib, curl) sur le serveur,</li>
+<li>l'installation de l'environnement (gcc, eccodes, curl) sur le serveur,</li>
 <li>le téléchargement des fichiers sources dans un répertoire <code>csources</code>,</li>
 <li>la compilation et l'édition de lien de ces sources,</li>
 <li>l'adaptation du fichier de configuration <code>routing.par</code> pour notamment les chemins d'accès (wd, www), </li>
@@ -135,19 +137,12 @@ sudo apt install gcc
 </code></pre>
 
 		<h2>Installer les bibliothèques</h2>
-		<p>Installez les paquets nécessaires pour curl, eccodes, la Glib&nbsp;:</p>
+		<p>Installez les paquets nécessaires pour curl, eccodes&nbsp;:</p>
 <pre>
 <code>
 sudo apt-get install -y libcurl4 libcurl4-openssl-dev 
-sudo apt-get install libglib2.0-dev
 sudo apt-get install -y libeccodes0 libeccodes-dev
 sudo apt-get install libeccodes-tools  # pour les outils ligne de commande
-</code>
-</pre>
-Pour vérifier que la GLIB est bien installée, faire éventuellement&nbsp;
-<pre>
-<code>
-pkg-config --modversion glib-2.0
 </code>
 </pre>
    <h3>JSdoc</h3>
@@ -166,6 +161,11 @@ sudo npm install -g jsdoc
 <pre>
 jsdoc --version
 </pre>
+   <h3>Basic Authentication avec NGINX</h3>
+<pre>sudo apt install apache2-utils
+</pre>
+Permet d'accéder à la commande <code>htpasswd</code>.
+
 
    <h3>wgrib2</h3>
 <p>Voir section relative à r3gribget.</p>
@@ -200,35 +200,39 @@ www
 		sources .c et .h suivants&nbsp;:</p>
 <pre>
 engine.c
-r3grib.c
-mailutil.c
 polar.c
-r3util.c
+r3grib.c
 r3server.c
-r3gribget.c
+r3util.c
+readgriballeccodes.c
+readgriballwithouteccodes.c
+
+r3gribget.c (programme indépendant utilisant quand même glibwrapper.h)
 
 engine.h
+glibwrapper.h
 grib.h
 inline.h
-mailutil.h
 polar.h
-rtypes.h
+r3types.h
 r3util.h
+readgriball.h
+
 </pre>
 Ainsi que les fichiers&nbsp;:
 <pre>
 ccg
 ccs
+ccs0 : idem ccs mais ne nécessite pas ECCODES
 MakeFile
 </pre>
-      <p> Pour la construiction du logiciel <code>r3server</code>, la commande de compilation et d’édition des liens est assurée par le
+      <p> Pour la construction du logiciel <code>r3server</code>, la commande de compilation et d’édition des liens est assurée par le
 		fichier shell exécutable&nbsp;:</p>
 <pre>
 <code>./ccs</code>
+ou
+<code>./ccs0</code>
 </pre>
-		<p>Un Makefile peut aussi être utilisé.</p>
-		<pre>
-<code>Make</code></pre>
 
 		<h3>geo</h3>
       <p>Le répertoire geo contient les fichiers géographiques.</p>
@@ -297,28 +301,6 @@ MakeFile
 </pre>
 <p>La commande curl envoie sur le port 8080 (ici au serveur local) la requête HTTP POST dont le contenu est spécifié après -d.</p>
 <p>Le résultat de la requête est une réponse JSON.</p>
-<p>Exemple de réponse&nbsp;:</p>
-<pre>
-
-{
-"banane": {
-"heading": -51, "rank": 0, "duration": 649743, "totDist": 1879.64,
-"routingRet": 358,
-"isocTimeStep": 1800.00,
-"calculationTime": 0.9358,
-"destinationReached": true,
-"lastStepDuration": [5253.8156, 1889.6976],
-"motorDist": 0.00, "starboardDist": 1329.52, "portDist": 550.12,
-"nSailChange": 21, "nAmureChange": 6,
-"bottomLat": -60.00, "leftLon": -60.00, "topLat": 60.00, "rightLon": 20.00,
-"polar": "class40VR.csv", "wavePolar": "polwave.csv", "grib": "GFS_20250430_06Z_384.grb", "currentGrib": ".", "track": [
-   [0, 41.244772, -16.787108, 0.000000, 4.690523, 9.381046, 94.396162, 23.397542, 308.961259, 145.461585, 13.925407, 0.000000, 100.000000, "LG", false, -1, -1],
-   [0, 41.293900, -16.868014, 1800.000000, 5.273621, 10.547243, 91.665136, 22.468782, 303.808291, 147.888957, 13.339639, 0.000000, 100.000000, "LG", false, 24, -1],
-... 
-]
-}
-}
-</pre>
 
 <h2> Détail de la requête </h2>
 <p> L'ordre dans le quel les paramètres sont indiqués n'a pas d'importance.</p>
@@ -343,10 +325,10 @@ MakeFile
             <td>1</td><td>Demande de routage pour un seul bateau</td><td>La principale requête.</td>
          </tr>
          <tr>
-            <td>2</td><td>Demande de routage pour plusieurs bateaux.</td><td>A éviter. Préférer la génération de multiples requêtes de type 1 à partie du client.</td>
+            <td>2</td><td>Demande de routage pour plusieurs bateaux.</td><td>Supprimée. Préférer la génération de multiples requêtes de type 1 à partie du client.</td>
          </tr>
          <tr>
-            <td>3</td><td>Recherche de la meilleure date de départ.</td><td>A éviter. Préférer la génération de multiples requêtes de type 1 à partie du client.<td>
+            <td>3</td><td>Recherche de la meilleure date de départ.</td><td>Supprimée. Préférer la génération de multiples requêtes de type 1 à partie du client.</td>
          </tr>
          <tr>
             <td>4</td><td>Demande de polaire.</td><td>Le nom de la polaire doit être donné.</td>
@@ -373,16 +355,16 @@ MakeFile
             <td>11</td><td>Dump fichier texte</td><td>Le nom du fichier doit être donné..</td>
          </tr>
          <tr>
-            <td>12</td><td>Demande le port le plus proche</td><td>La latitude et la longitude du point doivent être donnés.</td>
+            <td>12</td><td>Demande le port le plus proche</td><td>A éviter. Préférer la gestion à partir du client. La latitude et la longitude du point doivent être donnés.</td>
          </tr>
       </tbody>
    </table>
 
 <h3>Paramètres de la requêtes</h3>
 
-<p>La latittude (lat) est un nombre décimal sur l'itervalle [-90..90]. </p>
-<p>La logitude (lon) est un nombre décimal sur l'intervalle [-180..180] ou sur l'intervalle [0..360].
-<p> Le tableau suivant indique pour chaque paramètre les dépendance par rapport au type.</p>
+<p>La latitude (lat) est un nombre décimal sur l'intervalle [-90..90]. </p>
+<p>La longitude (lon) est un nombre décimal sur l'intervalle [-180..180] ou sur l'intervalle [0..360].
+<p>Le tableau suivant indique pour chaque paramètre les dépendance par rapport au type.</p>
 
    <table>
       <caption>Paramètres de la requête</caption>
@@ -418,6 +400,9 @@ MakeFile
          </tr>
          <tr>
             <td>wavePolar</td><td>Chaîne de caractères</td><td>Nom de la polaire de vaques.</td><td>Pour requête 1, 2, 3, 4.</td><td>Par défaut fourni par le serveur.</td>
+         </tr>
+         <tr>
+            <td>model</td><td>Chaîne de caractères</td><td>Model du grib</td><td>Pour requête 1, 2, 3, 5</td><td>GFS, ECMWF, ARPEGE, METEOCONSULT</td>
          </tr>
          <tr>
             <td>grib</td><td>Chaîne de caractères</td><td>Nom du fichier grib.</td><td>Pour requête 1, 2, 3, 5.</td><td>Par défaut fourni par le serveur.</td>
@@ -522,15 +507,19 @@ MakeFile
 <p>Exemple de Requête&nbsp;:</p>
 <pre>
 curl https://rcube.ddns.net/post-api/ -d "type=0"
+
 {
    "Prog-version": "RCube, 0.1, René Rigault",
    "API server port": 8080,
-   "Compilation-date": "Apr 30 2025",
-   "GLIB-version": "2.80.0",
-   "ECCODES-version": "2.34.1",
-   "CURL-version": "8.5.0",
-   "PID": 164446,
-   "Memory usage in KB": 1366036
+   "Grib Reader": "ECCODES 2.34.1",
+   "Memory for Grib Wind": "171 445 680",
+   "Memory for Grib Current": "0",
+   "Compilation-date": "Oct  6 2025",
+   "PID": 9520,
+   "Memory usage in KB": "195 484",
+   "Client IP Address": "90.12.244.150",
+   "User Agent": "curl/8.5.0",
+   "Authorization-Level": 0
 }
 </pre>
 Autre requête possible&nbsp;:
@@ -542,63 +531,144 @@ Autre requête possible&nbsp;:
 
 <p>Exemple de Requête&nbsp;:</p>
 <pre>
-curl http://localhost:8080 -d "type=1&amp;boat=hoho,47.0,-3.0&amp;waypoints=47.5,-3.0;47.0,-5.0&amp;timeStep=3600&amp;isoc=false"
-
-{
-"hoho": {
-"heading": 0, "rank": 0, "duration": 88001, "totDist": 117.25,
-"routingRet": 25,
-"isocTimeStep": 3600.00,
-"calculationTime": 0.0853,
-"destinationReached": true,
-"lastStepDuration": [319.1854, 1282.6331],
-"motorDist": 0.00, "starboardDist": 32.22, "portDist": 85.02,
-"nSailChange": 0, "nAmureChange": 2,
-"bottomLat": -20.00, "leftLon": -80.00, "topLat": 60.00, "rightLon": 10.00,
-"polar": "moteur.pol", "wavePolar": "polwave.csv", "grib": "GFS_20250429_00Z_384.grb", "currentGrib": ".", "track": [
-   [0, 47.000000, -3.000000, 0.000000, 5.000000, 5.000000, 92.387045, 15.149572, 0.000000, 92.387045, 13.000020, 0.000000, 78.000000, "NA", false, -1, -1],
-...
-}
+curl https://rcube.ddns.net/post-api/ -u admin:admin -d "type=1&amp;boat=banane,41.24,-16.78;
+&amp;waypoints=43.068888,-40.957031;43.707594,-56.953125
+&amp;model=ECMWF
+&amp;timeStep=7200
+&amp;polar=pol/class40VR.csv
 </pre>
 
 <p>Réponse du serveur&nbsp;:</p>
+<pre>
+{
+"banane": {
+"duration": 710255,
+"totDist": 1982.56,
+"routingRet": 97,
+"isocTimeStep": 7200.00,
+"calculationTime": 0.2669,
+"destinationReached": true,
+"lastStepDuration": [7618.6958, 11437.0309],
+"motorDist": 0.00, "starboardDist": 1066.88, "portDist": 915.68,
+"nSailChange": 26, "nAmureChange": 7,
+"bottomLat": -60.00, "leftLon": -60.00, "topLat": 60.00, "rightLon": 20.00,
+"polar": "class40VR.csv",
+"wavePolar": "polwave.csv",
+"grib": "ECMWF_20251005_12Z_240.grb",
+"currentGrib": ".",
+"track": [
+   [0, 41.244772, -16.787108, 0.000000, 10.712832, 5.356416, 146.477188, 5.366323, 279.003272, -132.448718, 0.000000, 0.000000, 100.000000, "LG", false, -1, -1],
+   [0, 41.272475, -17.021744, 7200.000000, 12.523172, 6.261586, 162.450041, 6.299242, 293.914355, -131.380405, 0.000000, 0.000000, 100.000000, "LG", false, 18, -1],
+   [0, 41.356804, -17.275940, 14400.000000, 13.085164, 6.542582, 165.576586, 6.768942, 298.634402, -132.973345, 0.000000, 0.000000, 100.000000, "LG", false, 683, 18],
+...
+]}}
+</pre>
+
 <p>Une route en JSON est générée pour le bateau.</p>
-<p>Si le paramètre "isoc" est positionné à <code>true</code>, l'isochrone de la route est envoyée.</p>
-<p>Si le paramètre "isocdesc" est positionné à <code>true</code>, un descripteur d'isochrones de la route est envoyée.</p>
+<p>Si le paramètre "isoc" était positionné à <code>true</code> dans la requête, l'isochrone de la route est envoyée.</p>
+<p>Si le paramètre "isocdesc" était positionné à <code>true</code> dans la requête, un descripteur d'isochrones de la route est envoyée.</p>
 
+<p>La route "track" elle même est un tableau Json (array).</p>
+<p>Chaque élément du tableau est un tableau:&nbsp;</p>
 
+<code>[wp, lat, lon, time, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor, id, father]</code>
+
+<p></p>
+
+   <table>
+      <caption>Eléménts d'une route</caption>
+      <thead>
+      <tr>
+         <th>Elément</th><th>Type/unités</th><th>Valeur</th>
+      </tr>
+      </thead>
+      <tbody>
+         <tr>
+            <td>wp</td><td>Entier -1, 0...n</td><td>No de way point. -1 = destination</td>
+         </tr>
+         <tr>
+            <td>lat</td><td>Décimal</td><td>Latitude</td>
+         </tr>
+         <tr>
+            <td>lon</td><td>Décimal</td><td>Longitude</td>
+         </tr>
+         <tr>
+            <td>time</td><td>Entier</td><td>Nombre de seconde à partir du début de la route</td>
+         </tr>
+         <tr>
+            <td>dist</td><td>Décimal</td><td>Distance en miles marin.</td>
+         </tr>
+         <tr>
+            <td>sog</td><td>Décimal</td><td>Speed over Ground. Vitesse en noeuds.</td>
+         </tr>
+         <tr>
+            <td>twd</td><td>Décimal [0..360]</td><td>True Wind Direction. Direction du vent par rapport au Nord en degrés.</td>
+         </tr>
+         <tr>
+            <td>tws</td><td>Décimal</td><td>True Wind Speed. Vitesse du vent en noeuds.</td>
+         </tr>
+         <tr>
+            <td>hdg</td><td>Décimal [0..360]</td><td>Heading. Direction du bateau en degrés..</td>
+         </tr>
+         <tr>
+            <td>twa</td><td>Décimal [0..360]</td><td>True Wind Angle. Angle du bateau par rapport au vent en degrés.</td>
+         </tr>
+         <tr>
+            <td>g</td><td>Décimal.</td><td>Gust. Vitesse du vent dans les rafales.</td>
+         </tr>
+         <tr>
+            <td>w</td><td>Décimal.</td><td>Waves. Hauteur des vagues en mètres.</td>
+         </tr>
+         <tr>
+            <td>stamina</td><td>Décimal</td><td>Energie (concept Virtual Regatta).</td>
+         </tr>
+         <tr>
+            <td>sail</td><td>Chaîne de caractères</td><td>Voile utilisé.</td>
+         </tr>
+         <tr>
+            <td>motor</td><td>Booléen: true / false </td><td>Moteur ou non.</td>
+         </tr>
+         <tr>
+            <td>id</td><td>Entier</td><td>Id du point</td>
+         </tr>
+         <tr>
+            <td>father</td><td>Entier</td><td>Id du father</td>
+         </tr>
+      </tbody>
+   </table>
+
+<p></p>
 <h4>Requête de recherche de la meilleure date de départ type=2</h4>
 
-<p>Il est recommandé d'éviter d'utiliser cette requête et de préférer l'enchainement de requêtes de type 1 à partir du client </p>
-
-<p>Exemple de Requête&nbsp;:</p>
-<pre>
-curl http://localhost:8080 -d "type=2&amp;boat=hoho,47.0,-3.0;titi,47.5,3.0;&amp;waypoints=47.5,-3.0;47.0,-5.0&amp;timeStep=3600&amp;isoc=false"
-</pre>
+<p>Supprimée. Remplacée par l'enchainement de requêtes de type 1 à partir du client.</p>
 
 <h4>Requête de routage pour plusieurs bateaux type=3</h4>
 
-<p>Il est recommandé d'éviter d'utiliser cette requête et de préférer l'enchainement de requêtes de type 1 à partir du client </p>
-<p>Exemple de Requête&nbsp;:</p>
-<pre>
-curl http://localhost:8080 -d "type=3&amp;boat=hoho,47.0,-3.0;titi,47.5,3.0;&amp;waypoints=47.5,-3.0;47.0,-5.0&amp;timeStep=3600&amp;isoc=false"
-</pre>
+<p>Supprimée. Remplacée par l'enchainement de requêtes de type 1 à partir du client.</p>
 
 <h4>Chargement de la polaire type=4</h4>
 <p>Exemple de Requête&nbsp;:</p>
 <pre>
-curl http://localhost:8080 -d "type=4&amp;polar=pol/first260.pol"
+curl https://rcube.ddns.net/post-api/ -d "type=4"
 </pre>
 <p>Réponse du serveur&nbsp;:</p>
 <p>Le serveur envoie en Json la polaire en Json sous forme d'un tableau à deux dimensions.</p>
 
 <h4>Méta information sur un fichier Grib type=5</h4>
+La requête contient soit&nbsp;:
+<ul>
+<li>Le nom du modèle. C'est alors le fichier le plus récent correspondant à ce modèle qui est sélectionné,
+model: GFS | ECMWF | ARPEGE | METEOCONSULT, </li>
+<li>Le nom du fichier grib. Il faut l'avoir préalablement identifié à partir d'une requête de type 6 par exemple.</li>
+</ul>
 <p>Exemple de Requête&nbsp;:</p>
 <pre>
-curl http://localhost:8080 -d "type=5&amp;grib=grib/reference.grb2"
+curl https://rcube.ddns.net/post-api/ -d "type=5&iamp;model=GFS"
+ou
+curl https://rcube.ddns.net/post-api/ -d "type=5&iamp;model=GFS"
 </pre>
 <p>Réponse du serveur&nbsp;:</p>
-<p>Les méta information sur le grib et non le fichier Grib lui même. <p>
+<p>Les méta information sur le grib et non le fichier Grib lui même.<p>
 
 <h4>Répertoire type=6</h4>
 <p>Liste le répertoire donné en paramètre <code>dir=</code>. Ce peut être&nbsp;:</p>
@@ -613,17 +683,26 @@ curl http://localhost:8080 -d "type=5&amp;grib=grib/reference.grb2"
 
 <p>Exemple de Requête&nbsp;:</p>
 <pre>
-curl http://localhost:8080 -d "type=6&amp;dir=pol&amp;sortByName=true"
+curl https://rcube.ddns.net/post-api/ -d "type=6&amp;dir=pol&amp;sortByName=true"
+ou
+curl https://rcube.ddns.net/post-api/ -d "type=6&amp;dir=grib"
+
 </pre>
 <p>Réponse du serveur&nbsp;:</p>
 Chaque ligne de tableau est de la forme&nbsp;:
 <pre>
 [nom fichier, taille fichier, date de modification]
-
 [
    ["2024-VR-VG-RR.csv", 2162, "2025-01-11 01:52:20"],
    ["2025-Imoca.csv", 4188, "2025-01-03 19:07:14"],
    ["Dufou500GV+FocOriginal.pol", 665, "2024-05-04 15:57:52"]
+]
+
+ou
+[
+   ["GFS_20251006_00Z_384.grb", 137104881, "2025-10-06 07:16:21"],
+   ["GFS_20251005_18Z_384.grb", 137297882, "2025-10-06 01:16:19"],
+   ["GFS_20251005_12Z_384.grb", 138417282, "2025-10-05 19:16:20"]
 ]
 
 </pre>
@@ -631,7 +710,7 @@ Chaque ligne de tableau est de la forme&nbsp;:
 <p>Permet de dumper les paramètres courants du serveur au format brut (RAW).</p>
 <p>Voir section suivante pour comprendre les paramètres de configuration du serveur </p>
 <pre>
-curl http://localhost:8080 -d "type=7"
+curl https://rcube.ddns.net/post-api/ -u admin:admin -d "type=7"
 </pre>
 <p>Réponse du serveur&nbsp;:</p>
 <pre>
@@ -644,10 +723,10 @@ ALLWAYS_SEA:     0
 <p>Permet de dumper les paramètres courants du serveur au format Json.</p>
 <p>Voir section suivante pour comprendre les paramètres de configuration du serveur </p>
 <pre>
-curl http://localhost:8080 -d "type=8"
+curl https://rcube.ddns.net/post-api/ -d "type=8"
 </pre>
 <p>Réponse du serveur&nbsp;:</p>
-<pre>curl http://localhost:8080 -d "type=8"
+<pre>
 {
    "wd": "/home/rr/routing/",
    "grib": "GFS_20250429_00Z_384.grb",
@@ -660,7 +739,7 @@ curl http://localhost:8080 -d "type=8"
 </pre>
 <h4>Réinit type=9</h4>
 <p>Utilisé notamment pour faire en sorte que le serveur charge le grib le plus récent.</p>
-<p> Le script suivant <code>r3init</code> réinitialise l'ensemble des instances. </p>
+<p>Le script suivant <code>r3init</code> réinitialise l'ensemble des instances. </p>
 <pre>#!/bin/bash
 for port in $(seq 8080 8081);
 do
@@ -671,19 +750,20 @@ done
 <h4>Feedback  type=10</h4>
 <p>Utilisé pour permettre à l'utlisateur de donner un feedback.</p>
 <pre>
-curl http://localhost:8080 -d "type=10&amp;feedback=bug report..."
+curl https://rcube.ddns.net/post-api/ -d "type=10&amp;feedback=bug report..."
 </pre>
 
 <h4>Dump type=11</h4>
 <p>Utilisé pour télécharger un fichier texte. Mode "RAW".</p>
 <pre>
-curl http://localhost:8080 -d "type=11&amp;file=routing.log"
+curl https://rcube.ddns.net/post-api/ -d "type=11&amp;file=routing.log"
 </pre>
 
 <h4>Port le plus proche type=12</h4>
 <p>Utilisé pour trouver le port le plus proche (SHOM) et l'identifiant Marée Info.</p>
+<p> Peut être aussi générée à partir du client.<p>
 <pre>
-curl http://localhost:8080 -d "type=12&amp;waypoints=47.2,-2.5"
+curl https://rcube.ddns.net/post-api/ -d "type=12&amp;waypoints=47.2,-2.5"
 {"nearestPort": "LE_POULIGUEN", "idPort": 115}
 </pre>
 
@@ -716,15 +796,10 @@ WEB:/home/rr/routing/client   # static files directory: html, css js etc
 
 <h1 id="chap7">7. Code source</h1>
 <h2> Présentation </h2>
-   <p> Le logiciel côté serveur est écrit en langage C. La version c11 est utilisée.</p>
-   <p>Les librairies utilisées sont&nbsp;:
-   <ul>
-      <li>la Glib,</li>
-      <li>eccodes (pour le décodage des fichiers Grib,</li>
-      <li>curl (pour l'envoi de mail).</li>
-   </ul>
+   <p> Le logiciel côté serveur est écrit en langage C.</p>
+   <p>La librairie eccodes peut être utilisée pour le décodage des fichiers Grib. C'est optionnel, il existe également la possibilité des se passer de eccodes. </p>
 
-   <p>Le répertoire csources ou csources4 contient le code C.</p>
+   <p>Le répertoire csources contient le code C.</p>
 
    <table>
       <caption>Fichiers et actions associées</caption>
@@ -735,11 +810,14 @@ WEB:/home/rr/routing/client   # static files directory: html, css js etc
       </thead>
       <tbody>
          <tr>
-            <td>rtypes.h</td><td>Définition des constantes générales <code>#defines</code>, des 
+            <td>r3types.h</td><td>Définition des constantes générales <code>#defines</code>, des 
             <code>enum</code> et des <code>typedef</code>.</td>
          </tr>
          <tr>
-            <td>inline.h</td><td>Définition des petites fonctions inline incluses dans les fichiers .c</td>
+            <td>inline.h</td><td>Définition de petites fonctions inline incluses dans les fichiers .c</td>
+         </tr>
+         <tr>
+            <td>glibwrapper.h</td><td>Définition de petites fonctions inline simulant les fontions eponymes de la GLIB.</td>
          </tr>
          <tr>
             <td>engine.c</td><td>Cœur du programme avec calcul des isochrones.</td>
@@ -751,13 +829,7 @@ WEB:/home/rr/routing/client   # static files directory: html, css js etc
             <td>r3grib.c</td><td>Lecture des fichiers Grib et utilitaires Grib.</td>
          </tr>
          <tr>
-            <td>r3grib.h</td><td>Interface de grib (prototypes des fonctions externes).</td>
-         </tr>
-         <tr>
-            <td>mailutil.c</td><td>Envoi de mails.</td>
-         </tr>
-         <tr>
-            <td>mailutil.h</td><td>Interface de mailutil (prototypes des fonctions externes).</td>
+            <td>grib.h</td><td>Interface de grib (prototypes des fonctions externes).</td>
          </tr>
          <tr>
             <td>r3util.c</td><td>Fonctions utiles.</td>
@@ -772,17 +844,24 @@ WEB:/home/rr/routing/client   # static files directory: html, css js etc
             <td>polar.h</td><td>Interface de polar (prototypes des fonctions externes).</td>
          </tr>
          <tr>
+            <td>readgriballeccodes.c</td><td>Chargement de fichiers Grib en mémoire, utilisant l'API ECMWF ECCODES.</td>
+         </tr>
+         <tr>
+            <td>readgriballwithouteccodes.c</td><td>Chargement de fichiers Grib en mémoire, n'utilisant pas l'API ECMWF ECCODES.</td>
+         </tr>
+         <tr>
+            <td>readgriball.h</td><td>Interface commune à readgribeccodes.h et de readgribwithoutccodes.c</td>
+         </tr>
+         <tr>
             <td>r3server.c</td><td>Le serveur.</td>
          </tr>
       </tbody>
    </table>
 
-      <p>La documentation Doxygen est disponible dans le répertoire csources.4/html&nbsp;
-      <a href= "../csources4/html/index.html">Doxygen Doc</a></p>
 
 		<h2>Style et documentation</h2>
 
-		<p>Doxygen est donc utilisé pour produire la documentation. </p>
+		<p>Doxygen donc utilisé pour produire la documentation. </p>
 
 		<p>L’anglais américain est utilisé pour les identificateurs
 		(constantes, variables, fonction, etc) et les commentaires.</p>
@@ -823,28 +902,13 @@ const int xTop = 1;
 <h2>Vérification du code</h2>
 
 		<p>Des directives de compilation strictes sont utilisées pour vérifier le code
-		voir ccs.
+		voir ccs, ccs0.
 
       <p> cppcheck est utilisé pour compléter la vérification statique du code.</p>
 
       <p> gcc analyser est également utilisé.</p>
 
 		<p> Voir le fichier ccheck.</p>
-
-<h2>Bibliothèque Glib</h2>
-
-      <h3>Constantes</h3>
-<pre>
-G_PI TRUE FALSE
-</pre>
-   <h3>Macros</h3>
-<pre>
-MAX MIN CLAMP G_APPROX_VALUE GPOINTER_TO_INT GINT_TO_POINTER
-</pre>
-
-      <h3>Fonctions Glib</h3>
-
-      <p> Voir le fichier texte : <p><a href= "glibserver.txt">Fonctions Glib Server</a></p>
 
    <h2>Gestion du temps</h2>
    <p>La gestion du temps est assez complexe et mérite quelques éclaicissements.<p>
@@ -905,9 +969,9 @@ Example: ./r3getgrib grib 502              # METEO CONSULT Request for Wind Cent
 
 <p>r3gribget est écrit en langage C. Un seul fichier source&nbsp;: <code>r3gribget.c</code>
 
-<p>La bibliothèque Glib est utilisée, ansi que curl our le tékéchargement des fichiers Grib.</p>
+<p>La bibliothèque curl est utilisée pour le téléchargement des fichiers Grib.</p>
 
-<code>gcc -o r3gribget r3gribget.c -lcurl `pkg-config --cflags --libs glib-2.0`</code>
+<code>gcc -o r3gribget r3gribget.c -lcurl </code>
 
 <p> La commande de compilation et d’édition des liens est dans le fichier shell exécutable&nbsp;:</p>
 <code>./ccg</code>
@@ -974,7 +1038,7 @@ sudo certbot --nginx -d rcube.ddns.net
 <h3> Architecture NGINX et r3server</h3>
 
 <p> NGINX écoute sur le port 443 (HTTPS), sert les pages statiques situées dans le répertoire www et joue le rôle de proxy pour le serveur API qui fonctionne en HTTP sur
-les ports 8080, 8081.</p>
+les ports 8080, 8081, chere l'authentification "basic" HTTP.</p>
 
 <p> L'application r3server écoute sur les ports 808x. (en fait, une instance pour chaque port).</p>
 
@@ -987,9 +1051,17 @@ les ports 8080, 8081.</p>
 <pre><small>
 upstream api_servers {
     # Load balancing entre les serveurs API internes (en HTTP)
-    #least_conn;  
+    #least_conn;
     server 127.0.0.1:8080;
     server 127.0.0.1:8081;
+}
+
+# Mapping identité niveau
+map $remote_user $user_level {
+    default 0;     # anonyme ou non authentifié : niveau 0
+    alice   1;
+    bob     1;
+    admin   10;
 }
 
 server {
@@ -997,45 +1069,70 @@ server {
     server_name rcube.ddns.net;
 
     # Certificat SSL géré par Certbot
-    ssl_certificate /etc/letsencrypt/live/rcube.ddns.net/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/rcube.ddns.net/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/rcube.ddns.net/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/rcube.ddns.net/privkey.pem; # managed by Certbot
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
-    # 📂 Servir les fichiers statiques
+    # Fichiers statiques
     location / {
-    root /home/rr/rcube/www;
-    index index.html;
-    try_files $uri $uri/ =404;
+        root /home/rr/rcube/www;
+        index index.html;
+        try_files $uri $uri/ =404;
 
-    expires -1;  # Désactive le cache des fichiers statiques
-    add_header Cache-Control "no-cache, no-store, must-revalidate";
-    add_header X-Frame-Options "DENY";
-   }
-
-    # 🔄 Load Balancer : Répartition des requêtes POST vers 8080 et 8081
+        expires -1;  # Désactive le cache
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header X-Frame-Options "DENY";
+    }
+    # Load Balancer + Auth "optionnelle"
     location /post-api/ {
-        proxy_pass http://api_servers/; # Appel des serveurs API en HTTP
-        proxy_http_version 1.1;
-        proxy_set_header Connection "";
-        proxy_set_header Host $host;
-       proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      # Auth Basic : si échec, on redirige en interne (niveau 0)
+      auth_basic "Restricted";
+      auth_basic_user_file /etc/nginx/.htpasswd;
+      error_page 401 = @anonymous;
+
+      # Retire le préfixe /post-api/ avant d'envoyer au backend
+      rewrite ^/post-api/(.*)$ /$1 break;
+
+      # En-têtes vers le backend (auth OK ici)
+      proxy_set_header X-User       $remote_user;
+      proxy_set_header X-User-Level $user_level;
+      proxy_set_header Authorization "";
+
+      # IMPORTANT: pas de partie URI ici non plus (on a déjà réécrit l'URI)
+      proxy_pass http://api_servers;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+      # Debug optionnel
+      # add_header X-User       $remote_user always;
+      # add_header X-User-Level $user_level  always;
+   }
+   location @anonymous {
+      # Même réécriture du chemin (pour garder le même upstream URI)
+      rewrite ^/post-api/(.*)$ /$1 break;
+
+      proxy_set_header X-User       anonymous;
+      proxy_set_header X-User-Level 0;
+      proxy_set_header Authorization "";
+
+      # IMPORTANT: pas de partie URI dans une named location
+      proxy_pass http://api_servers;
+      proxy_http_version 1.1;
+      proxy_set_header Connection "";
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+      # Debug optionnel
+      # add_header X-User       anonymous always;
+      # add_header X-User-Level 0         always;
     }
 }
 
-types {
-    text/plain par; # to display routing.par as text
-}
-
-# 🔀 Redirection automatique HTTP → HTTPS
-server {
-    listen 80;
-    server_name rcube.ddns.net;
-    return 301 https://$host$request_uri;
-}
-error_log /var/log/nginx/error.log warn;
-access_log /var/log/nginx/access.log;
 </small></pre>
 
 <p> Vérification de la configuration </p>
@@ -1056,7 +1153,7 @@ sudo netstat -tulnp | grep 808
 <p>Charge</p>
 <pre>
 for i in {1..20}; do curl https://rcube.ddns.net/post-api/ -d "type=0"; sleep 0.5; done
-</pre>
+</pre>  
 <p> Permet aussi de vérifier le round robin entre ports 8080, 8081...</p>
 
 <p>
@@ -1140,7 +1237,55 @@ crontab -l
 <li>port translation 443</li>
 </ul>
 
-<h1 id="Annexe1">Annexe, ServeurGPS et AIS</h1>
+<h1 id="chap10">10. Authentification</h1>
+
+  <h2>But</h2>
+  <p>
+    NGINX gère le HTTPS et l’authentification HTTP Basic (via <code>htpasswd</code>), 
+    puis traduit l’utilisateur en un niveau d’accès (<code>0</code>, <code>1</code>, <code>ADMIN</code>) 
+    qu’il transmet au serveur C dans <code>X-User-Level</code>. 
+    Le serveur C applique les droits à partir de ce header.
+  </p>
+
+  <h2>Flux</h2>
+  <ol>
+    <li>Le client appelle l'API avec Basic Auth.</li>
+    <li>NGINX vérifie les identifiants dans <code>/etc/nginx/.htpasswd</code>.</li>
+    <li>NGINX associé l’utilisateur validé au niveau et envoie <code>X-User-Level</code> au serveur C.</li>
+    <li>Le serveur C autorise ou refuse selon <code>X-User-Level</code>.</li>
+  </ol>
+
+  <h2> Création des users</h2>
+  <pre>
+   Premier user :
+   sudo htpasswd -cB -C 10 /etc/nginx/.htpasswd alice
+   Puis :
+   sudo htpasswd -B -C 10 /etc/nginx/.htpasswd bob
+ </pre>
+
+  <h2>Commande de test</h2>
+  <pre><code>curl https://rcube.ddns.net/post-api/ -u alice:pistache \
+  -d "type=1&amp;boat=hoho, 47.0,-3.0&amp;waypoints=47.5,-3.0;47.0,-5.0&amp;timeStep=3600&amp;isodesc=true&amp;isoc=false"
+   </code></pre>
+
+  <h2>Notes sécurité</h2>
+  <ul>
+    <li>Utiliser <code>htpasswd</code> en bcrypt : <code>-B</code> (ex. <code>-C 10</code>).</li>
+    <li>Protéger <code>/etc/nginx/.htpasswd</code> (droits 640, groupe <code>www-data</code>).</li>
+    <li>Ne pas faire confiance à un <code>X-User-Level</code> envoyé par le client&nbsp;: NGINX le force.</li>
+  </ul>
+
+
+<h1 id="chap11">11. Comportements bizarres</h1>
+
+Pour fonctionner sans NGINX (en local) et éviter les erreurs CORS&nbsp;:
+<ul>
+<li>Mettre dans <code>par/routing.par</code> AUTHENT = 0 (ou enlever la ligne AUTHENT).</li>
+<li>Eviter d'envoyer dans le fetch l'authentication header. 
+Pour cela dans <code>r3param.js</code> mettre userID = &ldquo; &rdquo; et password = &ldquo; &rdquo;.</li> 
+</ul>
+
+<h1 id="Annexe1">Annexe 1, ServeurGPS et AIS</h1>
 
 <h2>Introduction</h2>
    <p> Côté client, il est possible d'installer un petit module ou plugin permettant de disposer des informations AIS et GPS.<p>
@@ -1246,7 +1391,7 @@ curl http://localhost:8090/ais
 référencé dans le fichier paramètres.</p>
 
 <h2>Construction de aisgpsserver</h2>
-<p>La GLIB est nécessaire.</p>
+<p>La GLIB est ici nécessaire.</p>
    <table>
       <caption>Fichiers et actions associées</caption>
       <thead>
@@ -1284,7 +1429,7 @@ référencé dans le fichier paramètres.</p>
    
    <p> Le script <code> transpolar </code> transforme le fichier Json fourni par le dashboard de Virtual Regatta en un fichier lisible par jq.</p>  
    
-   <p> Le script <code> saillist </code> liste les voiles décrites dans le fichier json en question.</p>  
+   <p> Le script <code> saillist</code> ou <code>list</code> liste les voiles décrites dans le fichier json en question.</p>  
    
    <p> Le script <code> jstocsv  </code> basé sur jq transforme la structure Json fournie par le dashboard Virtual Regatta (après transformation avec transpolar) 
    en n fichiers CSV.<p>
@@ -1341,20 +1486,125 @@ référencé dans le fichier paramètres.</p>
 </table>
 
 <h3>Construction du code </h3>
-<p>Composepol utilise la Glib.</p>
 <p>Il nécessite&nbsp;:</p>
 <ul>
-   <li>rtypes.h</li>
+   <li>r3types.h</li>
    <li>r3util.c et r3util.h</li>
    <li>polar.c et polar.h</li>
 </ul> 
 <p>Pour la construction du code, utiliser&nbsp;: <code>./ccc</code>.</p>
+
+<h2>Enchainement des opérations</h2>
+
+<code>allcompose</code> enchaine&nbsp;:
+<ul>
+<li>Translation du fichier passé en paramètre en fichier Json, </li>
+<li>Création de n fichiers CSV avec jq,</li>
+<li>Composition finale de ces n fichiers csv en <code>VRespol.csv</code> et <code>VRespol.sailpol</code></li>
+</ul>
+
+<h1 id="Annexe3">Annexe 3, Transformations de Grib</h1>
+
+<h2> Cas des fichiers Meteoconsult</h2>
+
+<p> La version sans ECCCODES nécessite de traiter les fichiers Meteoconsult de façon à obtenir un format non compressé</p>
+<p> La commande wgrib adaptée est automatiquement gérée par <code>r3gribget</code> dans la fonction <code>uncompress</code>&nbsp;:
+<pre>
+/*! Uncompress Grib file received from METOCONSULT to Template 5.0 */
+static bool uncompress (const char *in, const char *out) {
+   char command [MAX_SIZE_LINE * 4];
+   snprintf (command, sizeof (command), 
+      "wgrib2 %s -set_scaling same same -set_grib_type simple -grib_out %s &gt;/dev/null", in, out);
+   return (system (command) == 0);
+}
+</pre>
+
+<h2> Cas des fichiers Saildoc</h2>
+
+<p> La version sans ECCCODES nécessite de traiter les fichiers Saildoc de façon à&nbsp;</p>
+<ul>
+<li>Les convertir du format Grib1 au format Grib2 (script Perl <code>grp1to2.pl</code>)</li>
+<li>Forcer le "simple packing" avec wgrib2.</li>
+</ul>
+
+<h3>Installation de grb1to2</h3>
+
+<p>Ce script NOAA convertit GRIB1→GRIB2 en s’appuyant sur wgrib (GRIB1) + wgrib2.<p>
+
+<pre>Installer/Compiler wgrib (GRIB1) :
+
+mkdir -p ~/bin &amp;&amp; cd ~/bin
+wget -O wgrib.c https://ftp.cpc.ncep.noaa.gov/wd51we/wgrib/wgrib.c
+gcc -O2 -o wgrib wgrib.c
+chmod +x wgrib
+
+
+Récupérer le convertisseur et ses deux fichiers compagnons :
+
+# dans ~/bin par ex.
+wget https://ftp.cpc.ncep.noaa.gov/wd51we/grb1to2/grb1to2.pl
+wget https://ftp.cpc.ncep.noaa.gov/wd51we/grb1to2/grib1to2_metadata.pl
+wget https://ftp.cpc.ncep.noaa.gov/wd51we/grb1to2/global_template.g2
+chmod +x grb1to2.p
+</pre>
+
+<h3>Enchaînement avec simple packing </h3>
+<p> Le script bash <code> grib1togrib2</code> prend un entrée un fichier saildoc et produit en sortie un fichier lisible
+par la version sans ECCOES de Rcube.</p>
+
+<pre>
+#!/bin/bash
+in="$1"
+out1="${in%.grb}_g2.grb"
+out2="${in%.grb}_g2_simple.grb"
+
+# si GRIB1 (octet 8 == 1) → convertir
+if [ "$(dd if="$in" bs=1 skip=7 count=1 2 &lt;&gt; /dev/null | od -An -tu1)" -eq 1 ]; then
+  ~/bin/grb1to2.pl -packing c3 "$in" -o "$out1" || exit 1
+else
+  out1="$in"
+fi
+
+# forcer simple packing
+wgrib2 "$out1" -set_grib_type simple -grib_out "$out2" || exit 1
+echo "Output: ${$out2}"
+</pre>
+
+<h1 id="Annexe4">Annexe 4, Exemple de session MAJ server</h1>
+
+<pre>
+rr@rr-Zenbook-UX3402ZA-UX3402ZA:~/rcube$ ./upload
+Mot de passe SSH : 
+www files...
+www/doc files...
+csources files...
+gribget files...
+Done
+rr@rr-Zenbook-UX3402ZA-UX3402ZA:~/rcube$ ssh rcube
+rr@rcube's password: 
+
+Last login: Mon Sep  1 09:35:49 2025 from 2a01:cb05:8f15:5a00:41ed:5ba5:9f25:482f
+rr@rcube:~$ cd rcube/csources/
+rr@rcube:~/rcube/csources$ ./ccs
+rr@rcube:~/rcube/csources$ cd ..
+rr@rcube:~/rcube$ pgrep r3server
+858891
+rr@rcube:~/rcube$ kill 858891
+rr@rcube:~/rcube$ ./launch
+==== Lancement des serveurs ====
+→ Lancement du serveur sur le port 8080
+   PID = 866224, log = /home/rr/rcube/r3server_8080.log
+✅ Tous les serveurs sont lancés.
+
+
+</pre>
 
 </div> <!-- main -->
 <div class="notes">
 
 <h2>Liens </h2>
 
+<p> <a href= "dox/html/index.html">Doxygen Doc</a></p>
 <p><a href= "docpar.txt">Documentation sur les paramètres</a></p>
 <p><a href="https://nomads.ncep.noaa.gov/">Fichiers Grib NOAA</a></p>
 <p><a href="https://data.ecmwf.int/">Fichiers Grib ECMWF</a></p>

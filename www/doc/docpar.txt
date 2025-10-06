@@ -1,5 +1,6 @@
 Name              Comment
 DESC:             Descciption field for information
+AUTHENT:          1 id authentication is enabled 0 default value
 WD:               Working Directory. TO KEEP ON FIRST LINE !
 ALLWAYS_SEA:      If 1 (true) then there is no earth avoidance. Allways on sea.
 POI:              Point of Interests
@@ -20,12 +21,13 @@ POLAR:            Polar File Name
 WAVE_POL:         Wave Polar File Name
 ISSEA:            Is Sea File Name
 MID_COUNTRY:      Text file namme with MID to Country association (MID is part of MMSI)
-TIDES:            CSC file with lat, lon of ports for tides (France Only)
+TIDES:            CSV file with lat, lon of ports for tides (France Only)
 HELP:             Help html File Name
 CLI_HELP:         Text Help File Name
 SHP:              Shape File Name
 TRACE:            Trace File Name
 LOG:              Log File Name
+FEEDBACK:         User Feedback File Name
 VR_DASHBOARD:     Virtual Regatta Dashboard File Name
 VR_DASHB_UTC:     1 if VR Dashboard provide time in UTC. O if local time.
 VR_STAMINA:       double number betwween 0.0 and 100.0 for stamina virtual regatta init.

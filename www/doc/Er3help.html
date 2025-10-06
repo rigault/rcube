@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RCube</title>
+<link rel="icon" type="image/ico" href="favicon.ico">
+<link rel="stylesheet" type="text/css" href="r3help.css">
+</head>
+<body>
+<header> 
+   <div class="container">
+      <div class="menu"></div>
+      <span class="titlename">RCube</span>
+   </div>
+</header>
+
+<div class="container">
+
+<div class="menu">
+<h2>Table of Contents</h2>
+   <a href="#chap1">1. Introduction</a>
+   <a href="#chap2">2. Interface</a>
+   <ul>
+   <li><a href="#chap2Fond">Basemap</a></li>
+   <li><a href="#chap2Disp">Screen Layout</a></li>
+   <li><a href="#chap2clic">Right-Click Menu</a></li>
+   </ul>
+   <a href="#chap3">3. Menu Bar</a>
+   <ul>
+   <li><a href="#chap3menuGrib">GRIB Menu</a></li>
+   <li><a href="#chap3menuPolar">Polar Menu</a></li>
+   <li><a href="#chap3menuRoute">Route Menu</a></li>
+   <li><a href="#chap3menuTech">Tech Menu</a></li>
+   <li><a href="#chap3menuHelp">Help Menu</a></li>
+   <li><a href="#chap3menuLink">Links Menu</a></li>
+   <li><a href="#chap3menuSignIn">Sign In Menu</a></li>
+   </ul>
+   <a href="#annexe">Appendix</a>
+
+</div><!-- menu -->
+
+<div class="main">
+
+<h1 id="chap1">1. Introduction</h1>
+<p>RCube is routing software. It computes a route from an origin point <b>pOr</b> to a destination point <b>pDest</b>, starting at <samp>START_TIME</samp>, using GRIB weather files and the boat’s polar.</p>
+
+<p>The algorithm is based on <b>isochrones</b>. Starting from pOr, RCube computes all points reachable within the time step <samp>T_STEP</samp> (isochrone 0). From each point on isochrone 0, it computes all points reachable within <samp>T_STEP</samp> again (isochrone 1), and so on, until pDest is reached (destination reached). If the weather time coverage is insufficient, the process stops (destination unreached).</p>
+
+<p>RCube then proposes a route: either the optimal route from pOr to pDest, or the route from pOr to the point on the last isochrone that is closest to pDest.</p>
+
+<p><b>GRIB</b> (GRIdded Binary) files contain meteorological values on a latitude/longitude grid.</p>
+
+<p>Routing mainly uses:</p>
+<ul>
+  <li>10 m wind,</li>
+  <li>waves.</li>
+</ul>
+
+<p>GRIB files with <b>ocean currents</b> can also be used by RCube.</p>
+
+<p>The <b>polar</b> describes the boat’s speed as a function of true wind speed (<b>TWS</b>) and true wind angle relative to the boat’s axis (<b>TWA</b>).</p>
+
+<p><b>Wave polars</b> (if available) apply a multiplier to boat speed based on wave height and the wave angle relative to the boat. Typically, head seas reduce speed (e.g., 60%), whereas following seas increase it (e.g., 120%).</p>
+
+<p>Additional parameters influence routing. You can define <samp>DAY_EFFICIENY</samp> and <samp>NIGHT_EFFICIENCY</samp> to reflect crew capability. For example, 80% means RCube uses 80% of the speed given by the boat polar (night efficiency is often lower than daytime).</p>
+
+<p>Define a <samp>THRESHOLD</samp> below which sailing speed triggers engine use. Engine speed is set by <samp>MOTOR_S</samp>.</p>
+
+<p><samp>X_WIND</samp> multiplies wind speed. If, for example, you estimate that GRIB wind is 20% too low, set <samp>X_WIND</samp> to 1.2.</p>
+
+<p><samp>MAX_WIND</samp> sets a maximum wind speed. Routing favors paths that avoid winds above this value.</p>
+
+<p><samp>PENALTY0</samp> is the time lost during a tack (seconds), <samp>PENALTY1</samp> during a gybe (seconds), and <samp>PENALTY2</samp> during a sail change (seconds).</p>
+
+<p>When computing the next isochrone, <samp>RANGE_COG</samp> defines the span (−90° to +90°) relative to the direct course to the destination; <samp>COG_STEP</samp> defines the angular granularity (e.g., 5°).</p>
+
+<h1 id="chap2">2. Interface</h1> 
+
+<h2 id="chap2Fond">Basemap</h2>
+<p>The route is displayed over a basemap: either <b>Windy</b> or <b>OpenSeaMap</b>.</p>
+<p>Press <code>&lt;Ctrl&nbsp;S&gt;</code> to switch basemaps.</p>
+<p>Note: switching resets the current route.</p>
+
+<figure>
+  <figcaption>Basemap: Windy</figcaption>
+  <img src="images/generalWindy.png" alt="Windy basemap with route overlay" width="500">
+</figure>
+
+<figure>
+  <figcaption>Basemap: OpenSeaMap</figcaption>
+  <img src="images/generalOSM.png" alt="OpenSeaMap basemap with route overlay" width="500">
+</figure>
+
+<h2 id="chap2Disp">Screen Layout</h2>
+
+<h3>Top bar</h3>
+<p>A menu bar provides access to:</p>
+<ul>
+  <li>GRIB</li>
+  <li>Polar</li>
+  <li>Route</li>
+  <li>Tech</li>
+  <li>Help</li>
+  <li>Links</li>
+  <li>Sign In</li>
+</ul>
+
+<h3>Bottom bar</h3>
+<ul>
+  <li>If a route is available, a time bar with:
+    <ul>
+      <li>play/pause controls and a route reset button,</li> 
+      <li>a time slider,</li> 
+      <li>local date and time,</li> 
+      <li>a button and slider to control isochrone display.</li> 
+    </ul>
+  </li>
+  <li>A status bar with:
+    <ul>
+      <li>on the left: the boat polar, wave polar (if any), wind GRIB, and current GRIB (if any),</li>
+      <li>the latitude and longitude beneath the mouse pointer.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3>Center pane</h3>
+<ul>
+  <li>Windy, or</li>
+  <li>OpenSeaMap.</li>
+</ul>
+<p>With Windy, the Windy time slider appears at the bottom of the center pane.</p>
+
+<h2 id="chap2clic">Right-Click Menu</h2>
+<figure>
+  <figcaption>Right-click menu</figcaption>
+  <img src="images/rightClic.png" alt="Context menu shown on right-click" width="400">
+</figure>
+
+<ul>
+  <li>Set the boat position (one line per boat with the boat’s color),</li>
+  <li>Add a boat (see next figure),</li>
+  <li>Add waypoints (by convention, the destination is the last waypoint),</li>
+  <li>Erase all waypoints (and thus the destination),</li>
+  <li>Add POIs (points of interest),</li>
+  <li>Erase all POIs.</li>
+</ul>
+
+<figure>
+  <figcaption>Add a boat</figcaption>
+  <img src="images/addNewBoat.png" alt="Add a boat dialog" width="400">
+</figure>
+
+<h1 id="chap3">3. Menu Bar</h1>
+
+<h2 id="chap3menuGrib">GRIB Menu</h2>
+<p>View the current GRIB description or choose another GRIB file.</p>
+<p>GRIBs are mainly used for wind. GRIBs for currents are also supported.</p>
+<figure>
+  <figcaption>GRIB info</figcaption>
+  <img src="images/gribInfo.png" alt="GRIB information panel" width="500">
+</figure>
+
+<h2 id="chap3menuPolar">Polar Menu</h2>
+<p>View and select the polar used for routing.</p>
+<p>Both boat polars and wave polars are supported.</p>
+
+<figure>
+  <figcaption>Polar</figcaption>
+  <img src="images/polar.png" alt="Boat polar diagram selection" width="400">
+</figure>
+
+<figure>
+  <figcaption>Polar dump</figcaption>
+  <img src="images/polarDump.png" alt="Polar dump view" width="400">
+</figure>
+
+<h2 id="chap3menuRoute">Route Menu</h2>
+<p>Use this menu to:</p>
+<ul>
+  <li>launch a routing,</li>
+  <li>retrieve the report for a previously computed routing,</li>
+  <li>dump the last route,</li>
+  <li>view the simulation report to search for the best departure time,</li>
+  <li>compare different competitors.</li>
+</ul>
+
+<h3>Route &raquo; Launch</h3>
+<figure>
+  <figcaption>Launch a route</figcaption>
+  <img src="images/routeLaunch.png" alt="Route launch dialog" width="400">
+</figure>
+
+<p>Start a routing at the desired date with the desired precision (time step).</p>
+<ul>
+  <li><b>Date</b>: departure date (local time),</li>
+  <li><b>Time step</b>: precision (e.g., 15 minutes),</li>
+  <li><b>Boat</b>: the selected boat, or <i>all</i> to benchmark several boats,</li>
+  <li><b>Model</b>: the weather model,</li>
+  <li><b>Forbid Zones</b>: when unchecked, ignore forbidden zones (land, etc.),</li>
+  <li><b>Isochrones</b>: show isochrones,</li>
+  <li><b>With Waves</b>: account for waves if a wave polar exists,</li>
+  <li><b>With Current</b>: account for currents if a current GRIB exists,</li>
+  <li><b>Request in Clipboard</b>: copy the server request to the clipboard (debugging).</li>
+</ul>
+
+<p>To compute the best departure time, set:</p>
+<ul>
+  <li><b>Time Interval</b>: time between attempts,</li>
+  <li><b>N Try</b>: number of attempts.</li>
+</ul>
+
+<p>After computation, RCube generates a report. As long as the route isn’t deleted, you can reopen it later from <i>Route Report</i>.</p>
+
+<h3>Route &raquo; Report</h3>
+<figure>
+  <figcaption>Route report</figcaption>
+  <img src="images/routeReport.png" alt="Route report view" width="600">
+</figure>
+
+<p>This report summarizes the route (departure, ETA, duration, etc.). It also shows time series from departure to arrival for:</p>
+<ul>
+  <li>wind direction, wind speed, and gusts (if available) at the boat’s position,</li>
+  <li>boat speed,</li>
+  <li>wave height (if available).</li>
+</ul>
+<p>Below the time axis, a colored band indicates the sail in use (if available). Dotted vs. solid lines distinguish the tack (starboard vs. port).</p>
+
+<h3>Route &raquo; Dump</h3>
+<figure>
+  <figcaption>Route dump</figcaption>
+  <img src="images/routeDump.png" alt="Tabular route dump" width="600">
+</figure>
+
+<p>The complete route with all available data. Each row corresponds to a timestamp (the associated isochrone).</p>
+
+<h3>Best Time Report</h3>
+<figure>
+  <figcaption>Best time report</figcaption>
+  <img src="images/bestTimeReport.png" alt="Best departure time report" width="600">
+</figure>
+
+<p>A chart showing, for each selected departure time, the route duration. The green bar marks the departure time with the minimum duration.</p>
+
+<h3>Benchmark Report</h3>
+<figure>
+  <figcaption>Benchmark report</figcaption>
+  <img src="images/benchmarkReport.png" alt="Competitor benchmark table" width="600">
+</figure>
+
+<p>A table comparing competitor performance (one row per competitor).</p>
+
+<h2 id="chap3menuTech">Tech Menu</h2>
+<p>This menu has four submenus:</p>
+<ul>
+  <li>Waypoints</li> 
+  <li>Change</li> 
+  <li>Manage Competitors</li> 
+  <li>Stamina</li> 
+</ul>
+
+<h3>Waypoint Distances</h3>
+<figure>
+  <figcaption>Waypoint distances</figcaption>
+  <img src="images/waypointDistances.png" alt="Waypoint distances and bearings table" width="600">
+</figure>
+
+<p>One table per competitor shows: distance and bearing from the competitor to the next waypoint, and distance and bearing from waypoint to waypoint up to the destination.</p>
+<p>Distances and bearings are provided as rhumb-line (loxodromic) and great-circle (orthodromic).</p>
+
+<h3>Change</h3>
+<figure>
+  <figcaption>Change</figcaption>
+  <img src="images/change.png" alt="Behavior settings panel" width="400">
+</figure>
+
+<p>This section describes only the <b>Behavior</b> tab (other tabs are developer-only).</p>
+
+<ul>
+  <li><b>X Wind</b>: multiplier applied to wind speed (GRIB winds are often underestimated; e.g., use 1.15),</li>
+  <li><b>Max Wind</b>: maximum wind to avoid overly windy areas,</li>
+  <li><b>Tack</b>: time lost during a tack (s),</li>
+  <li><b>Gybe</b>: time lost during a gybe (s),</li>
+  <li><b>Sail Change</b>: time lost during a sail change (s),</li>
+  <li><b>Motor Speed</b>: engine speed (kt),</li>
+  <li><b>Threshold Motor</b>: sailing speed below which the engine engages,</li>
+  <li><b>Day Efficiency</b>: daytime crew efficiency (typically 100%),</li>
+  <li><b>Night Efficiency</b>: nighttime crew efficiency (e.g., 90%).</li>
+</ul>
+
+<h3>Manage Competitors</h3>
+<figure>
+  <figcaption>Manage competitors</figcaption>
+  <img src="images/manageCompetitors.png" alt="Manage competitors table" width="600">
+</figure>
+
+<p>A table with one row per competitor lets you edit a competitor’s name, color, and geographic coordinates. You can also delete competitors.</p>
+<p>To add a competitor, use the right-click menu.</p>
+<p>The <b>Import</b> button imports competitors from a CSV file compatible with the I.T.Y.C Dashboard module used for Virtual Regatta.</p>
+
+<h3>Stamina</h3>
+<figure>
+  <figcaption>Stamina</figcaption>
+  <img src="images/stamina.png" alt="Stamina and penalty calculator" width="600">
+</figure>
+
+<p>A <b>Stamina &amp; Penalty</b> calculator. Useful for Virtual Regatta players.</p>
+<p>Based on your inputs (boat type, wind speed, skipper energy, and whether you have the “full pack”), it estimates:</p>
+<ul>
+  <li>time to recover 1 energy point,</li>
+  <li>maneuver times (tack, gybe, sail change),</li>
+  <li>energy lost per maneuver.</li>
+</ul>
+
+<h2 id="chap3menuHelp">Help Menu</h2>
+<p>Provides options to:</p>
+<ul>
+  <li>show Help,</li>
+  <li>show About,</li>
+  <li>send Feedback.</li>
+</ul>
+
+<h2 id="chap3menuLink">Links Menu</h2>
+<p>Links to various map and weather sites are offered, based on the main boat’s geographic area.</p>
+
+<h2 id="chap3menuSignIn">Sign In Menu</h2>
+<figure>
+  <figcaption>Sign in</figcaption>
+  <img src="images/signIn.png" alt="Sign in dialog" width="300">
+</figure>
+<p>Sign in to gain elevated privileges.</p>
+
+<h1 id="annexe">Appendix</h1>
+
+<h2>Glossary (mini)</h2>
+<dl>
+  <dt>Basemap</dt>
+  <dd>The background map layer (Windy or OpenSeaMap) on which RCube overlays routes, markers, and layers.</dd>
+
+  <dt>GRIB</dt>
+  <dd>GRIdded Binary meteorological data used by RCube (wind, waves, currents) on a latitude/longitude grid.</dd>
+
+  <dt>Polar (boat polar)</dt>
+  <dd>A table/curve of boat speed versus true wind speed (TWS) and true wind angle (TWA).</dd>
+
+  <dt>Wave polar</dt>
+  <dd>A multiplier applied to boat speed as a function of wave height and wave angle relative to the boat.</dd>
+
+  <dt>Isochrone</dt>
+  <dd>The set of points reachable after a fixed time step. RCube builds successive isochrones to find a route.</dd>
+
+  <dt>Time step</dt>
+  <dd>The time interval (&Delta;t) between successive isochrones and samples. Smaller steps increase precision and computation time.</dd>
+
+  <dt>Waypoint (WP)</dt>
+  <dd>An intermediate target. By convention, the last waypoint is the destination (pDest).</dd>
+
+  <dt>POI</dt>
+  <dd>Point of interest shown on the map. POIs are informational and are not used by the router.</dd>
+
+  <dt>Model (weather model)</dt>
+  <dd>The numerical weather dataset used to populate GRIB variables for routing.</dd>
+
+  <dt>Benchmark</dt>
+  <dd>A comparison of competitors or boats over the same route to evaluate relative performance.</dd>
+</dl>
+
+</div> <!-- main -->
+
+<div class="notes">
+  <p><b>Abbreviations</b></p>
+  <p>Lat: Latitude</p>
+  <p>Lon: Longitude</p>
+  <p>pOr: Origin point</p>
+  <p>pDest: Destination point (last waypoint)</p>
+  <p>WP i: Waypoint i</p>
+  <p>ETA: Estimated Time of Arrival</p>
+
+  <p><b>Acronyms</b></p>
+  <p>TWS: True Wind Speed</p>
+  <p>TWD: True Wind Direction</p>
+  <p>TWA: True Wind Angle (angle of the boat to the wind)</p>
+  <p>SOG: Speed Over Ground</p>
+  <p>COG: Course Over Ground</p>
+  <p>AWA: Apparent Wind Angle</p>
+  <p>AWS: Apparent Wind Speed</p>
+  <p>HDG: Heading (angle between the boat’s axis and north)</p>
+  <p>VMG: Velocity Made Good</p>
+  <p>VMC: Velocity Made on Course</p>
+
+  <p><i>Upwind: VMG = cos(TWA) × TWS.</i></p>
+
+  <p><b>Conventions</b></p>
+  <p>Distances are in nautical miles.</p>
+  <p>Speeds are in knots.</p>
+  <p>GRIB files provide speeds in meters per second.</p>
+
+</div> <!-- notes -->
+</div> <!-- container -->
+<hr>
+
+<footer>
+René Rigault, 2025
+</footer>
+
+</body>
+</html>

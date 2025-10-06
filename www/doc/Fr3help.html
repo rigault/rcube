@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang = "fr">
+<head>
+<meta charset="UTF-8">
+<title>RCube</title>
+<link rel="icon" type="image/ico" href="favicon.ico">
+<link rel="stylesheet" type="text/css" href="r3help.css">
+</head>
+<body>
+<header> 
+   <div class="container">
+      <div class="menu"></div>
+      <span class=titlename>Rcube</span>
+   </div>
+</header>
+
+<div class="container">
+
+<div class="menu">
+<h2>Table des matières </h2>
+   <a href="#chap1">1. Introduction</a>
+   <a href="#chap2">2. Interface</a>
+   <ul>
+   <li><a href="#chap2Fond">Fond de carte</a></li>
+   <li><a href="#chap2Disp">Disposition de l'écran</a></li>
+   <li><a href="#chap2clic">Clic droit</a></li>
+   </ul>
+   <a href="#chap3">3. Barre de Menus</a>
+   <ul>
+   <li><a href="#chap3menuGrib">Menu Grib</a></li>
+   <li><a href="#chap3menuPolar">Menu Polar</a></li>
+   <li><a href="#chap3menuRoute">Menu Route</a></li>
+   <li><a href="#chap3menuTech">Menu Tech</a></li>
+   <li><a href="#chap3menuHelp">Menu Help</a></li>
+   <li><a href="#chap3menuLink">Menu Links</a></li>
+   <li><a href="#chap3menuSignIn">Menu Sign In</a></li>
+   </ul>
+   <a href="#annexe">Annexe</a>
+
+</div><!-- menu -->
+
+<div class="main">
+
+<h1 id="chap1">1. Introduction</h1>
+		<p>RCube est un logiciel de routage. Il calcule la route allant
+		d’un point origine pOr à un point destination pDest à partir
+		d’une date <samp>START_TIME</samp> en utilisant les fichiers météo Grib et
+		la polaire du bateau.</p>
+
+		<p>La méthode utilisée est celle des isochrones. A partir du
+		point Origine pOr, on calcule tous les points accessibles dans un
+		intervalle de temps <samp>T_STEP</samp>. C’est l’isochrone 0. Puis à partir
+		de cet isochrone 0, on calcule tous les points accessibles dans
+		l’intervalle <samp>T_STEP</samp>. On réitère jusqu’à ce que l’on soit
+		arrivé à la destination pDest lorsque c’est possible
+		(destination reached). Si la couverture de temps météo est
+		insuffisante, on arrête le processus (destination unreached).</p>
+
+		<p>On propose alors une route qui est soit la route optimale allant
+		de pOr à pDest, soit la route allant de pOr au point du dernier
+		isochrone le plus proche de la destination.</p>
+
+		<p>Les fichiers Grib (General Regularly-distributed Information in
+		Binary) sont des fichiers contenant pour un ensemble de coordonnées
+		(lat, lon) des valeurs météorologiques.</p>
+
+		<p>Les valeurs qui nous intéressent sont celles qui influencent le
+		routage.&nbsp;:</p>
+
+		<ul>
+			<li> Le vent à 10 mètres de hauteur,</li>
+			<li>Les vagues.</li>
+		</ul>
+
+		<p>Il existe aussi des fichiers Grib qui donnent la valeur des
+		courants. Ils sont également utilisables par RCube.</p>
+
+		<p>La polaire décrit la vitesse du bateau en fonction de la
+		vitesse du vent réel (TWS&nbsp;: True Wind Speed) et de l’angle
+		du vent avec l’axe du bateau (TWA&nbsp;: True Wind Angle).</p>
+
+		<p>Il existe également des polaires de vagues qui décrivent en
+		fonction de la hauteur des vagues et de l’angle des vagues avec
+		le bateau un coefficient mutiplicateur de la vitesse du bateau.
+		Typiquement, des vagues face au bateau diminueront sa vitesse
+		(exemple 60 %), alors que une vaque arrière l’augmentera
+		(exemple 120 %).</p>
+
+		<p>D’autres paramètres influencent le routage. On peut définir
+		un coefficient <samp>DAY_EFFICIENY</samp> ou
+		<samp>NIGHT_EFFICIENCY</samp> qui traduisent la capacité de
+		l’équipage. 80 % indiquera que la vitesse prise en compte sera
+		de 80% de la vitesse donnée par la polaire du bateau. Il existe
+		deux paramètres&nbsp;: Un pour la nuit et un pour le jour, afin de
+		refléter une efficacité plus faible la nuit.</p>
+
+		<p>Il est également possible de définir un seuil <samp>THRESHOLD</samp>
+		qui définit la vitesse à la voile en dessous de laquelle on
+		passera au moteur. La vitesse au moteur est définie par le paramètre <samp>MOTOR_S</samp>.</p>
+
+		<p>Le paramètre <samp>X_WIND</samp> est un multiplicateur concernant la vitesse
+		du vent. En général, on estimera que le vent qui doit être
+		pris en compte est par exemple de 20&nbsp;% supérieur au vent
+		trouvé dans le fichier Grib. On donnera alors à <samp>X_WIND</samp> la
+		valeur&nbsp;:1.2.</p>
+
+		<p><samp>MAX_WIND</samp> est utilisable pour indiquer une vitesse de vent maximale. Le
+		routage privilégiera une route évitant des vents dont la vitesse
+		excède ce seuil.</p>
+
+		<p><samp>PENALTY0</samp> est le nombre de secondes perdues lors d’un virement de bord.</p>
+
+		<p><samp>PENALTY1</samp> est le nombre de secondes perdues lors d’un empannage.</p>
+		
+		<p><samp>PENALTY2</samp> est le nombre de secondes perdues lors d’un changement de voile.</p>
+
+		<p>Lors du calcul de l’isochrone suivant, <samp>RANGE_COG</samp>
+		définit la l’amplitude -90 à + 90 degrés par rapport à la
+		route directe vers la destination.</p>
+
+		<p><samp>COG_STEP</samp> défini la granularité. Par exemple 5 degré.</p>
+
+
+<h1 id="chap2">2. Interface</h1> 
+<h2 id="chap2Fond">Fond de carte</h2>
+
+<p>
+L'affichage de la route se fait sur un fond de carte qui peut être Windy ou Open Sea Map.
+<p>
+Le passage d'un mode à l'autre est réalisé par la combinaison de touche <code>&lt;Ctrl S&gt;</code>.
+<p>
+Notez qu'il y a reinitialisation de la route lors de cette manipulation.
+
+<figure>
+<figcaption>Fond d'écran avec Windy</figcaption>
+<img src="images/generalWindy.png" alt="windy" width="500">
+</figure>
+<p>
+<figure>
+<figcaption> Fond d'écran avec Open Sea Map</figcaption>
+<img src="images/generalOSM.png" alt="open sean map" width="500">
+</figure>
+<p>
+
+<h2 id="chap2Disp">Disposition de l'écran</h2>
+
+<h3>En haut de l'écran, une barre de menu propose les choix entre&nbsp;: </h3>
+<ul>
+<li>Grib</li>
+<li>Polar</li>
+<li>Route</li>
+<li>Tech</li>
+<li>Help</li>
+<li>Links</li>
+<li>Sign In</li>
+</ul>
+
+<h3>En bas de l'écran on trouve&nbsp;: </h3>
+<ul>
+<li> Si une route est calculée, une barre temporelle avec&nbsp;
+   <ul>
+   <li>Les boutons de contrôle du temps et de reinitialisation de la route,</li> 
+   <li>le slider permettant de se déplacer dans le temps,</li> 
+   <li>la date et l'heure locale,</li> 
+   <li>un bouton et un slider de contrôle de l'affichage des isochrones.</li> 
+   </ul>
+</li>
+<li> La barre d'état avec 
+   <ul>
+   <li> à gauche le nom de la polair, de la polaire de vagues (wavepolar) si elle existe, du grib vent et du grib pour courants (si il existe),</li>
+   <li> la latitude et la longitude du point désigné par le pointeur de la souris.</li>
+   </ul>
+</li>
+</ul>
+
+<h3>La partie centrale de l'écran affiche&nbsp;:</h3>
+   <ul>
+   <li>Soit Windy,</li>
+   <li>soit Open Sea Map.</li>
+   </ul>
+
+Lorsque Windy est utilisé la barre temporelle de déplacement dans le timing Windy est affichée en bas de la partie centrale.
+
+<h2 id="chap2clic">Clic droit</h2>
+<figure>
+<figcaption>Clic droit</figcaption>
+<img src="images/rightClic.png" alt="clic droit" width="400">
+</figure>
+
+<ul>
+<li>Positionnement du bateau (une ligne par bateau avec la couleur du bateau,</li>
+<li>addition d'un bateau (voir figure à suivre),</li>
+<li>ajout de waypoints (par convention la destination est le dernier waypoint),</li>
+<li>l'effacement de tous les waypoints et donc de la destination.</li>
+<li>ajout de POI Point Of Interest,</li>
+<li>effacement de tous les POI.</li>
+</ul>
+
+<figure>
+<figcaption>Ajout d'un bateau</figcaption>
+<img src="images/addNewBoat.png" alt="clic droit" width="400">
+</figure>
+
+<h1 id="chap3">3. Barre de menus</h1>
+
+<h2 id="chap3menuGrib">Menu Grib</h2>
+<p>Permet de visualiser la description du grib en cours, ou un autre fichier grib</p>
+<p>Les Grib sont essentiellement pour le vent.<p>
+<p>Il existe aussi des Grib pour les courants.</p>
+<figure>
+<figcaption>Info Grib</figcaption>
+<img src="images/gribInfo.png" alt="Info Grib" width="500">
+</figure>
+
+<h2 id="chap3menuPolar">Menu Polar</h2>
+<p>Permet de visualiser et de sélectionner pour le calcul de route une polaire.</p>
+<p>Il existe des polaires pour le bateau, et aussi pour les vagues.</p>
+
+<figure>
+<figcaption>Polaire</figcaption>
+<img src="images/polar.png" alt="polaire" width="400">
+</figure>
+
+<figure>
+<figcaption>Dump de Polaire</figcaption>
+<img src="images/polarDump.png" alt="polarDump" width="400">
+</figure>
+
+<h2 id="chap3menuRoute">Menu Route</h2>
+Permet de :
+<ul>
+<li>Lancer un routage,</li>
+<li>retrouver le rapport d'un routage effectué précédemment,</li>
+<li>réaliser un dump de la dernière route,</li>
+<li>visualiser le rapport de simulation pour la recherche du meilleur moment de départ,</li>
+<li>visualiser la comparaison de différents compétiteurs.</li>
+</ul>
+
+<h3>Route/Launch</h3>
+<figure>
+<figcaption>Route Launch</figcaption>
+<img src="images/routeLaunch.png" alt="route launch" width="400">
+</figure>
+
+<p>Lance un routage à la date souhaitée avec la précision (timestep) souhaitée.</p>
+<ul>
+<li>Date&nbsp;: la date de départ (heures locales),</li>
+<li>Timestep&nbsp;: la précision (15 minutes, ...),</li>
+<li>Boat&nbsp;: le bateau sélection ou "all" pour une compétition entre plusieurs bateaux,</li>
+<li>Model&nbsp;: le modèle météo choisi,</li>
+<li>Forbid Zones&nbsp;: permet en décochant la case d'ignorer les zones interdites (terre...),</li>
+<li>Isochrones&nbsp;: permet d'afficher les isochrones;</li>
+<li>With Waves&nbsp;: prend en compte les vagues si une polaire de vague existe,</li>
+<li>With Current&nbsp;: prend en compte le courant si un grib des courants existe,</li>
+<li>Request in Clipboard&nbsp;: copie la requête serveur dans le bloc note (pour debug).</li>
+</ul>
+
+<p>Les options suivantes sont disponibles si on souhaite calculer le meilleur moment de départ&nbsp;:</p>
+<ul>
+<li>Time Interval&nbsp;: Temps entre chaque essai;</li>
+<li>N Try&nbsp;: Nombre d'essais.</li>
+</ul>
+
+<p> Suite au calcul de la route, un rapport est généré.</p>
+<p> ce Rapport est également disponible ultérieurement, tant que la route n'est pas détruite, dans le sous menu "Route Report".</p>
+
+<h3>Route Report</h3>
+<figure>
+<figcaption>Route Report</figcaption>
+<img src="images/routeReport.png" alt="route report" width="600">
+</figure>
+
+<p>Ce rapport donne des indications sur la route globales&nbsp;: Départ, ETA, durée, etc.<p>
+<p>Il donne le graphe temporel (entre date de départ et date d'arrivée) de l'évolution&nbsp;:
+<ul>
+<li>De l'orientation du vent, de la vitesse du vent et de la vitesse du vent dans les rafales (si disponible)
+à l'endroit ou se trouve le bateau à la date correspondante,</li>
+<li>de la vitesse du bateau,</li>
+<li>de la hauteur des vagues si information est disponible.</li>
+<li>sous l'axe des temps, une indication colorée indiquant la voile utilisée (si l'information existe). 
+Les pointillés (versus ligne continue) sont utilisés pour distinguer l'amure (tribord ou bâbord).</li>
+</ul> 
+
+<h3>Route Dump</h3>
+<figure>
+<figcaption>Route Dump</figcaption>
+<img src="images/routeDump.png" alt="route dump" width="600">
+</figure>
+
+<p>La route avec toutes les informations disponibles.</p>
+<p>Chaque ligne du tableau est associée à une date correspondant à l'isochrone associé.</p>
+
+<h3>Best Time Report</h3>
+<figure>
+<figcaption>Best Time Report</figcaption>
+<img src="images/bestTimeReport.png" alt="best time report" width="600">
+</figure>
+
+<p>Le graphe indiquant pour chaque heure de départ sélectionnées la durée de la route.</p>
+<p>La barre en vert indique l'heure de départ associée à la durée minimale.</p>
+
+<h3>Benchmark Report</h3>
+<figure>
+<figcaption>Benchmark Report</figcaption>
+<img src="images/benchmarkReport.png" alt="benchmark report" width="600">
+</figure>
+
+<p>Un tableau comparant les performances des différents compétiteurs.</p>
+<p>Chaque ligne du tableau correspond à un compétiteur.</p>
+
+<h2 id="chap3menuTech">Menu Tech</h2>
+<p>Quatre sous menus</p>
+<ul>
+<li>Waypoints</li> 
+<li>Change</li> 
+<li>Manage Competitors</li> 
+<li>Stamina</li> 
+</ul>
+
+<h3>Waypoint Distances</h3>
+<figure>
+<figcaption>Waypoint distances</figcaption>
+<img src="images/waypointDistances.png" alt="waypoint distances" width="600">
+</figure>
+
+<p>Un tableau par compétiteur indiquant la distance et le cap du compétiteur au prochain waypoint et la 
+distance ainsi que le de waypoint à waypoint jusqu'à la destination..</p>
+<p>Les distances et cap sont donné en loxodromiques et orthodromique.</p>
+
+<h3>Change</h3>
+<figure>
+<figcaption>Change</figcaption>
+<img src="images/change.png" alt="change" width="400">
+</figure>
+
+<p>Seul l'onglet Behavior est décrit dans cette section. 
+Les autres onglets ne sont pas utiles, hors développeur.</p>
+
+<ul>
+   <li>X Wind&nbsp;: facteur multiplicateur de la vitesse du vent. La vitesse du vent étant fréquemment 
+considérée comme sous estimées dans les Grib. Un facteur 1.15 peut être utilisé,</li>
+   <li>Max Wind&nbsp;: la valeur maximale du vent, afin d'éviter des zones trop venteuses.,</li>
+   <li>Tack&nbsp;: le temps perdu lors d'un virement de bord en secondes,</li>
+   <li>Gybe&nbsp;: le temps perdu lors d'un empannage en secondes,</li>
+   <li>Sail Change&nbsp;: le temps perdu lors d'un changement de voile en secondes,</li>
+   <li>Motor Speed&nbsp;: la vitesse au moteur en noeuds,</li>
+   <li>Threshold Motor&nbsp;: la vitesse à la voile au dessous de laquelle on déclenche le moteur,</li>
+   <li>Day Efficiency&nbsp;: l'efficacité de l'équipage le jour (normalement 100 %),</li>
+   <li>Night Efficiency&nbsp;: l'efficacité de l'équipage la nuit (par exemple 90 %).</li>
+</ul>
+
+<h3>Manage competitors</h3>
+<figure>
+<figcaption>Manage competitors</figcaption>
+<img src="images/manageCompetitors.png" alt="manage competitors" width="600">
+</figure>
+
+<p>Un tableau avec une ligne par compétiteur, avec la possibilité de modifier 
+le nom, la couleur d'un compétiteur et les coordonnées géographiques.</p>
+<p>Il est également possible de supprimer des compétiteurs.</p>
+<p>Pour ajouter un compétiteur, le clic droit est nécessaire.</p>
+<p>Le bouton import permet d'importer des compétiteurs à partir d'un fichier CSV, compatible avec le
+module I.T.Y.C Dashboard utile à Virtual Regatta.<p>
+
+
+<h3>Stamina</h3>
+<figure>
+<figcaption>Stamina</figcaption>
+<img src="images/stamina.png" alt="Stamina" width="600">
+</figure>
+
+<p>Une calculette "Stamina &amp; Penalty" s'affiche.</p>
+<p>Elle est utile pour les joueurs de Virtual Regatta.</p>
+<p>Elle estime, à partir des paramètres entrés (type de bateau, vitesse du vent, énergie du skipper, 
+souscription au "full pack" ou non)&nbsp;:<p>
+<ul>
+   <li>Le temps pour récupérer 1 point d'énergie,</li>
+   <li>le temps des manoeuvres&nbsp;: Virement de bord, Empannage, Changement de voile,</li>
+   <li>l'énergie perdue pendant la manoeuvre.</li>
+</ul>
+
+<h2 id="chap3menuHelp">Menu Help</h2>
+Offre la possibilité de&nbsp;:
+<ul>
+<li>Afficher l'aide,</li>
+<li>afficher un "à propos",</li>
+<li>donner un feedback.</li>
+</ul>
+
+<h2 id="chap3menuLink">Menu Links</h2>
+
+Des liens vers différents sites d'affichage de cartes ou de météo sont 
+proposés en cohérence avec la localisation géographique du bateau principal.
+
+<h2 id="chap3menuSignIn">Menu Sign In</h2>
+
+<figure>
+<figcaption>Sign In</figcaption>
+<img src="images/signIn.png" alt="Sign In" width="300">
+</figure>
+
+<p>Possibilité de s'identifier pour avoir des droits d'accès plus importants.</p>
+
+<h1 id="annexe">Annexe</h1>
+
+</div> <!-- main -->
+
+<div class="notes">
+      <p>
+		<p><b>Abréviations&nbsp;</b>:</p>
+		<p>Lat&nbsp;: Latitude</p>
+		<p>Lon&nbsp;: Longitude</p>
+		<p>pOr&nbsp;: Point Origine</p>
+		<p>pDest&nbsp;: Point Destination&nbsp;= last Way Point</p>
+      <p>WP i&nbsp;: Way Point i</p>
+      <p>ETA&nbsp;:Estimated Time of Arrival</p>
+
+		<p><b>Acronymes&nbsp;</b>:</p>
+		<p>TWS&nbsp;: True Wind Speed</p>
+		<p>TWD&nbsp;: True Wind Direction</p>
+		<p>TWA&nbsp;: True Wind Angle - the angle of the boat to the wind</p>
+		<p>SOG&nbsp;: Speed over Ground. Vitesses sur le fond.</p>
+		<p>COG&nbsp;: Course over Ground. Cap sur le fond.</p>
+		<p>AWA&nbsp;: Apparent Wind Angle</p>
+		<p>AWS&nbsp;: Apparent Wind Speed</p>
+		<p>HDG&nbsp;: heading. Angle de l’axe du bateau avec le nord.</p>
+		<p>VMG&nbsp;: Velocity Made Good</p>
+		<p>VMC&nbsp;: Velocity Made On Course</p>
+
+		<p><i>Au près&nbsp;: Vmg = cos (twa) * tws.</i></p>
+
+      <p><b>Conventions&nbsp;</b>:</p>
+		<p>Les distances sont en miles nautiques.</p>
+		<p>Les vitesses sont en nœuds.</p>
+		<p>Les fichiers Grib donnent les vitesses en mètres/seconde.</p>
+
+</div> <!-- notes -->
+</div> <!-- container -->
+<hr>
+
+<footer>
+René Rigault, 2025
+</footer>
+
+</body>
+</html>

@@ -25,29 +25,40 @@ header {
 .menu {
    text-align: left; 
    padding: 10px;
-   width: 30%;
+   width: 20%;
    /*border-right: 1px solid #ddd;*/
 }
 
 .main {
    padding: 10px;
-   width: 40%;
+   width: 60%;
+   background-color: #faebd7;
    /*background-color: #f4f4f4;*/
    /*border-right: 1px solid #ddd;*/
 }
 
 .notes {
    padding: 10px;
-   width: 30%;
+   margin-left: 20px;
 }
 
 .menu a {
    text-decoration: none;
-   background-color: LightGray;
+   /* background-color: LightGray;*/
    border: 1px solid white;
    color: black;
    width: 300px;
    display: block;
+}
+
+.menu li a {
+   text-decoration: none;
+   /* background-color: LightGray;*/
+   border: 1px solid white;
+   color: black;
+   width: 200px;
+   display: block;
+   font-style: italic;
 }
 
 .menu a:hover {
@@ -66,6 +77,12 @@ header {
    font-style: italic;
 }
 
+figcaption {
+   font-family:times;
+   color: gray;
+   font-size: 18px;
+}
+
 h1 {
    margin-top: 10px;
    font-size: 28px;
@@ -80,8 +97,9 @@ h2 {
 
 h3 {
    margin-top: 10px;
-   font-size: 20px;
+   font-size: 18px;
    color: black;
+   font-style: italic;
 }
 
 h4 {
@@ -92,6 +110,8 @@ h4 {
 
 pre {
    color: gray;
+   white-space: pre;       /* ou pre-nowrap */
+   overflow-x: auto;       /* barre de défilement horizontale si nécessaire */
 }
 
 code {
@@ -101,6 +121,11 @@ code {
 samp {
    font-style: italic;
    color: crimson;
+}
+
+ul ul {
+   font-size: 10px;
+   color: gray;
 }
 
 table, tr {
