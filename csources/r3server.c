@@ -40,14 +40,14 @@
 
 char *bigBuffer = NULL;
 
-const char *filter[] = {".csv", ".pol", ".grb", ".grb2", ".log", ".txt", ".par", NULL}; // global filter for REQ_DIR request
+const char *filter[] = {".csv", ".pol", ".grb", ".grb2", ".log", ".txt", ".par", "json", NULL}; // global filter for REQ_DIR request
 
-enum {REQ_KILL = -1793, REQ_TEST = 0, REQ_ROUTING = 1, REQ_BEST_DEP = 2, REQ_RACE = 3, REQ_POLAR = 4, 
+enum {REQ_KILL = -1793, REQ_TEST = 0, REQ_ROUTING = 1, REQ_COORD = 2, REQ_RACE = 3, REQ_POLAR = 4, 
       REQ_GRIB = 5, REQ_DIR = 6, REQ_PAR_RAW = 7, REQ_PAR_JSON = 8, 
       REQ_INIT = 9, REQ_FEEDBACK = 10, REQ_DUMP_FILE = 11, REQ_NEAREST_PORT = 12}; // type of request
 
 // level of authorization
-const int typeLevel [13] = {0, 1, ADMIN_LEVEL, ADMIN_LEVEL, 0, 0, 0, 0, 0, ADMIN_LEVEL, 0, 0, 0};        
+const int typeLevel [13] = {0, 1, 0, ADMIN_LEVEL, 0, 0, 0, 0, 0, ADMIN_LEVEL, 0, 0, 0};        
  
 char parameterFileName [MAX_SIZE_FILE_NAME];
 
@@ -64,9 +64,7 @@ typedef struct {
    int penalty1;                             // penalty in seconds fot Gybe
    int penalty2;                             // penalty in seconds for sail change
    int timeStep;                             // isoc time step in seconds
-   int timeInterval;                         // for REQ_BEST_DEP time interval in seconds between each try
    time_t epochStart;                        // epoch time to start routing
-   time_t timeWindow;                        // time window in seconds for bestTimeDeparture
    bool isoc;                                // true if isochrones requested
    bool isoDesc;                             // true if isochrone decriptor requested
    bool sortByName;                          // true if directory should be sorted by name, false if sorted by modif date
@@ -270,7 +268,21 @@ static char  *routeToStrJson (SailRoute *route, bool isoc, bool isoDesc, char *r
    return res;
 }
 
-/**
+/*! 
+ * information associated to coord (lat lon)
+ * isSea and isSeaTolerant
+ */
+static char *infoCoordToJson (double lat, double lon, char *res, size_t maxLen) {
+   bool sea = isSea (tIsSea, lat, lon);
+   bool seaTolerant = isSeaTolerant (tIsSea, lat, lon);
+   bool wind = isInZone (lat, lon, &zone);
+   bool current = isInZone (lat, lon, &currentZone);
+   snprintf (res, maxLen, "{\n  \"isSea\": %s,\n  \"isSeaTolerant\": %s,\n  \"inWind\": %s,\n  \"inCurrent\": %s\n}\n", 
+      sea ? "true" : "false", seaTolerant ? "true": "false", wind ? "true": "false", current ? "true": "false"); 
+   return res;
+}
+
+/*!
  * @brief Retrieves the real client IP address from HTTP headers.
  * 
  * @param headers A string containing the HTTP headers.
@@ -513,7 +525,6 @@ static bool initContext (const char *parameterFileName, const char *pattern) {
    char str [MAX_SIZE_LINE];
    char errMessage [MAX_SIZE_TEXT] = "";
    bool readGribRet;
-   char sailPolFileName [MAX_SIZE_NAME] = "";
 
    if (! readParam (parameterFileName, false)) {
       fprintf (stderr, "In initContext, Error readParam: %s\n", parameterFileName);
@@ -539,16 +550,13 @@ static bool initContext (const char *parameterFileName, const char *pattern) {
       printf ("Cur grib loaded: %s\n", par.currentGribFileName);
       printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (currentZone.dataDate [0], currentZone.dataTime [0], str, sizeof (str)));
    }
-   if (readPolar (true, par.polarFileName, &polMat, errMessage, sizeof (errMessage))) {
+   if (readPolar (true, par.polarFileName, &polMat, &sailPolMat, errMessage, sizeof (errMessage))) {
       printf ("Polar loaded   : %s\n", par.polarFileName);
-      newFileNameSuffix (par.polarFileName, "sailpol", sailPolFileName, sizeof (sailPolFileName));
-      if (readPolar (false, sailPolFileName, &sailPolMat, errMessage, sizeof (errMessage)))
-         printf ("Sail Pol.loaded: %s\n", sailPolFileName);
    }
    else
       fprintf (stderr, "In initContext, Error readPolar: %s\n", errMessage);
       
-   if (readPolar (true, par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage)))
+   if (readPolar (true, par.wavePolFileName, &wavePolMat, NULL, errMessage, sizeof (errMessage)))
       printf ("Polar loaded   : %s\n", par.wavePolFileName);
    else
       fprintf (stderr, "In initContext, Error readPolar: %s\n", errMessage);
@@ -612,7 +620,6 @@ static bool decodeHttpReq (const char *req, ClientRequest *clientReq) {
    memset (clientReq, 0, sizeof (ClientRequest));
    clientReq->type = -1;              // default unknown
    clientReq->timeStep = 3600;   
-   clientReq->timeInterval = 3600;
    clientReq->cogStep = 5;
    clientReq->rangeCog = 90;
    clientReq->kFactor = 1;
@@ -679,9 +686,7 @@ static bool decodeHttpReq (const char *req, ClientRequest *clientReq) {
       else if (sscanf (parts[i], "penalty0=%d", &clientReq->penalty0) == 1);                    // penalty0 extraction
       else if (sscanf (parts[i], "penalty1=%d", &clientReq->penalty1) == 1);                    // penalty1 extraction
       else if (sscanf (parts[i], "penalty2=%d", &clientReq->penalty2) == 1);                    // penalty2 (sail change)  extraction
-      else if (sscanf (parts[i], "timeInterval=%d", &clientReq->timeInterval) == 1);            // time Window extraction
       else if (sscanf (parts[i], "epochStart=%ld",  &clientReq->epochStart) == 1);              // time startextraction
-      else if (sscanf (parts[i], "timeWindow=%ld", &clientReq->timeWindow) == 1);               // time Window extraction
       else if (sscanf (parts[i], "polar=%255s", clientReq->polarName) == 1);                    // polar name
       else if (sscanf (parts[i], "wavePolar=%255s", clientReq->wavePolName) == 1);              // wave polar name
       else if (sscanf (parts[i], "file=%255s",  clientReq->fileName) == 1);                     // file name
@@ -729,8 +734,6 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    char strPolar [MAX_SIZE_FILE_NAME];
    char strGrib [MAX_SIZE_FILE_NAME];
    char directory [MAX_SIZE_DIR_NAME];
-   char sailPolFileName [MAX_SIZE_NAME] = "";
-   char errMessage [MAX_SIZE_TEXT] = "";
    // printf ("startInfo after: %s, startTime: %lf\n", asctime (&startInfo), par.startTimeInHours);
    if ((clientReq->nBoats == 0) || (clientReq->nWp == 0)) {
       snprintf (checkMessage, maxLen, "\"1: No boats or no Waypoints\"");
@@ -765,12 +768,9 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
       printf ("polar found: %s\n", strPolar);
       if (strncmp (par.polarFileName, strPolar, strlen (strPolar)) != 0) {
          printf ("read polar: %s\n", strPolar);
-         if (readPolar (false, strPolar, &polMat, checkMessage, maxLen)) {
+         if (readPolar (false, strPolar, &polMat, &sailPolMat, checkMessage, maxLen)) {
             g_strlcpy (par.polarFileName, strPolar, sizeof (par.polarFileName));
             printf ("Polar loaded   : %s\n", strPolar);
-            newFileNameSuffix (par.polarFileName, "sailpol", sailPolFileName, sizeof (sailPolFileName));
-            if (readPolar (false, sailPolFileName, &sailPolMat, errMessage, sizeof (errMessage)))
-               printf ("Sail Pol.loaded: %s\n", sailPolFileName);
          }
          else {
             snprintf (checkMessage, maxLen, "\"2: Error reading Polar: %s\"", clientReq->polarName);
@@ -783,7 +783,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
       printf ("wave polar found: %s\n", strPolar);
       if (strncmp (par.wavePolFileName, strPolar, strlen (strPolar)) != 0) {
          printf ("read wave polar: %s\n", strPolar);
-         if (readPolar (false, strPolar, &wavePolMat, checkMessage, maxLen)) {
+         if (readPolar (false, strPolar, &wavePolMat, NULL, checkMessage, maxLen)) {
             g_strlcpy (par.wavePolFileName, strPolar, sizeof (par.wavePolFileName));
             printf ("Wave Polar loaded : %s\n", strPolar);
          }
@@ -841,7 +841,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
 
    competitors.n = clientReq->nBoats;
    for (int i = 0; i < clientReq->nBoats; i += 1) {
-      if (! par.allwaysSea && ! isSea (tIsSea,  clientReq -> boats [i].lat,  clientReq -> boats [i].lon)) {
+      if (! par.allwaysSea && ! isSeaTolerant (tIsSea,  clientReq -> boats [i].lat,  clientReq -> boats [i].lon)) {
          snprintf (checkMessage, maxLen, 
             "\"5: Competitor not in sea.\",\n\"name\": \"%s\", \"lat\": %.6lf, \"lon\": %.6lf\n",
             clientReq -> boats [i].name, clientReq -> boats [i].lat, clientReq -> boats [i].lon);
@@ -861,7 +861,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    }
  
    for (int i = 0; i < clientReq->nWp; i += 1) {
-      if (! par.allwaysSea && ! isSea (tIsSea, clientReq->wp [i].lat, clientReq->wp [i].lon)) {
+      if (! par.allwaysSea && ! isSeaTolerant (tIsSea, clientReq->wp [i].lat, clientReq->wp [i].lon)) {
          snprintf (checkMessage, maxLen, 
             "\"7: WP or Dest. not in sea.\",\n\"lat\": %.2lf, \"lon\": %.2lf\n",
             clientReq->wp [i].lat, clientReq->wp [i].lon);
@@ -887,15 +887,6 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    }
 
    par.tStep = clientReq->timeStep / 3600.0;
-
-   // specific for bestTimeDeparture
-   chooseDeparture.count = 0;
-   chooseDeparture.tInterval = clientReq->timeInterval / 3600.0;
-   chooseDeparture.tBegin = par.startTimeInHours;
-   if (clientReq->timeWindow > 0)
-      chooseDeparture.tEnd = chooseDeparture.tBegin + (clientReq->timeWindow / 3600.0);
-   else
-      chooseDeparture.tEnd = INT_MAX; // all grib window Grib time will be used.
 
    par.pOr.lat = clientReq->boats [0].lat;
    par.pOr.lon = clientReq->boats [0].lon;
@@ -1043,10 +1034,6 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
              const char *date, const char *clientIPAddress, const char *userAgent, char *outBuffer, size_t maxLen) {
    char tempFileName [MAX_SIZE_FILE_NAME];
    char checkMessage [MAX_SIZE_TEXT];
-   char sailPolFileName [MAX_SIZE_NAME] = "";
-   char str [MAX_SIZE_TEXT_FILE] = "";
-   char strSail [MAX_SIZE_TEXT_FILE] = "";
-   char legendStr[MAX_SIZE_LINE] = "";
    char directory [MAX_SIZE_DIR_NAME];
    bigBuffer [0] = '\0';
    // printf ("client.req = %d\n", clientReq->type);
@@ -1065,41 +1052,29 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
          routeToStrJson (&route, clientReq->isoc, clientReq->isoDesc, outBuffer, maxLen); 
       }
       else {
-         snprintf (outBuffer, maxLen, "{\"_Error\":\n%s\n}\n", checkMessage);
+         snprintf (outBuffer, maxLen, "{\"_Error\":\n\"%s\"\n}\n", checkMessage);
       }
       break;
-   case REQ_POLAR:
-      str [0] = '\0'; strSail [0] = '\0'; legendStr [0] = '\0';
-      printf ("polarName: %s\n", clientReq->polarName);
-      if (strstr (clientReq->polarName, "wavepol") != NULL) {
-         polToStrJson (clientReq->polarName, "wavePolarName", str, sizeof (str));
-         g_strlcat (outBuffer, "[", maxLen);
-         g_strlcat (outBuffer, str, maxLen);
-         g_strlcat (outBuffer, ",\n {}, {}]\n", maxLen);
-         break;
-      }
-
-      if (clientReq->polarName [0] != '\0') {
-         polToStrJson (clientReq->polarName, "polarName", str, sizeof (str));
-         newFileNameSuffix (clientReq->polarName, "sailpol", sailPolFileName, sizeof (sailPolFileName));
+   case REQ_COORD:
+      if (clientReq->nBoats > 0) {
+         infoCoordToJson (clientReq->boats [0].lat, clientReq->boats [0].lon, outBuffer, maxLen);
       }
       else {
-         polToStrJson (par.polarFileName, "polarName", str, sizeof (str));
-         newFileNameSuffix (par.polarFileName, "sailpol", sailPolFileName, sizeof (sailPolFileName));
+         snprintf (outBuffer, maxLen, "{\"_Error\":\n\"No Boat\"\n}\n");
       }
-      polToStrJson (sailPolFileName, "sailName", strSail, sizeof (strSail));
-      if (g_str_has_prefix (strSail, "{}"))
-         g_strlcpy (legendStr, "{}", sizeof (legendStr));
-      else 
-         sailLegendToStrJson (sailName, MAX_N_SAIL, legendStr, sizeof (legendStr));
-
-      g_strlcat (outBuffer, "[", maxLen);
-      g_strlcat (outBuffer, str, maxLen);
-      g_strlcat (outBuffer, ", ", maxLen);
-      g_strlcat (outBuffer, strSail, maxLen);
-      g_strlcat (outBuffer, ", ", maxLen);
-      g_strlcat (outBuffer, legendStr, maxLen);
-      g_strlcat (outBuffer, "]\n", maxLen);
+      break;
+      
+   case REQ_POLAR:
+      if (clientReq->polarName [0] != '\0') {
+         if (strstr (clientReq->polarName, "wavepol")) {
+            polToStrJson (clientReq->polarName, "wavePolarName", outBuffer, maxLen);
+         }
+         else {
+            polToStrJson (clientReq->polarName , "polarName", outBuffer, maxLen);
+         }
+         break;
+      }
+      polToStrJson (par.polarFileName, "polarName", outBuffer, maxLen);
       break;
    case REQ_GRIB:
       if (clientReq->model [0] != '\0' && clientReq->gribName [0] == '\0') { // there is a model specified but no grib file

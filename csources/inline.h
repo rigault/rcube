@@ -12,6 +12,19 @@ static inline bool isSea (char * isSeaArray, double lat, double lon) {
    return isSeaArray [(iLat * 3601) + iLon];
 }
 
+/*! say if point is in sea */
+static inline bool isSeaTolerant (char * isSeaArray, double lat, double lon) {
+   if (isSeaArray == NULL) return true;
+   int iLonInf = floor (lon * 10  + 1800);
+   int iLonSup = ceil (lon * 10  + 1800);
+   int iLatInf = floor (-lat * 10  + 900);
+   int iLatSup = ceil (-lat * 10  + 900);
+   return isSeaArray [(iLatInf * 3601) + iLonInf]
+       || isSeaArray [(iLatInf * 3601) + iLonSup]
+       || isSeaArray [(iLatSup * 3601) + iLonInf]
+       || isSeaArray [(iLatSup * 3601) + iLonSup];
+}
+
 /*! return lon on ]-180, 180 ] interval */
 static inline double lonCanonize (double lon) {
   return remainder (lon, 360.0);

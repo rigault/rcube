@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <locale.h>
 #include <math.h>
+#include <ctype.h>
 #include "glibwrapper.h"
 #include "r3types.h"
 #include "inline.h"
@@ -94,19 +95,19 @@ static bool polarCheck (PolMat *mat, char *report, size_t maxLen) {
 
 /*! read polar file and fill poLMat matrix 
    if check then polarCheck */
-bool readPolar (bool check, const char *fileName, PolMat *mat, char *errMessage, size_t maxLen) {
+static bool readPolarCsv (const char *fileName, PolMat *mat, char *errMessage, size_t maxLen) {
    FILE *f = NULL;
    char buffer [MAX_SIZE_TEXT];
    char *pLine = &buffer [0];
    char *strToken;
-   double v = 0;
+   double v = 0.0, max = 0.0;
    int c;
 
    errMessage [0] = '\0';
-   mat->nLine = 0;
-   mat->nCol = 0;
+   strlcpy (mat->jsonHeader, "null", sizeof mat->jsonHeader); // important !
+   
    if ((f = fopen (fileName, "r")) == NULL) {
-      snprintf (errMessage, maxLen,  "Error in readPolar: cannot open: %s\n", fileName);
+      snprintf (errMessage, maxLen,  "Error in readPolarCsv: cannot open: %s\n", fileName);
       return false;
    }
    while (fgets (pLine, MAX_SIZE_TEXT, f) != NULL) {
@@ -118,6 +119,7 @@ bool readPolar (bool check, const char *fileName, PolMat *mat, char *errMessage,
       while ((strToken != NULL) && (c < MAX_N_POL_MAT_COLS)) {
          if (strtodNew (strToken, &v)) {
             mat->t [mat->nLine][c] = v;
+            if ((mat->nLine != 0) && (c != 0)) max = fmax (max, v);
             c += 1;
          }
          if ((mat->nLine == 0) && (c == 0))
@@ -126,33 +128,23 @@ bool readPolar (bool check, const char *fileName, PolMat *mat, char *errMessage,
       }
       if (c <= 2) continue; // line is not validated if not at least 2 columns
       if (c >= MAX_N_POL_MAT_COLS) {
-         snprintf (errMessage, maxLen, "Error in readPolar: max number of colums: %d\n", MAX_N_POL_MAT_COLS);
+         snprintf (errMessage, maxLen, "Error in readPolarCsv: max number of colums: %d\n", MAX_N_POL_MAT_COLS);
          fclose (f);
          return false;
       }
       mat->nLine += 1;
       
       if (mat->nLine >= MAX_N_POL_MAT_LINES) {
-         snprintf (errMessage, maxLen, "Error in readPolar: max number of line: %d\n", MAX_N_POL_MAT_LINES);
+         snprintf (errMessage, maxLen, "Error in readPolarCsv: max number of line: %d\n", MAX_N_POL_MAT_LINES);
          fclose (f);
          return false;
       }
       if (mat->nLine == 1) mat->nCol = c; // max
    }
    mat->t [0][0] = -1;
+   mat->maxAll = max;
    fclose (f);
-   if (check)
-      polarCheck (mat, errMessage, maxLen);
    return true;
-}
-
-/*! return the max value found in polar */
-double maxValInPol (const PolMat *mat) {
-   double max = 0.0;
-   for (int i = 1; i < mat->nLine; i++)
-      for (int j = 1; j < mat->nCol; j++) 
-         if (mat->t [i][j] > max) max = mat->t [i][j];
-   return max;
 }
 
 /*! return VMG: angle and speed at TWS: pres */
@@ -200,21 +192,246 @@ char *polToStr (const PolMat *mat, char *str, size_t maxLen) {
    g_strlcat (str, line, maxLen);
    snprintf (line, MAX_SIZE_LINE, "Number of lines in polar: %d\n", mat->nLine);
    g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, "Max                     : %.2lf\n", maxValInPol (mat));
+   snprintf (line, MAX_SIZE_LINE, "Max                     : %.2lf\n", mat->maxAll);
+   g_strlcat (str, line, maxLen);
+   snprintf (line, MAX_SIZE_LINE, "nSail                   : %.2ld\n", mat->nSail);
    g_strlcat (str, line, maxLen);
    return str;
+}
+
+/*! add a new sail in PoMat object */
+static bool addSail (PolMat *polMat, int id, char *name, double max) {
+   const int nSail = polMat->nSail;
+   if (nSail >= MAX_N_SAIL - 1) return false;
+   polMat->tSail [nSail].id = id;
+   strlcpy (polMat->tSail [nSail].name, name, MAX_SIZE_NAME);
+   polMat->tSail [nSail].max = max;
+   polMat->nSail += 1;
+   polMat->maxAll = fmax (max, polMat->maxAll);
+   return true;
+} 
+
+/* update polMat and sailPolMat with new sail found in Json str */
+static char *findSailPol (char *str, PolMat *polMat, PolMat *sailPolMat, char *message, size_t maxLen) {
+   double sailId, maxVal = 0.0;
+   int nTws = 0, maxNTws= 0, nTwa = 0;
+   char *sailName, *endPtr;
+   char *pt = strstr (str, "\"id\":");
+
+   if (pt == NULL) return NULL;
+   pt += 5;
+   sailId = strtod (pt, &endPtr);
+   if (endPtr == pt) return NULL;
+   pt = endPtr;
+
+   pt = strstr (str, "\"name\":");
+   if (pt == NULL) return NULL;
+   pt = strchr (pt + strlen ("name") + 2, '"');
+   if (pt == NULL) return NULL;
+   sailName = pt + 1;
+   pt = strchr (sailName, '"');
+   *pt = '\0';
+   pt += 1;
+   pt = strstr (pt, "\"speed\":");
+   if (pt == NULL) return NULL;
+   pt += 8; 
+   // printf ("speed:\n");
+   pt = strstr (pt, "[");
+   if (pt == NULL) return NULL;
+   pt += 1;
+   while (isspace (*pt)) pt += 1;
+   pt = strstr (pt, "[");
+   if (pt == NULL) return NULL;
+   pt += 1;
+   while (pt) {
+      nTws = 0;
+      while ((*pt == ',') || (*pt == '[') || isspace (*pt)) pt += 1; // important
+      while (pt) {
+         double val = strtod (pt, &endPtr);
+         if (pt == endPtr) {
+            fprintf (stderr, "In findSailPol, Error: No value at nTwa: %d, nTWs: %d\n", nTwa, nTws);
+         }
+         if ((val >= polMat->t [nTwa + 1][nTws + 1]) && (val > 0.0)) {
+            polMat->t [nTwa + 1][nTws + 1] = val;
+            sailPolMat->t [nTwa + 1][nTws + 1] = sailId;
+            if (fabs (sailId - round (sailId)) > 0.2) {
+               fprintf (stderr, "In findSail, Error: Strange Value for saiId: %.2lf\n", sailId);
+            }
+            maxVal = fmax (val, maxVal);
+         }
+         
+         nTws += 1;
+         // printf ("%.2lf ", val);
+         while (isspace (*endPtr)) endPtr += 1;
+         if (*endPtr == ']') {  
+            break;
+         }
+         pt = endPtr + 1;
+      }
+      pt = endPtr + 1;
+      maxNTws = fmax (nTws, maxNTws);
+      nTwa += 1;
+      while (isspace (*pt)) pt += 1;
+      // printf ("\nbefore end\n");
+      if (*endPtr == ']') { // research of ]]
+         endPtr += 1;
+         while (isspace (*endPtr)) endPtr += 1;
+         if (*endPtr == ']') break;
+      }
+      // printf ("\n");
+   }
+   if (nTws != polMat->nCol -1) {
+      snprintf (message, maxLen, "nTws = %d and polMat->nCol-1 = %d should be equal\n", nTws, polMat->nCol-1);
+      return NULL;
+   }
+   if (nTwa != polMat->nLine -1) {
+      snprintf (message, maxLen, "nTwa = %d and polMat->nLine-1 = %d should be equal\n", nTwa, polMat->nLine-1);
+      return NULL;
+   }
+      
+   if (! addSail (polMat, sailId, sailName, maxVal)) return NULL;
+   return pt;
+}
+
+/*! update polMat and sailPolMat this tws ans twa lists found in Json str */
+static char *findListPol (bool isTws, char *str, const char *startWith, PolMat *polMat, PolMat *sailPolMat, char *message, size_t maxLen) {
+   char *pt = strstr (str, startWith);
+   // printf ("pt: %s\n", pt);
+   char *endPtr;
+   int size = 0;
+   if (pt == NULL)  {
+      snprintf (message, maxLen, "In findListPol, Error: %s not found.\n", startWith);
+      return NULL;
+   }
+   pt += strlen (startWith);
+   while (isspace (*pt)) pt += 1;
+   if (*pt != '[')  {
+      snprintf (message, maxLen, "In findListPol, Error: [ not found after %s.\n", startWith);
+      return NULL;
+   }
+   pt += 1;
+   for (int n = 1; pt != NULL; n += 1) {
+      double val = strtod (pt, &endPtr);
+      if (endPtr == pt) break;
+      if (isTws) polMat->t [0][n] = sailPolMat->t [0][n] = val;
+      else polMat->t [n][0] = sailPolMat->t [n][0] = val;
+      if (pt == endPtr) break;
+      size += 1;
+      // printf ("%.2lf ", val);
+      while (isspace (*endPtr)) endPtr += 1;
+      if (*endPtr == ']') {  
+         break;
+      }
+      pt = endPtr + 1;
+   }
+   if (pt == NULL)  {
+      snprintf (message, maxLen, "In findListPol, Error: ] end not found for %s\n", startWith);
+      return NULL;
+   }
+   // printf ("\n");
+   if (isTws) polMat->nCol = sailPolMat->nCol = size + 1;
+   else polMat->nLine = sailPolMat->nLine = size + 1;
+
+   return pt;
+}
+
+/*!
+   read polar in json format (eg. VirtualRegatta) with several sails
+*/
+static bool readPolarJson (const char *fileName, PolMat *polMat, PolMat *sailPolMat, char *errMessage, size_t maxLen) {
+   char buffer [1000000];
+   char str [1000000];
+   char start [9000];
+   char *line = &buffer [0];
+   buffer [0] = '\0';
+   char *begin, *ptr;
+   FILE *f;
+   errMessage [0] = '\0';
+
+   if ((f = fopen (fileName, "r")) == NULL) {
+      snprintf (errMessage, maxLen, "Error Cannot open: %s\n", fileName);
+      return false;
+   }
+   while (fgets (str, sizeof str, f) != NULL) strlcat (buffer, str, sizeof buffer);
+
+   if (line [0] != '\0') {
+      ptr = strstr (line, "\"tws\":");
+      if (ptr == NULL) {
+         snprintf (errMessage, maxLen, "\"tws\": not found\n");
+         return false;
+      }
+      begin = strstr (line, "\"_id\"");
+      if (begin == NULL) {
+         snprintf (errMessage, maxLen, "[ _id: not found\n");
+         return false;
+      }
+      strlcpy (start, begin, (ptr-begin));
+      g_strstrip (start);
+      int len = strlen (start);
+      if (start [len - 1] == ',') start [len - 1 ] = '\0';     // last comma elimination if exist 
+      snprintf (polMat->jsonHeader, sizeof polMat->jsonHeader, "{%s\n}", start);
+
+      line = findListPol (true, line, "\"tws\":", polMat, sailPolMat, errMessage, maxLen);
+      if (line == NULL) return false;
+      line = findListPol (false, line, "\"twa\":", polMat, sailPolMat, errMessage, maxLen);
+      if (line == NULL) return false;
+      line = strstr (line, "\"sail\":");
+      if (line == NULL) {
+         snprintf (errMessage, maxLen, "\"sail\": not found\n");
+         return false;
+      }
+      line += strlen ("sail") + 2;
+      while (line) {
+         line = findSailPol (line, polMat, sailPolMat, errMessage, maxLen);
+      }
+   }
+   fclose (f);
+   polMat->fromJson = sailPolMat->fromJson = true;
+   return errMessage [0] == '\0';
+}
+
+/*! Launch readPolarCsv or readPolarJson according to type */
+bool readPolar (bool check, const char *fileName, PolMat *mat, PolMat *sailPolMat, char *errMessage, size_t maxLen) {
+   char sailPolFileName [MAX_SIZE_NAME] = "";
+   bool res = false;
+   if (!mat) return false;
+   *mat = (PolMat){0}; // set all to zero
+   if (sailPolMat) *sailPolMat = (PolMat){0}; // set all to zero if not NULL
+
+   if (g_str_has_suffix (fileName, ".json")) {
+      res = readPolarJson (fileName, mat, sailPolMat, errMessage, maxLen);
+   }
+   else {
+      res = readPolarCsv (fileName, mat, errMessage, maxLen);
+      if (res && sailPolMat != NULL) {  // read addotional polar for sail numbers
+         newFileNameSuffix (fileName, "sailpol", sailPolFileName, sizeof (sailPolFileName));
+         if (readPolarCsv (sailPolFileName, sailPolMat, errMessage, maxLen)) { 
+            mat->nSail = sailPolMat->maxAll; // Number of sail max is the number of sails
+            if (SAIL_NAME_SIZE < mat->nSail) {
+               fprintf (stderr, "in readPolar, Error: size of SAIL_NAME: %ld not enough for nSail: %ld\n",
+                    SAIL_NAME_SIZE, mat->nSail);
+            }
+         }
+         else mat->nSail = 1;
+      }
+   }
+   if (check) polarCheck (mat, errMessage, maxLen);
+   return res;
 }
 
 /*! write polar information in string Json format */
 char *polToStrJson (const char *fileName, const char *objName, char *out, size_t maxLen) {
    char polarName [MAX_SIZE_FILE_NAME];
    char errMessage [MAX_SIZE_LINE];
-   char str [MAX_SIZE_TEXT];
-   PolMat mat;
+   char str [MAX_SIZE_TEXT] = "";;
+   char *pt;
+   PolMat mat, sailMat;
    buildRootName (fileName, polarName, sizeof (polarName));
+   mat.nSail = 0;
+   out [0] = '\0';
 
-   if (!readPolar (false, polarName, &mat, errMessage, sizeof (errMessage))) {
-      fprintf (stderr, "In polToJson Error: %s\n", errMessage);
+   if (!readPolar (false, polarName, &mat, &sailMat, errMessage, sizeof (errMessage))) {
+      fprintf (stderr, "%s", errMessage);
       snprintf (out, maxLen, "{}\n");
       return out;
    }
@@ -223,31 +440,59 @@ char *polToStrJson (const char *fileName, const char *objName, char *out, size_t
       snprintf (out, maxLen, "{}\n");
       return out;
    }
-   snprintf (out, maxLen, "{\"%s\": \"%s\", \"nLine\": %d, \"nCol\":%d, \"max\":%.2lf, \"array\":\n[\n", 
-                objName, polarName, mat.nLine, mat.nCol, maxValInPol (&mat));
+   
+   snprintf (out, maxLen, 
+      "{\"header\": %s,\n\"%s\": \"%s\", \"nLine\": %d, \"nCol\": %d, \"nSail\": %ld, \"max\": %.2lf, \"fromJson\": %s, \n\"array\":\n[\n", 
+       mat.jsonHeader, objName, polarName, mat.nLine, mat.nCol, mat.nSail, mat.maxAll, mat.fromJson ? "true" : "false");
 
+   // generate two dimensions array with the values 
    for (int i = 0; i < mat.nLine ; i++) {
       g_strlcat (out, "   [", maxLen);
       for (int j = 0; j < mat.nCol - 1; j++) {
-         snprintf (str, sizeof (str), "%.4f, ", mat.t [i][j]);
+         snprintf (str, sizeof str, "%.4f, ", mat.t [i][j]);
          g_strlcat (out, str, maxLen);
       }
       snprintf (str, sizeof (str), "%.4f]%s\n", mat.t [i][mat.nCol -1], (i < mat.nLine - 1) ? "," : "");
       g_strlcat (out, str, maxLen);
    }
-   g_strlcat (out, "]}\n", maxLen);
-   return out;
-}
-
-/*! write legend about sail in string Json format */
-char *sailLegendToStrJson (const char *sailName [], size_t len, char *out, size_t maxLen) {
-   char str [MAX_SIZE_TEXT];
-   snprintf (out, maxLen, "{\"legend\": [");
-   for (size_t i = 0; i < len; i += 1) {
-      snprintf (str, sizeof (str), "\"%s\"%s", sailName [i], (i < len -1) ? ", " : "");
+   g_strlcat (out, "]", maxLen);
+   if (mat.nSail <= 1) { // no sail specification
+      g_strlcat (out, "\n}\n", maxLen);
+      return out;
+   }
+   // if several sails, generate two domensions array with sail number
+   g_strlcat (out, ",\n", maxLen);
+   g_strlcat (out, "\"arraySail\":\n[\n", maxLen);
+   
+   for (int i = 0; i < mat.nLine ; i++) {
+      g_strlcat (out, "   [", maxLen);
+      for (int j = 0; j < mat.nCol - 1; j++) {
+         snprintf (str, sizeof str, "%.4f, ", sailMat.t [i][j]);
+         g_strlcat (out, str, maxLen);
+      }
+      snprintf (str, sizeof (str), "%.4f]%s\n", sailMat.t [i][mat.nCol -1], (i < mat.nLine - 1) ? "," : "");
       g_strlcat (out, str, maxLen);
    }
-   g_strlcat (out, "]}\n", maxLen);
+   g_strlcat (out, "],\n", maxLen);
+   // genrate one dimension array that list th name of sail, ordered NA = 0, Sail1, sail2 etc
+   g_strlcat (out, "\"legend\": [", maxLen);
+   if (g_str_has_suffix (fileName, ".json")) {
+      g_strlcat (out, "\"NA\",", maxLen); // first is NA (id 0)
+      for (size_t i = 0; i < mat.nSail; i += 1) {
+         snprintf (str, sizeof str, "\"%s\"%s", mat.tSail [i].name, (i < mat.nSail -1) ? ", " : "");
+         g_strlcat (out, str, maxLen);
+      }
+   }
+   else {
+      for (size_t i = 0; i <= mat.nSail; i += 1) {
+         snprintf (str, sizeof (str), "\"%s\",", SAIL_NAME [i]);
+         g_strlcat (out, str, maxLen);
+      }
+      pt = strrchr (out, ',');
+      if (pt) *pt = '\0'; // delete laste comma
+   }
+
+   g_strlcat (out, "]\n", maxLen);
+   g_strlcat (out, "}\n", maxLen);
    return out;
 }
-

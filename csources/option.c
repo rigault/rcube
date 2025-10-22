@@ -34,7 +34,7 @@ static bool initScenarioOption (void) {
       printf ("Cur grib loaded: %s\n", par.currentGribFileName);
       printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (currentZone.dataDate [0], currentZone.dataTime [0], str, sizeof (str)));
    }
-   if (readPolar (true, par.polarFileName, &polMat, errMessage, sizeof (errMessage))) {
+   if (readPolar (true, par.polarFileName, &polMat, &sailPolMat, errMessage, sizeof (errMessage))) {
       printf ("Polar loaded   : %s\n", par.polarFileName);
    }
    else {
@@ -42,7 +42,7 @@ static bool initScenarioOption (void) {
       return false;
    }
       
-   if (readPolar (true, par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage)))
+   if (readPolar (true, par.wavePolFileName, &wavePolMat, NULL, errMessage, sizeof (errMessage)))
       printf ("Polar loaded   : %s\n", par.wavePolFileName);
    else
       fprintf (stderr, "In initScenatioOption, Error readPolar: %s\n", errMessage);
@@ -52,7 +52,6 @@ static bool initScenarioOption (void) {
 /*! Manage command line option reduced to one character */
 void optionManage (char option) {
 	FILE *f = NULL;
-   char sailPolFileName [MAX_SIZE_NAME] = "";
    char directory [MAX_SIZE_DIR_NAME];
    char *buffer = NULL;
    char footer [MAX_SIZE_LINE] = "";
@@ -123,9 +122,7 @@ void optionManage (char option) {
       fclose (f);
       break;
    case 'p': // polar
-      readPolar (true, par.polarFileName, &polMat, errMessage, sizeof (errMessage));
-      newFileNameSuffix (par.polarFileName, "sailpol", sailPolFileName, sizeof (sailPolFileName));
-      readPolar (false, sailPolFileName, &sailPolMat, errMessage, sizeof (errMessage));
+      readPolar (true, par.polarFileName, &polMat, &sailPolMat, errMessage, sizeof (errMessage));
       polToStr (&polMat, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       polToStr (&sailPolMat, buffer, MAX_SIZE_BUFFER);
@@ -137,11 +134,11 @@ void optionManage (char option) {
          if (scanf ("%lf", &tws) < 1) break;
          printf ("Old Speed over ground: %.2lf\n", oldFindPolar (twa, tws, &polMat));
          printf ("Speed over ground: %.2lf\n", findPolar (twa, tws, &polMat, &sailPolMat, &sail));
-         printf ("Sail: %d, Name: %s\n", sail, sailName [sail % MAX_N_SAIL]); 
+         printf ("Sail: %d,", sail); 
       }
       break;
    case 'P': // Wave polar
-      readPolar (true, par.wavePolFileName, &wavePolMat, errMessage, sizeof (errMessage));
+      readPolar (true, par.wavePolFileName, &wavePolMat, NULL, errMessage, sizeof (errMessage));
       polToStr (&wavePolMat, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
@@ -153,7 +150,7 @@ void optionManage (char option) {
       }
       break;
    case 'q':
-      readPolar (true, par.polarFileName, &polMat, errMessage, sizeof (errMessage));
+      readPolar (true, par.polarFileName, &polMat, &sailPolMat, errMessage, sizeof (errMessage));
       polToStr (&polMat, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {

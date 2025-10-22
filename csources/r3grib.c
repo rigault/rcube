@@ -544,26 +544,29 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
    char str0 [MAX_SIZE_NAME] = "";
    char str1 [MAX_SIZE_NAME] = "";
    char centreName [MAX_SIZE_NAME] = "";
+   struct tm tm_buf, *tm_info;
+   char strTime [20] = "1970-01-01 00:00:00";
    Zone gZone;
+
    buildRootName (fileName, gribName, sizeof (gribName));
 
    if (stat (gribName, &st) != 0) {
-      fprintf (stderr, "In gribToJson Error stat: %s\n", gribName);
+      fprintf (stderr, "In gribToStrJson Error stat: %s\n", gribName);
       snprintf (out, maxLen, "{}\n");
       return out;
    }
    if (! readGribLists (gribName, &gZone)) {
-      fprintf (stderr, "In gribToJson Error reading: %s\n", gribName);
+      fprintf (stderr, "In gribToStrJson Error reading: %s\n", gribName);
       snprintf (out, maxLen, "{}\n");
       return out;
    }
    if (! readGribParameters (gribName, &gZone)) {
-      fprintf (stderr, "In gribToJson Error reading: %s\n", gribName);
+      fprintf (stderr, "In gribToStrJson Error reading: %s\n", gribName);
       snprintf (out, maxLen, "{}\n");
       return out;
    }
    if (gZone.nbLat == 0) {
-      fprintf (stderr, "In gribToJson Error no value available in: %s\n", gribName);
+      fprintf (stderr, "In gribToStrJson Error no value available in: %s\n", gribName);
       snprintf (out, maxLen, "{}\n");
       return out;
    }
@@ -604,7 +607,12 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
       g_strlcat (out, str, maxLen);
    }
    g_strlcat (out, "],\n", maxLen);
-   snprintf (str, sizeof (str),  "  \"fileName\": \"%s\", \"fileSize\": %ld,\n", gribName, st.st_size);
+
+   tm_info = localtime_r (&st.st_mtime, &tm_buf);
+   if (tm_info) strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S", tm_info);
+
+   snprintf (str, sizeof (str),  "  \"fileName\": \"%s\", \"fileSize\": %ld, \"fileTime\": \"%s\",\n", 
+            gribName, st.st_size, strTime);
    g_strlcat (out, str, maxLen);
 
    if ((gZone.nDataDate != 1) || (gZone.nDataTime != 1)) {

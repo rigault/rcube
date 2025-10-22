@@ -40,6 +40,8 @@
 #define MAX_N_ISOC            (384 + 1) * 4     // Max Hours in 16 days * 4 times per hours Max (tSep = 15 mn) required for STATIC way
 #define MAX_N_POL_MAT_COLS    128               // Max number of column in polar
 #define MAX_N_POL_MAT_LINES   128               // Max number of lines in polar
+#define MAX_SIZE_JSON_HEADER  10000             // Max size json header when reading polar json
+
 #define MAX_SIZE_LINE         256		         // Max size of pLine in text files
 #define MAX_SIZE_STD          1024		         // Max size of lines standard
 #define MAX_SIZE_LINE_BASE64  1024              // Max size of line in base64 mail file
@@ -67,7 +69,7 @@
 #define N_METEO_ADMIN         4                 // administration: Weather Service US, DWD, etc
 
 #define MAX_N_COMPETITORS     10                // Number Max of competitors
-#define MAX_N_SAIL            8                 // Max number of sails in sailName table
+#define MAX_N_SAIL            32                // Max number of sails in PolMat object
 #define MAX_N_SECTORS         3600              // Max number of sectors for optimization of sectors
 #define LIMIT_SOG             100               // for SOG error detection
 
@@ -194,11 +196,20 @@ typedef struct {
    double focalLon;        // focal point Lon
 } IsoDesc;
 
-/*! polat Matrix description */
+/*! polar Matrix description */
 typedef struct {
+   char jsonHeader [MAX_SIZE_JSON_HEADER];
    double t [MAX_N_POL_MAT_LINES][MAX_N_POL_MAT_COLS];
+   double maxAll;
    int    nLine;
    int    nCol;
+   bool   fromJson;
+   size_t nSail;
+   struct {
+      int id;
+      char name [MAX_SIZE_NAME];
+      double max;
+   } tSail [MAX_N_SAIL]; 
 } PolMat;
 
 /*! Point for way point route */

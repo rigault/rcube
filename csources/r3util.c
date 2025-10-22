@@ -35,8 +35,9 @@ MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 const struct MeteoElmt meteoTab [N_METEO_ADMIN] = {{7, "Weather service US"}, {78, "DWD Germany"}, {85, "Meteo France"}, {98,"ECMWF European"}};
 
 /*! sail attributes */
-const char *sailName [MAX_N_SAIL] = {"NA", "C0", "HG", "Jib", "LG", "LJ", "Spi", "SS"}; // for sail polars
-const char *colorStr [MAX_N_SAIL] = {"black", "green", "purple", "gray", "blue", "yellow", "orange", "red"};
+const size_t SAIL_NAME_SIZE = 8;
+const char *SAIL_NAME [] = {"NA", "C0", "HG", "Jib", "LG", "LJ", "Spi", "SS"}; // for sail polars
+// const char *colorStr [] = {"black", "green", "purple", "gray", "blue", "yellow", "orange", "red"};
 
 /*! list of wayPoint */
 WayPointList wayPoints;
@@ -65,8 +66,12 @@ Zone currentZone;                      // current
 
 /*! return the name of the sail */
 char *fSailName (int val, char *str, size_t maxLen) {
-   if (val >= 0 && val < MAX_N_SAIL) g_strlcpy (str, sailName [val], maxLen);
-   else g_strlcpy (str, "--", maxLen);
+   if (polMat.fromJson && val > 0 && val <= (int) polMat.nSail)
+      strlcpy (str, polMat.tSail[val-1].name, maxLen);
+   else if (! polMat.fromJson && val >= 0 && val < (int) polMat.nSail)
+      strlcpy (str, SAIL_NAME [val], maxLen);
+   else 
+      g_strlcpy (str, "--", maxLen);
    return str;
 }
 

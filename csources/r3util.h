@@ -12,8 +12,8 @@ extern MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 extern struct MeteoElmt meteoTab [N_METEO_ADMIN];
 
 /* sail attributes */
-extern const char *sailName [];
-extern const char *colorStr [];
+extern const size_t SAIL_NAME_SIZE;
+extern const char *SAIL_NAME [];
 
 /*! polar description */
 extern PolMat polMat;
