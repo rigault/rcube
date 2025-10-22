@@ -1,6 +1,8 @@
 const MS_TO_KN = (3600.0/1852.0);   // conversion meter/second to knots
 
-const sailLegend = {
+const DMS_DISPLAY = {BASIC: 0, DD: 1, DM: 2, DMS: 3};
+
+/*const sailLegend = {
   NA:     { bg: "black",  luminance: 0 },
   C0:     { bg: "green",  luminance: 85 },
   HG:     { bg: "purple", luminance: 48 },
@@ -9,6 +11,22 @@ const sailLegend = {
   LJ:     { bg: "yellow", luminance: 210 },
   Spi:    { bg: "orange", luminance: 170 },
   SS:     { bg: "red",    luminance: 76 }
+};*/
+
+const sailLegend = {
+  NA:     { bg: "black",  luminance: 0 },
+  Jib:    { bg: "gray",   luminance: 128 },
+  Spi:    { bg: "orange", luminance: 170 },
+  SS:     { bg: "red",    luminance: 76 },
+  Staysail: { bg: "red",    luminance: 76 },
+  LJ:     { bg: "yellow", luminance: 210 },
+  LightJib: { bg: "yellow",   luminance: 210 },
+  C0:     { bg: "green",  luminance: 85 },
+  Code0:    { bg: "green",  luminance: 85 },
+  HG:     { bg: "purple", luminance: 48 },
+  HeavyGnk: { bg: "purple", luminance: 48 },
+  LG:     { bg: "blue",   luminance: 29 },
+  LightGnk: { bg: "blue",   luminance: 29 },
 };
 
 /**
@@ -110,68 +128,69 @@ function formatDurationShort (seconds) {
 }
 
 /**
- * Converts a coordinate in DMS format to decimal degrees.
+ * Converts a coordinate in DMS format to decimal degree".
  * @param {string} dms - The coordinate in DMS format (e.g., "46°24'33"N").
  * @returns {number} The decimal degrees equivalent of the DMS input.
  */
 function dmsToDecimal (dms) {
-  if (!dms) return 0;
-  const parts = dms.match(/(\d+)\u00B0(?:\s*(\d+)')?(?:\s*(\d+(?:\.\d+)?)\")?\s*([NSEW])/);
-  if (!parts) return 0;
-  let [_, d, m, s, dir] = parts;
-  let decimal = parseFloat(d);
-  if (m) decimal += parseFloat(m) / 60;
-  if (s) decimal += parseFloat(s) / 3600;
-  if (dir === 'S' || dir === 'W') decimal *= -1;
-  return decimal;
+   if (!dms) return 0;
+   let decimal, m, s;
+   if ((dms.includes("°")) && (dms.includes("'")) && (dms.includes('"'))) {// X° Y' Z" 
+      decimal = parseFloat(dms);
+      m = parseFloat(dms.split('°')[1]);
+      s = parseFloat(dms.split("'")[1]);
+      if (m) decimal += parseFloat(m) / 60;
+      if (s) decimal += parseFloat(s) / 3600;
+      if (dms.includes('S') || dms.includes('W')) decimal *= -1;
+      return decimal;
+   }
+   if ((dms.includes("°")) && (dms.includes("'"))) {// X° Y'
+      decimal = parseFloat (dms);
+      m = parseFloat(dms.split('°')[1]);
+      if (m) decimal += m / 60;
+      if (dms.includes('S') || dms.includes('W')) decimal *= -1;
+      return decimal;
+   }
+   decimal = parseFloat(dms.replaceAll ('°', '')); // X° or X
+   if (dms.includes('S') || dms.includes('W')) decimal *= -1;
+   return decimal; // case if value is a decimal number
 }
 
 /**
- * Converts latitude and longitude to a formatted string in DMS format.
+ * Converts latitude and longitude to a formatted string.
+ * DMS (Degrees, Minutes, Seconds) string ex: 45°28'30 S" or
+ * DM (Degrees, Minutes) ex: 45°28.5 S' string or
+ * DD (Decimal Degrees) ex: 45.48° S string or
+ * BASIC ex -45.48 (with sign if negative)
  * @param {number} lat - The latitude in decimal degrees.
  * @param {number} lon - The longitude in decimal degrees.
- * @returns {string} The formatted coordinate string.
- */
-function latLonToStr(lat, lon) {
-   function toDMS(deg, isLat) {
-      const abs = Math.abs(deg);
-      const d = Math.floor(abs);
-      const m = Math.floor((abs - d) * 60);
-      const s = (abs - d - m / 60) * 3600;
-      const dir = isLat ? (deg >= 0 ? 'N' : 'S') : (deg >= 0 ? 'E' : 'W');
-
-      // Padding: degrees (3), minutes (2), seconds (5: xx.xx)
-      const degStr = String(d).padStart(3, '0');
-      const minStr = String(m).padStart(2, '0');
-      const secStr = s.toFixed(2).padStart(5, '0');
-
-      return `${degStr}°${minStr}&apos;${secStr}" ${dir}`;
-   }
-
-   return `${toDMS(lat, true)} - ${toDMS(lon, false)}`;
-}
-
-
-/**
- * Converts latitude and longitude to a formatted DMS (Degrees, Minutes, Seconds) string.
- * This function converts decimal latitude and longitude coordinates into 
- * a human-readable string in the DMS format, including the appropriate hemisphere indicator (N/S/E/W).
- *
- * @param {number} lat - Latitude in decimal degrees.
- * @param {number} lon - Longitude in decimal degrees.
  * @returns {string} The coordinates formatted as a DMS string (e.g., "48°51'24\"N, 2°21'03\"E").
  */
-function toDMSString (lat, lon) {
-   function convert (coord, isLat) {
-      const absolute = Math.abs(coord);
-      const degrees = Math.floor(absolute);
-      const minutes = Math.floor((absolute - degrees) * 60);
-      const seconds = Math.floor((absolute - degrees - minutes / 60) * 3600);
-      const direction = isLat ? (coord >= 0 ? 'N' : 'S') : (coord >= 0 ? 'E' : 'W');
-
-      return `${String(degrees).padStart(2, '0')}°${String(minutes).padStart(2, '0')}'${String(seconds).padStart(2, '0')}"${direction}`.trim();
+function latLonToStr(lat, lon, type=DMS_DISPLAY.DMS) {
+   function toDMS (val, isLat, type) {
+      const dir = isLat ? (val >= 0 ? 'N' : 'S') : (val >= 0 ? 'E' : 'W');
+      const absVal = Math.abs (val);
+      const d = Math.floor(absVal);
+      let m, degStr, minStr;
+      switch (type) {
+      case DMS_DISPLAY.BASIC: return val.toFixed (4);
+      case DMS_DISPLAY.DD: return `${absVal.toFixed(4)}° ${dir}`;
+      case DMS_DISPLAY.DM:
+         m = (absVal - d) * 60;
+         degStr = String(d).padStart(3, '0');
+         minStr = m.toFixed (2).padStart(2, '0');
+         return `${degStr}°${minStr}'${dir}`;
+      case DMS_DISPLAY.DMS:
+         m = Math.floor((absVal - d) * 60);
+         s = (absVal - d - m / 60) * 3600;
+         degStr = String(d).padStart(3, '0');
+         minStr = String(m).padStart(2, '0');
+         secStr = s.toFixed(0).padStart(2, '0');
+         return `${degStr}°${minStr}'${secStr}"${dir}`;
+      default: return 0;
+      }
    }
-   return `${convert(lat, true)}, ${convert(lon, false)}`.trim ();
+   return `${toDMS(lat, true, type)} - ${toDMS(lon, false, type)}`;
 }
 
 /**
@@ -201,5 +220,4 @@ function findNearestPort(lat, lon) {
    }
    return { idPort: nearest.id, namePort: nearest.name };
 }
-
 

@@ -85,7 +85,7 @@ let compResult = [];
 const colorMap = ["red", "green", "blue", "orange", "black"];
 
 // equivalent server side: enum {REQ_TEST, REQ_ROUTING, ...}; // type of request
-const REQ = {TEST: 0, ROUTING: 1, BEST_DEP: 2, RACE: 3, POLAR: 4, 
+const REQ = {TEST: 0, ROUTING: 1, COORD: 2, RACE: 3, POLAR: 4, 
              GRIB: 5, DIR: 6, PAR_RAW: 7, PAR_JSON: 8,
              INIT: 9, FEEDBACK:10, DUMP_FILE:11, NEAREST_PORT:12}; 
 
@@ -124,12 +124,15 @@ function getDateFromIndex (index, boatName) {
  * Give visibility to tool bars only when route is active.
  */
 function updateToolsVisibility() {
-  const toolsDiv = document.getElementById('tools');
-  if (route && Object.keys(route).length > 0) {
-    toolsDiv.style.display = 'block';
-  } else {
-    toolsDiv.style.display = 'none';
-  }
+   const toolsDiv = document.getElementById('tools');
+   if (route && Object.keys(route).length > 0) {
+      toolsDiv.style.display = 'block';
+      const isocContEl = document.getElementById('isocCont');
+      if (routeParam.isoc && compResult.length === 0) isocContEl.style.display = 'inline'; 
+      else isocContEl.style.display = 'none';
+   } else {
+      toolsDiv.style.display = 'none';
+   }
 }
 
 /*
@@ -487,8 +490,7 @@ function showRoute (route, name) {
    // Convert format for Windy (Leaflet)
    const latlngs = track.map(coords => coords.slice(1, 3)); // lat, lon at pos 1 and 2
    //console.log (JSON.stringify (latlngs, null, 2));
-
-   const iComp = competitors.findIndex (c => c.name === name); // index of current boat
+   let iComp = competitors.findIndex (c => c.name === name); // index of current boat
    if (iComp < 0 ) iComp = 0;
    /*Si existe, l'ancienne  route change de couleur
    if (competitors[iComp].routePolyline) {
@@ -786,7 +788,7 @@ async function requestBestTime () {
    let boatName, routeData;
 
    await new Promise(resolve => setTimeout(resolve, 0));
-
+   compResult.length = 0; // inhibate display of competitor dashboard
    for (let i = 0; i < routeParam.nTry; i++) {
       routeParam.startTime = new Date(saveStartTime.getTime() + i * routeParam.timeInterval * 1000);
       let requestBody = buildBodyRequest (REQ.ROUTING, competitors, myWayPoints, routeParam);
@@ -888,6 +890,7 @@ async function requestAllCompetitors () {
 async function requestOne () {
    const spinnerOverlay = document.getElementById ("spinnerOverlay");
    spinnerOverlay.style.display = "flex"; // display spinner
+   compResult.length = 0; // inhibate display of competitor dashboard
    let requestBody = buildBodyRequest (REQ.ROUTING, competitors, myWayPoints, routeParam);
 
    if (clipBoard) navigator.clipboard.writeText (requestBody);
@@ -1297,13 +1300,13 @@ function move (iComp, firstTrack, index) {
 function updateBindPopup (competitor) {
    let [wp, lat, lon, time, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor] = route [competitor.name].track [index];
    hdg = (360 + hdg) % 360;
-   const propulse = motor ? "Motor": "Sail: " + sail ?? '-';
+   const propulse = (motor ? "Motor": "Sail: " + sail) ?? "-";
    let theDate = new Date (routeParam.startTime.getTime() + time * 1000);
    // alert ("updateBindPopup name: " + competitor.name);
    if (sog !== undefined)
       competitor.marker.bindPopup (`${popup4Comp(competitor)}<br>
          ${dateToStr(theDate)}<br>
-         ${toDMSString (lat, lon)}<br>
+         ${latLonToStr (lat, lon, DMSType)}<br>
          Twd: ${twd.toFixed(0)}° Tws: ${tws.toFixed(2)} kn<br>
          Hdg: ${hdg.toFixed(0)}° Twa: ${twa.toFixed(0)}°<br>
          Sog: ${sog.toFixed(2)} kn ${propulse}<br>`);
@@ -1321,12 +1324,6 @@ function updateHeading (competitor, firstTrack) {
    let newIndex = (index < firstTrack.length - 1) ? index : index - 1;
    if (newIndex <= 0) newIndex = 0;
    let [, , , , , , , , hdg, , , , , , ] = firstTrack [newIndex];
-   /*if (index < firstTrack.length - 1)
-      
-      heading = orthoCap (firstTrack[index].slice(1, 3), firstTrack[index + 1].slice(1, 3));
-   else
-      heading = orthoCap(firstTrack[index-1], firstTrack[index].slice(1, 3));
-   */
    competitor.marker._icon.setAttribute('data-heading', hdg);
    updateIconStyle (competitor.marker);
 }
@@ -1728,7 +1725,7 @@ function additionalInit () {
       if (isContextMenuOpen) return; // Do not open several contect menus
          let touch = event.touches [0];
 
-	   // check if user touch <header>, #tool ou <footer>
+      // check if user touch <header>, #tool ou <footer>
       let targetElement = event.target.closest("header, #tool, footer");
       if (targetElement) return; // Ignore one of these elem
 
@@ -1761,7 +1758,7 @@ function additionalInit () {
    map.on ('mousemove', function (event) {
         let lat = event.latlng.lat; //
         let lon = event.latlng.lng; 
-        document.getElementById ('coords').textContent = toDMSString (lat, lon);
+        document.getElementById ('coords').textContent = latLonToStr (lat, lon, DMSType);
     });
    // Handle some events. We need to update the rotation of icons ideally each time
    // leaflet re-renders. them.
@@ -1832,7 +1829,6 @@ function initMap(containerId) {
 
    // Tip: If you prefer to fit to the route instead of the bbox, use:
    // map.fitBounds(routeLine.getBounds());
-   additionalInit();   // 
    // updateRouteDisplay (0);
 }
 

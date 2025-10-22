@@ -88,6 +88,11 @@ function fTimeToRecupOnePoint (tws) {
  * Updates are live on any user interaction.
  */
 function stamina() {
+   if (! window.matchMedia('(orientation: landscape)').matches) {
+      Swal.fire('Stamina Warning', 'Passe en mode Lay out', 'warning');
+      return;
+   }
+
    const shipOptions = shipParam.map((ship, index) => `<option value="${index}">${ship.name}</option>`).join("");
 
    const htmlContent = `

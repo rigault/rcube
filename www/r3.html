@@ -12,7 +12,7 @@
    <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"></script>
    <script src="https://api.windy.com/assets/map-forecast/libBoot.js"></script>
    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+   <!-- <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>-->
    <!-- Utilise la version la plus récente de Plotly.js -->
    <script src="https://cdn.plot.ly/plotly-2.11.0.min.js"></script>
    <!-- <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>-->
@@ -38,6 +38,7 @@
 <div class="container">
    <header>
       <img src="favicon.ico" alt="favicon">
+      <span>&nbsp;&nbsp;&nbsp;</span>
       <div class="dropdown">
          <button class="menu">Grib</button>
          <div class="dropdown-content">
@@ -73,7 +74,7 @@
          </div>
       </div>
       <div class="dropdown">
-         <button class="menu">Help</button>
+         <button class="menu">ⓘ </button>
          <div class="dropdown-content">
             <a href="doc/Er3help.html" target="_blank">🇬🇧 Help</a>
             <a href="doc/Fr3help.html" target="_blank">🇫🇷 Aide</a>
@@ -82,7 +83,7 @@
          </div>
       </div>
       <div class="dropdown">
-         <button class="menu">Links</button>
+         <button class="menu">🔗</button>
          <div class="dropdown-content">
             <button class="menu-link" onclick="openTide (0, competitors[0].lat, competitors[0].lon);">SHOM</button>
             <button class="menu-link" onclick="openTide (1, competitors[0].lat, competitors[0].lon);">Marée Info</button>
@@ -95,8 +96,8 @@
          </div>
       </div>
       <div class="dropdown">
-         <button class="menu" id = "cadenas" onclick="promptForCreds()" title="Connexion">
-             <i class="fas fa-user"></i> <i class="fas fa-lock"></i></div>
+         <button class="menu" onclick="updateDMS ()" title="DMS Display">☰</button>
+      </div>
       <div class="dropdown" id="devMenu" style="display: none;">
          <button class="menu">Developper</button>
          <div class="dropdown-content">
@@ -111,6 +112,10 @@
             <a href="doc/r3ServerTechDoc.html" target="_blank">Server side Tech Doc</a>
             <a href="doc/r3ClientTechDoc.html" target="_blank">Client side Tech Doc</a>
          </div>
+      </div>
+      <div class="dropdownRight">
+         <button class="menu" id = "cadenas" onclick="promptForCreds()" title="Connexion">
+             <i class="fas fa-user"></i> <i class="fas fa-lock"></i></button>
       </div>
    </header>
 
@@ -127,12 +132,12 @@
       <button class="btn" onclick="forWard();"><i class="fas fa-forward"></i></button>
       <button class="btn" onclick="goEnd();"><i class="fas fa-step-forward"></i></button>
       <button class="btn" onclick="clearRoutes();"><i class="fas fa-times"></i></button>
-      <label for="timeline">Time Line %</label>
+      <label for="timeLine">Time Line %</label>
       <input type="range" id="timeLine" min="1" max="100" value="1" oninput="updateTimeLine(this.value);">
       <span id="timeLineValue">001%</span>
 
       <span id="infoTime"></span>
-      <span class="isocContainer">
+      <span id= "isocCont" class="isocContainer">
          <label>
             Isoc <input type="checkbox" id="isocCheckbox" class="isocCheckbox" checked>
          </label>
@@ -171,7 +176,7 @@
    </div>
    <footer class="footer">
       <span id = "infoRoute">Info</span>
-      <span id = "coords"></span>
+      <span id="coords"> </span>
       <script>updateStatusBar ();</script>
    </footer>
 </div>
@@ -188,7 +193,7 @@
       }
    });
 
-   /* listen CTRL S to switch betwwen Windy and OSM */
+   /* listen CTRL S to switch between Windy and OSM */
    document.addEventListener("keydown", (e) => {
       if (e.ctrlKey && e.key === "s") {
          e.preventDefault(); // éviter le marque-page sur certains navigateurs
@@ -196,6 +201,14 @@
          // alert (`windyplay: ${windyPlay}`);
          saveAppState ();
          location.reload ();
+      }
+   });
+
+   /* listen CTRL B to get coord info */
+   document.addEventListener("keydown", (e) => {
+      if (e.ctrlKey && e.key === "b") {
+         e.preventDefault(); // éviter le marque-page sur certains navigateurs
+         coordStatus ();
       }
    });
 
@@ -297,6 +310,7 @@
    });
    else {
       initMap('windy');
+      additionalInit ();
    };
 </script>
 </body>

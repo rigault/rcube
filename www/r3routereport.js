@@ -288,7 +288,7 @@ function dumpRoute (routeData) {
          WP: indexWp === -1 ? `<span style="color:green">Dest.</span>`
              : indexWp % 2 === 0 ? `<span style="color:red">${indexWp}</span>` 
              : `${indexWp}`,
-         Coord: toDMSString (lat, lon),
+         Coord: latLonToStr (lat, lon, DMSType),
          'Date Time': dateToStr ( new Date (routeParam.startTime.getTime() + time * 1000)),
          //Sail: sail ?? '-',
          Sail: (() => {
@@ -439,7 +439,7 @@ function dumpIsoDesc(route) {
          focalLon
       ] = row;
 
-      const latLonStr = latLonToStr (focalLat, focalLon);
+      const latLonStr = latLonToStr (focalLat, focalLon, DMSType).replaceAll ("'", "&apos;");
 
       return [
          nIsoc,
@@ -514,7 +514,7 @@ function dumpIsoc (route) {
          const id = point[2];
          const father = point[3];
          const index = point[4];
-         const coordStr = latLonToStr(lat, lon);
+         const coordStr = latLonToStr(lat, lon, DMSType).replaceAll ("'", "&apos;");
          rows.push([i, coordStr, id, father, index]);
       }
    }

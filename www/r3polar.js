@@ -20,8 +20,8 @@ function polarInfo (polType, polarName) {
    })
    .then(response => response.ok ? response.json() : Promise.reject (`In polarInfo Error ${response.status}: ${response.statusText}`))
    .then (data => {
-      if (Array.isArray(data) && data.length === 3) {
-         generatePolarPlotly (polType, polarName, data[0], data [1], data [2]); // polar and sailPolar
+      if (Array.isArray(data.array)) {
+         generatePolarPlotly (polType, polarName, data); // polar and sailPolar and legend
       } else {
          throw new Error ("Invalid format");
       }
@@ -40,18 +40,14 @@ function polarInfo (polType, polarName) {
 /**
  * dump polar information about polar
  * @param {Object} data - polar information
- * @param {Object} sailData - sail polar information
- * @param {Object} legend - sail polar legend
  */
-function showPolarTable (polType, polarName, data, sailData, legend) {
+function showPolarTable (polType, polarName, data) {
    let windSpeeds = data.array[0].slice(1).map(v => parseFloat(v)).filter(v => !isNaN(v));
    console.log("data: " + JSON.stringify(data));
-   console.log("sailData: " + JSON.stringify(sailData));
-   console.log("legend: " + JSON.stringify(legend));
 
    // Vérifier si sailData et legend sont valides
-   let sailDataValid = sailData && sailData.array && Array.isArray(sailData.array) && sailData.array.length > 0;
-   let legendValid = legend && legend.legend && Array.isArray(legend.legend);
+   let sailDataValid = data && data.arraySail && Array.isArray(data.arraySail) && data.arraySail.length > 0;
+   let legendValid = data.legend && Array.isArray(data.legend);
 
    if (!sailDataValid) {
       console.warn ("sailData is empty or undefined. No color.");
@@ -60,7 +56,7 @@ function showPolarTable (polType, polarName, data, sailData, legend) {
       console.warn ("legend is empty or undefined, No legend.");
    }
 
-   let tableHTML = "<table border='1' style='border-collapse: collapse; width: 100%; text-align: center;'>";
+   let tableHTML = "<table border='1' style='border-collapse: collapse; width: 100%; text-align: center; font-size: 8px'>";
 
    // Ligne d'en-tête (TWS for wind, height for Waves)
    tableHTML += (polType === POL_TYPE.WIND_POLAR) ? "<tr style='font-weight: bold; background-color: #FFA500; color: white;'><th>TWA / TWS</th>"
@@ -69,7 +65,9 @@ function showPolarTable (polType, polarName, data, sailData, legend) {
       tableHTML += `<th>${tws}</th>`;
    });
    tableHTML += "</tr>";
-   const sailNames = Object.keys(sailLegend);
+   //const sailNames = Object.keys(sailLegend);
+   const sailNames = data.legend;
+   console.log("sailNames: " + JSON.stringify(sailNames));
 
    // Création du tableau principal
    data.array.slice(1).forEach((row, rowIndex) => {
@@ -80,10 +78,10 @@ function showPolarTable (polType, polarName, data, sailData, legend) {
          let cellStyle = "padding: 5px;"; // Style de base
 
          if (sailDataValid) {
-            let sailValue = sailData.array[rowIndex + 1]?.[colIndex + 1] || 0;
+            let sailValue = data.arraySail[rowIndex + 1]?.[colIndex + 1] || 0;
             const sailName = sailNames[sailValue];
             const entry = sailLegend[sailName] || { bg: 'lightgray', luminance: 200 };
-            let textColor = getTextColorFromLuminance(entry.luminance);
+            const textColor = getTextColorFromLuminance(entry.luminance);
             cellStyle += `background-color: ${entry.bg};color: ${textColor};font-weight: bold;`;
          }
          tableHTML += `<td style='${cellStyle}'>${value.toFixed(2)}</td>`;
@@ -98,7 +96,8 @@ function showPolarTable (polType, polarName, data, sailData, legend) {
    let legendHTML = "";
    if (legendValid) {
       legendHTML = "<div style='display: flex; justify-content: center; margin-top: 20px; flex-wrap: wrap;'>";
-      Object.entries(sailLegend).forEach(([name, { bg, luminance }]) => {
+      data.legend.forEach(name => {
+         const { bg, luminance } = sailLegend[name] ?? sailLegend.NA;
          const textColor = getTextColorFromLuminance(luminance);
          legendHTML += `
             <div style='
@@ -119,12 +118,17 @@ function showPolarTable (polType, polarName, data, sailData, legend) {
    Swal.fire({
       title: (polType === POL_TYPE.WIND_POLAR) ? `Speed in Knots Max: ${data.max}` : `Height in meters Max: ${data.max}`,
       html: tableHTML + legendHTML,
-      width: "80%",
-      confirmButtonColor: "#FFA500",
-      confirmButtonText: "Return to graph"
-   }).then(() => {
-      generatePolarPlotly (polType, polarName, data, sailData, legend); // Recharge la polaire après fermeture du tableau
-   });
+      width: "100%",
+      showCancelButton: true,
+      confirmButtonText: 'Back',
+      cancelButtonText: 'Cancel',     
+      footer: `polarName: ${polarName}, nCol: ${data.nCol}, 
+         nLine: ${data.nLine}, max: ${data.max}, nSail: ${data.nSail}, fromJson: ${data.fromJson}`,
+   }).then((result) => {
+      if (result.isConfirmed) {
+         generatePolarPlotly (polType, polarName, data);
+      }
+   })
 }
 
 /** interpolate */
@@ -192,14 +196,47 @@ function bestVmgBack(twaValues, speeds) {
    return { angle: bestAngle, speed: bestSpeed };
 }
 
+/*! provide raw informations in header if exist */
+function moreInfoAboutPol(polType, polarName, data) {
+   const header = data?.header;
+   const lab = header.label ?? "(no label)";
+   const pretty = JSON.stringify(header, null, 2); // ← indenté
+
+   Swal.fire({
+     title: `Additional information for: ${lab}`,
+     width: '60%',
+     showCancelButton: true,
+     confirmButtonText: 'Back',
+     cancelButtonText: 'Cancel',
+     footer: `polarName: ${polarName}, nCol: ${data.nCol}, 
+         nLine: ${data.nLine}, max: ${data.max}, nSail: ${data.nSail}, fromJson: ${data.fromJson}`,
+     html: `
+       <pre style="
+         text-align:left; 
+         white-space:pre; 
+         margin:0; 
+         max-height:60vh; 
+         overflow:auto; 
+         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+         font-size: 12px;
+         line-height: 1.35;
+       ">${pretty}</pre>
+     `
+   }).then((result) => {
+      if (result.isConfirmed) {
+         generatePolarPlotly (polType, polarName, data);
+      }
+   })
+}
+
 /**
  * draw with plotty information about polar 
  * @param {Object} data - polar information
  * @param {Object} sailData - sail polar information
  * @param {Object} legend - sail polar legend
  */
-function generatePolarPlotly (polType, polarName, data, sailData, legend) {
-   if (!data.array || !Array.isArray (data.array) || data.array.length < 2) return;
+function generatePolarPlotly (polType, polarName, data) {
+   if (!data.array || data.array.length < 2) return;
    let maxMaxVal = Math.ceil (data.max);
 
    const windSpeeds = data.array[0].slice(1).map(v => parseFloat(v)).filter(v => !isNaN(v));
@@ -223,14 +260,27 @@ function generatePolarPlotly (polType, polarName, data, sailData, legend) {
           <p><strong>Back VMG:</strong> <span id="bestVmgBack">-</span> kn at <span id="bestVmgBackAngle">-</span>°</p>
        `;
     }
-    chartContainer.innerHTML += `
-      <button id="showTable" style="margin-top: 10px; padding: 5px 10px; background-color: #FFA500; color: white; border: none; cursor: pointer;">
-         Dump Table
-      </button>
-   `;
-
-   Swal.fire({ title: `${polarName} Max: ${data.max}`, html: chartContainer, width: "60%", showConfirmButton: true });
-
+   let moreButton = data.fromJson && data.arraySail && Array.isArray(data.arraySail) && data.arraySail.length > 0;
+   Swal.fire({
+      title: `${polarName} Max: ${data.max}`,
+      html: chartContainer,
+      width: '50%', // valeur fallback
+      customClass: { popup: 'polar-popup' },
+      showConfirmButton: true,
+      showDenyButton: moreButton, // button appear only if different sails
+      showCancelButton: true,
+      confirmButtonText: 'Dump Table',
+      denyButtonText: 'More',
+      cancelButtonText: 'Cancel',     
+      denyButtonColor: '#6b7280',
+   }).then((result) => {
+      if (result.isConfirmed) {
+         showPolarTable(polType, polarName, data);
+      }
+      else if (moreButton && result.isDenied) {
+         moreInfoAboutPol (polType, polarName, data);
+      }
+   });
 
    function updatePlot (polType, tws) {
       document.getElementById ("windSpeedValue").innerText = `${tws.toFixed(1)}`;
@@ -275,10 +325,6 @@ function generatePolarPlotly (polType, polarName, data, sailData, legend) {
       updatePlot(polType, parseFloat(this.value));
    });
 
-   document.getElementById ("showTable").addEventListener("click", function() {
-      showPolarTable (polType, polarName, data, sailData, legend);
-   });
-
    updatePlot (polType, initialTWS);
 }
 
@@ -301,10 +347,12 @@ function choosePolar (dir, currentPolar) {
    })
    .then(response => response.json())
    .then(data => {
-      if (!Array.isArray(data) || data.length === 0) {
+      if (!data) {
          Swal.fire("Erreur", "No polar file found", "error");
          return;
       }
+     
+      console.log("polar: " + JSON.stringify(data));
 
       // Création du menu déroulant SANS la taille et la date
       const fileOptions = data.map(file => {
@@ -338,11 +386,11 @@ function choosePolar (dir, currentPolar) {
             if (polType === POL_TYPE.WIND_POLAR) {
                polarName = result.value; // Mise à jour du fichier sélectionné
                saveAppState ();          // save in local context
-               polarInfo (polType,  polarName);
+               polarInfo (polType, polarName);
             }
             else {
                polWaveName = result.value;
-               polarInfo (polType,  polWaveName);
+               polarInfo (polType, polWaveName);
             }
             updateStatusBar ();
          }

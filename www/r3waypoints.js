@@ -168,7 +168,7 @@ function displayWayPoints(competitors, wayPoints) {
       let prev = [competitor.lat, competitor.lon];
       for (let i = 0; i < wayPoints.length; i++) {
          const curr = wayPoints[i];
-         const strCoord = toDMSString (curr [0], curr [1]);
+         const strCoord = latLonToStr (curr [0], curr [1], DMSType);
          const orthoC = orthoCap(prev, curr).toFixed(1);
          const orthoD = orthoDist(prev, curr).toFixed(2);
          const loxoC = loxoCap(prev, curr).toFixed(1);

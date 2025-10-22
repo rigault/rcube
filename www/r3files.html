@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang = "fr">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RCube</title>
+<link rel="icon" type="image/ico" href="favicon.ico">
+<link rel="stylesheet" type="text/css" href="r3files.css">
+<link rel="stylesheet" type="text/css" href="stamina.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.plot.ly/plotly-2.11.0.min.js"></script>
+<script src="r3polar.js"></script>
+<script src="r3grib.js"></script>
+<script src="r3util.js"></script>   <!-- pour helpInfo () -->
+<script src="stamina.js"></script>  <!-- pour stamina () -->
+<script src="feedback.js"></script> <!-- pour feedback () -->
+</head>
+
+<body> 
+<header> 
+   Grib &amp; Polar
+   <button class='fas fa-exclamation-circle' style='padding-left: 100px; color: navy;font-size: 40px; border: none; background: white;' title="help" onclick="helpInfo();"></button>
+</header>
+<nav>
+   <hr>
+   <button class="menu-link" onclick="getDir('grib');">Grib</button>
+   <button class="menu-link" onclick="getDir('currentgrib');">Current</button>
+   <button class="menu-link" onclick="getDir('pol');">Pol</button>
+   <button class="menu-link" onclick="getDir('wavepol');">Wave</button>
+   <button class="menu-link" onclick="stamina ();">Stamina</button>
+   <button class="menu-link" onclick="feedback (apiUrl);">Feedback</button>
+   <hr>
+</nav>
+<main>
+<!--<p><a href= "https://rcube.ddns.net/files/grib/">Fichiers Grib sur serveur</a></p>
+<p><a href= "https://rcube.ddns.net/files/currentgrib/">Fichiers Grib Courants sur serveur</a></p>
+<p><a href= "https://rcube.ddns.net/files/pol/">Fichiers Polaires sur serveur</a></p>
+<p><a href= "https://rcube.ddns.net/files/wavepol/">Fichiers Polaires de Vagues sur serveur</a></p>
+-->
+<!--A<table class="choice-btn">-->
+
+<div id="directory"></div>
+</main>
+<footer>
+Rcube René Rigault, 2025
+</footer>
+
+<script>
+const REQ = {TEST:0, POLAR:4, GRIB:5, DIR: 6, FEEDBACK:10}; 
+const apiUrl = `https://rcube.ddns.net/post-api/?_=${Date.now()}`;
+const sailLegend = {
+  NA:     { bg: "black",  luminance: 0 },
+  C0:     { bg: "green",  luminance: 85 },
+  HG:     { bg: "purple", luminance: 48 },
+  Jib:    { bg: "gray",   luminance: 128 },
+  LG:     { bg: "blue",   luminance: 29 },
+  LJ:     { bg: "yellow", luminance: 210 },
+  Spi:    { bg: "orange", luminance: 170 },
+  SS:     { bg: "red",    luminance: 76 }
+};
+const getTextColorFromLuminance = (luminance) => luminance < 128 ? 'white' : 'black';
+const userId = "admin";    // should be "" to enable authent
+const password = "admin";  // idem
+
+/**
+ * choose a grib file then launch gribInfo 
+ * @param {string} directory
+ * @param {string} current grib name
+ */
+function getDir (dir) {
+   const formData = `type=${REQ.DIR}&dir=${dir}`;
+   console.log ("Request sent:", formData);
+   const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+   const token = btoa(`${userId}:${password}`);
+   const auth = `Basic ${token}`;
+   console.log ("token: " + token);
+   if (auth && userId !== "") headers.Authorization = auth;     // else stay anonymous level 0
+   fetch(apiUrl, {
+      method: "POST",
+      headers,
+      body: formData,
+      cache: "no-store"
+   })
+   .then(response => response.json())
+   .then(data => {
+      if (!Array.isArray(data) || data.length === 0) {
+         Swal.fire ("Error", "No Grib File found", "error");
+         return;
+      }
+      console.log ("JSON received:", JSON.stringify(data));
+      // Construire la table HTML
+      const rows = data.map(([name, size, ts]) => {
+         let callFn = (dir === 'grib') || (dir === 'currentgrib') ? `gribInfo ('${dir}', '', '${name}')` 
+                      : (dir === 'pol') ? `polarInfo (0, '${name}')`
+                      : (dir === 'wavepol') ? `polarInfo (1, '${name}')`
+                      : `Swal.fire ('Error', 'dir choice', 'error')`;
+         return `
+         <tr class="row">
+            <td><button class='empty-btn' title="Info" onclick="${callFn};"><i class='fas fa-anchor' style='color:navy;font-size:40px; border:none; background:white';></i></button>
+            <a href= "https://rcube.ddns.net/files/${dir}/${name}" download>${name}</a></td>
+            <!--<td style="text-align:right">${size}</td>-->
+            <!--<td>${ts}</td>-->
+         </tr>`;
+      }).join("");
+      const result = `
+         <table cellspacing="0" cellpadding="6" class="directory">
+         <thead>
+         <tr class="row">
+            <!--<th>Download</th><th style="text-align:right">Size</th><th>Date</th>-->
+         </tr>
+         </thead>
+         <tbody>
+            ${rows}
+         </tbody>
+         </table>`;
+
+      const here = document.getElementById("directory");
+         here.innerHTML = result;
+   })
+   .catch(error => {
+      console.error("Error requesting grib:", error);
+      Swal.fire("Erreur", "Impossible to get file list", "error");
+   });
+}
+</script>
+</body>
+</html>
+

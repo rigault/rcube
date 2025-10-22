@@ -41,7 +41,7 @@ async function manageCompetitors(competitors) {
       html += `<tr>
                <td><input type='text' style='width:100%' value='${c.name}' id='name${index}'></td>
                <td><input type='number' style='width:100%' value='${c.color}' id='color${index}' min='0' max='${colorMap.length - 1}'></td>
-               <td><input type='text' style='width:100%; font-size:14px;' value='${latLonToStr(c.lat, c.lon)}' id='coord${index}'></td>
+               <td><input type='text' style='width:100%; font-size:14px;' value='${latLonToStr(c.lat, c.lon, DMSType).replaceAll ("'", "&apos;")}' id='coord${index}'></td>
                <td>${competitors.length > 1 ? `<button type='button' onclick='removeCompetitor(${index})'>❌</button>` : ''}</td>
             </tr>`;
    });
@@ -192,7 +192,7 @@ function importCSV (file, competitors) {
 
        for (const c of matching) {
          html += `<tr>
-           <td>${c.name}</td><td>${toDMSString (c.lat, c.lon)}</td>
+           <td>${c.name}</td><td>${latLonToStr (c.lat, c.lon, DMSType)}</td>
            <td>${c.rank}</td><td>${c.DTF}</td><td>${c.DTU}</td><td>${c.sail}</td>
            <td>${c.hdg}</td><td>${c.twa}</td><td>${c.tws}</td><td>${c.speed}</td>
            <td>${c.factor}</td><td>${c.foils}</td><td>${c.options}</td><td>${c.team}</td>
@@ -275,7 +275,7 @@ function dispAllCompetitors (result) {
       table += `
          <tr>
             <td>${comp.name}</td>
-            <td>${latLonToStr(comp.lat, comp.lon)}</td>
+            <td>${latLonToStr(comp.lat, comp.lon, DMSType).replaceAll ("'", "&apos;")}</td>
             <td>${duration}</td>
             <td>${ETA}</td>
          </tr>

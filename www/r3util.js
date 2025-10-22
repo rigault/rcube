@@ -1,3 +1,86 @@
+function coordStatus () {
+   if (! competitors || ! competitors [0]) return;
+   const c = competitors [0];
+   const formData = `type=${REQ.COORD}&boat=${c.name},${c.lat},${c.lon};`;
+   console.log ("Request sent:", formData);
+   fetch (apiUrl, {
+      method: "POST",
+      headers: {
+         "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: formData
+   })
+   .then(response => response.json())
+   .then(data => {
+      console.log ("JSON received:", data);
+      Swal.fire({
+         title: "Coord Info",
+         html: `
+            name: ${c.name}<br>
+            coord: ${latLonToStr(c.lat, c.lon)}<br>
+            isSea: ${data.isSea}<br>
+            isSeaTolerant: ${data.isSeaTolerant}<br>
+            inWind: ${data.inWind}<br>
+            inCurrent: ${data.inCurrent}
+         `,
+         icon: "info",
+         confirmButtonText: "OK",
+         confirmButtonColor: "orange",
+         customClass: { popup: "swal-wide" },
+      });
+   })
+   .catch (error => {
+      console.error("Error statusCoord:", error);
+      Swal.fire("Erreur", "Impossible to access server", "error");
+   });
+}
+
+
+function updateDMS() {
+  // Fallback if DMSType is not set
+  if (!DMSType || !Object.values(DMS_DISPLAY).includes(DMSType)) {
+    DMSType = DMS_DISPLAY.BASIC;
+  }
+
+  const html = `
+    <form id="dms-form">
+      <label for="dms-select" style="display:block;margin-bottom:8px;">Choose a display format:</label>
+      <select id="dms-select" class="swal2-select" style="min-width:180px;">
+        <option value="BASIC"${DMSType === DMS_DISPLAY.BASIC ? " selected" : ""}>BASIC</option>
+        <option value="DD"${DMSType === DMS_DISPLAY.DD ? " selected" : ""}>DD</option>
+        <option value="DM"${DMSType === DMS_DISPLAY.DM ? " selected" : ""}>DM</option>
+        <option value="DMS"${DMSType === DMS_DISPLAY.DMS ? " selected" : ""}>DMS</option>
+      </select>
+    </form>
+  `;
+
+  Swal.fire({
+    title: "DMS display choice",
+    html,
+    confirmButtonText: "Confirm",
+    showCancelButton: true,
+    focusConfirm: false,
+    preConfirm: () => {
+      const popup = Swal.getPopup();
+      const value = popup.querySelector('#dms-select').value;
+
+      // Validate against enum keys
+      if (!Object.prototype.hasOwnProperty.call(DMS_DISPLAY, value)) {
+        Swal.showValidationMessage("Invalid selection");
+        return false;
+      }
+
+      // Update the global selection
+      DMSType = DMS_DISPLAY[value];
+      return value; // optional: return for .then()
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      console.log("DMS display set to:", DMSType);
+    }
+  });
+}
+
 /**
  * SweetAlert2 prompt for credentials
  */
@@ -198,6 +281,8 @@ async function helpInfo () {
             API server port:  ${data ["API server port"]}<br>
             Memory usage in KB:  ${data ["Memory usage in KB"]}<br>
             Authorization-Level:  ${data ["Authorization-Level"]}<br>
+            Client IP address:  ${data ["Client IP Address"]}<br>
+            User Agent:  ${data ["User Agent"]}<br>
             Compilation-date: ${data ["Compilation-date"]}<br>
          `,
          icon: "info",

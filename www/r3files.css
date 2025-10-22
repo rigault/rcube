@@ -1,0 +1,130 @@
+/* Évite le zoom auto iOS sur champs/boutons <16px */
+html { 
+   -webkit-text-size-adjust: 100%; 
+}
+body {
+   margin: 0;
+   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Arial, sans-serif;
+   background: var(--bg);
+   font-size: 40px;
+}
+nav {
+   text-align: center;
+}
+header {
+   text-align: center;
+   color: darkgray;
+   font-size: 40px;
+   font-style: oblique; 
+}
+main {
+   /*justify-content: center;*/
+   font-family: 'Courier New', Courier, monospace;
+   font-size: 15px;
+   font-weight: bold;
+   padding: 20px; 
+}
+main a {
+   color: green;
+}
+main a:hover {
+   color:red;
+}
+
+footer {
+   text-align: center;
+   color: darkgray;
+   font-size: 12px;
+   font-style: oblique; 
+}
+
+/* Bouton sobre, tactile-friendly */
+.menu-link{
+  -webkit-appearance: none;
+  appearance: none;
+  font: 600 17px/1.2 -apple-system, system-ui, "SF Pro Text", Segoe UI, Roboto, Arial, sans-serif; /* ≥16px */
+  color: #1f2937;                   /* gris foncé lisible */
+  background: #f5f6f7;
+  border: 1px solid #d3d7dc;
+  border-radius: 14px;
+  padding: 10px 18px;
+  min-width: 80px;
+  min-height: 44px;                 /* cible tactile Apple */
+  touch-action: manipulation;       /* supprime délais 300ms */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  transition: transform .06s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+}
+
+.menu-link:hover{
+  background: #eef0f3;
+  border-color: #b8c0c7;
+  box-shadow: 0 2px 6px rgba(0,0,0,.10);
+}
+
+/* Retour tactile visuel */
+.menu-link:active{
+  transform: translateY(1px);
+  box-shadow: 0 1px 3px rgba(0,0,0,.12);
+}
+
+.empty-btn {
+   border: none;
+   background: white;
+   cursor: pointer;
+}
+.empty-btn:hover {
+  transform: scale(1.2);
+}
+/* quelque part dans ton CSS global */
+.swal2-popup.polar-popup { width: 50% !important; }        /* desktop */
+@media (max-width: 640px) {
+  .swal2-popup.polar-popup { width: 100% !important; }     /* mobile */
+}
+
+/* for feedback */
+.swal2-custom-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  border: none;
+}
+
+.swal2-feedback-custom-table td {
+  padding: 0.5em;
+  vertical-align: top;
+   border: none;
+}
+
+.swal2-feedback-label {
+  font-weight: bold;
+  white-space: nowrap;
+  padding-right: 0.5em;
+  color: #333;
+  width: 25%;
+}
+
+.swal2-feedback-input,
+.swal2-feedback-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6em 0.75em;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 1em;
+  font-family: inherit;
+  transition: border-color 0.3s ease;
+}
+
+.swal2-feedback-input:focus,
+.swal2-feedback-textarea:focus {
+  border-color: #3085d6;
+  outline: none;
+}
+
+.swal2-feedback-textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+

@@ -95,16 +95,16 @@ function gribInfo(dir, model, gribName) {
          return;
       }
       if (dir === "grib") {
-         if (model) {
-            gribLimits.name = model;
+         if (typeof gribLimits !== 'undefined') {
+            if (model) gribLimits.name = model;
+            gribLimits.bottomLat = data.bottomLat;
+            gribLimits.leftLon = data.leftLon;
+            gribLimits.topLat = data.topLat;
+            gribLimits.rightLon = data.rightLon;
+            const bounds = [[gribLimits.bottomLat, gribLimits.leftLon],[gribLimits.topLat, gribLimits.rightLon]];
+            map.fitBounds(bounds);
             updateStatusBar ();
          }
-         gribLimits.bottomLat = data.bottomLat;
-         gribLimits.leftLon = data.leftLon;
-         gribLimits.topLat = data.topLat;
-         gribLimits.rightLon = data.rightLon;
-         const bounds = [[gribLimits.bottomLat, gribLimits.leftLon],[gribLimits.topLat, gribLimits.rightLon]];
-         map.fitBounds(bounds);
       }
 
       let shortNames = Array.isArray(data.shortNames) ? data.shortNames.join(", ") : "Not present";
@@ -112,9 +112,9 @@ function gribInfo(dir, model, gribName) {
       let rows = [
          ["Centre", `${data.centreName} (ID ${data.centreID})`],
          ["Time Run", `${data.runStart.slice(11, 13)}Z`],
-         ["Window time UTC", `${data.runStart} - ${data.runEnd}`],
-         ["File", `${data.fileName} (${data.fileSize.toLocaleString("fr-FR")} bytes)`],
-         ["latStep / lonStep", `${data.latStep}° / ${data.lonStep}°`],
+         ["Ftom To UTC", `${data.runStart} - ${data.runEnd}`],
+         ["File", `${data.fileName} (${data.fileSize.toLocaleString("fr-FR")} bytes, ${data.fileTime})`],
+         ["latStep lonStep", `${data.latStep}° / ${data.lonStep}°`],
          ["Zone", `${data.nLat} x ${data.nLon} values: lat: ${formatLat (data.topLat)} to ${formatLat (data.bottomLat)}, lon: ${formatLon (data.leftLon)} to ${formatLon (data.rightLon)}`],
          ["Short Names", shortNames],
          ["Time Stamps", `${data.nTimeStamp} values: ${condenseTimeStamps(data.timeStamps)}`]
@@ -127,7 +127,7 @@ function gribInfo(dir, model, gribName) {
             <tbody>
                ${rows.map(([key, value], index) => `
                   <tr style="background-color: ${index % 2 === 0 ? '#f9f9f9' : '#ffffff'}; text-align: left;" >
-                     <td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #ddd; text-align: left;" >${key}</td>
+                     <td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #ddd; text-align: left; min-width: 80px" >${key}</td>
                      <td style="padding: 8px 12px; border-bottom: 1px solid #ddd; text-align: left;" >${value}</td>
                   </tr>
                `).join('')}
@@ -140,7 +140,6 @@ function gribInfo(dir, model, gribName) {
          html: content,
          icon: "success",
          confirmButtonText: "OK",
-         width: "50%",
          confirmButtonColor: "#FFA500"
       });
    })

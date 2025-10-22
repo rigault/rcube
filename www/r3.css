@@ -28,7 +28,6 @@ header a, .menu {
 
 #cadenas {
    color: lightgray;
-   text-align: right;
 }
 
 .menu-link {
@@ -49,6 +48,11 @@ header a:hover, .menu:hover {
    color: white;
 }
 
+.dropdownRight { /* for connexion */
+   position: absolute;
+   right: 0px;
+   display: inline-block;
+}
 
 .dropdown {
    position: relative;
@@ -130,7 +134,11 @@ header a:hover, .menu:hover {
 .footer .right {
    display: flex;
    align-items: center;
-   gap: 15px;
+   gap: 25px;
+}
+#coords {
+   display: inline-block;
+   margin-right: 30px;
 }
 .footer i {
    margin-right: 5px;
