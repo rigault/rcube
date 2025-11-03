@@ -35,9 +35,9 @@ MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 const struct MeteoElmt meteoTab [N_METEO_ADMIN] = {{7, "Weather service US"}, {78, "DWD Germany"}, {85, "Meteo France"}, {98,"ECMWF European"}};
 
 /*! sail attributes */
-const size_t SAIL_NAME_SIZE = 8;
-const char *SAIL_NAME [] = {"NA", "C0", "HG", "Jib", "LG", "LJ", "Spi", "SS"}; // for sail polars
-// const char *colorStr [] = {"black", "green", "purple", "gray", "blue", "yellow", "orange", "red"};
+const size_t SAIL_NAME_SIZE = 7;
+const char *SAIL_NAME [] = {"C0", "HG", "Jib", "LG", "LJ", "Spi", "SS"}; // for sail polars
+// const char *colorStr [] = {"green", "purple", "gray", "blue", "yellow", "orange", "red"};
 
 /*! list of wayPoint */
 WayPointList wayPoints;
@@ -66,10 +66,8 @@ Zone currentZone;                      // current
 
 /*! return the name of the sail */
 char *fSailName (int val, char *str, size_t maxLen) {
-   if (polMat.fromJson && val > 0 && val <= (int) polMat.nSail)
+   if (val > 0 && val <= (int) polMat.nSail)
       strlcpy (str, polMat.tSail[val-1].name, maxLen);
-   else if (! polMat.fromJson && val >= 0 && val < (int) polMat.nSail)
-      strlcpy (str, SAIL_NAME [val], maxLen);
    else 
       g_strlcpy (str, "--", maxLen);
    return str;
@@ -135,9 +133,10 @@ char *formatThousandSep (char *buffer, size_t maxLen, long value) {
 }
 
 /*! true if name terminates with slash */
-bool hasSlash (const char *name) {
-   const int len = strlen (name);
-   return name && (len > 0) && (name [len - 1] == '/');
+bool hasSlash(const char *name) {
+   if (!name || !*name) return false;
+   size_t len = strlen(name);         
+   return name[len - 1] == '/';
 }
 
 /*! select most recent file in "directory" that contains "pattern0" and "pattern1" in name 
@@ -677,6 +676,8 @@ bool readParam (const char *fileName, bool initDisp) {
       else if (sscanf (pLine, "GRIB_RESOLUTION:%lf", &par.gribResolution) > 0);
       else if (sscanf (pLine, "GRIB_TIME_STEP:%d", &par.gribTimeStep) > 0);
       else if (sscanf (pLine, "GRIB_TIME_MAX:%d", &par.gribTimeMax) > 0);
+      else if (sscanf (pLine, "MARKS:%255s", str) > 0)
+         buildRootName (str, par.marksFileName, sizeof (par.marksFileName));
       else if (sscanf (pLine, "TRACE:%255s", str) > 0)
          buildRootName (str, par.traceFileName, sizeof (par.traceFileName));
       else if (sscanf (pLine, "CGRIB:%255s", str) > 0)
@@ -780,12 +781,15 @@ bool readParam (const char *fileName, bool initDisp) {
       else if (sscanf (pLine, "WINDY_API_KEY:%1024s", par.windyApiKey) > 0);
       else if (sscanf (pLine, "WEBKIT:%255[^\n]", par.webkit) > 0)
          g_strstrip (par.webkit);
-      else if ((strstr (pLine, "FORBID_ZONE:") != NULL) && (par.nForbidZone < MAX_N_FORBID_ZONE)) {
-         pLine = strchr (pLine, ':') + 1;
-         g_strstrip (pLine);
-         g_strlcpy (par.forbidZone [par.nForbidZone], pLine, MAX_SIZE_LINE);
-         forbidZoneAdd (pLine, par.nForbidZone);
-         par.nForbidZone += 1;
+      else if (strstr (pLine, "FORBID_ZONE:") != NULL) {
+         if (par.nForbidZone < MAX_N_FORBID_ZONE) {
+            pLine = strchr (pLine, ':') + 1;
+            g_strstrip (pLine);
+            g_strlcpy (par.forbidZone [par.nForbidZone], pLine, MAX_SIZE_LINE);
+            forbidZoneAdd (pLine, par.nForbidZone);
+            par.nForbidZone += 1;
+         }
+         else fprintf (stderr, "In readParam, MAX_N_FORBID_ZONE: %d\n", MAX_N_FORBID_ZONE);
       }
       else if (sscanf (pLine, "SMTP_SERVER:%255s", par.smtpServer) > 0);
       else if (sscanf (pLine, "SMTP_USER_NAME:%255s", par.smtpUserName) > 0);
@@ -861,6 +865,7 @@ bool writeParam (const char *fileName, bool header, bool password) {
       fprintf (f, "SHP:             %s\n", par.shpFileName [i]);
    fprintfNoNull (f, "POI:             %s\n", par.poiFileName);
    fprintfNoNull (f, "PORT:            %s\n", par.portFileName);
+   fprintfNoNull (f, "MARKS:           %s\n", par.marksFileName);
    fprintfNoNull (f, "TRACE:           %s\n", par.traceFileName);
    fprintfNoNull (f, "POLAR:           %s\n", par.polarFileName);
    fprintfNoNull (f, "WAVE_POL:        %s\n", par.wavePolFileName);
@@ -988,7 +993,7 @@ bool isDayLight (struct tm *tm0, double t, double lat, double lon) {
 }
 
 /*! for virtual Regatta. return penalty in seconds for manoeuvre type. Depend on tws and energy. Give also sTamina coefficient */
-double fPenalty (int shipIndex, int type, double tws, double energy, double *cStamina) {
+double fPenalty (int shipIndex, int type, double tws, double energy, double *cStamina, bool fullPack) {
    if (type < 0 || type > 2) {
       fprintf (stderr, "In fPenalty, type unknown: %d\n", type);
       return -1;
@@ -1000,7 +1005,9 @@ double fPenalty (int shipIndex, int type, double tws, double energy, double *cSt
    double tMax = shipParam [shipIndex].tMax [type];
    double fTws = 50.0 - 50.0 * cos (G_PI * ((fmax (10.0, fmin (tws, 30.0))-10.0)/(30.0 - 10.0)));
    //printf ("cShip: %.2lf, cStamina: %.2lf, tMin: %.2lf, tMax: %.2lf, fTws: %.2lf\n", cShip, cStamina, tMin, tMax, fTws);
-   return  cShip * (*cStamina) * (tMin + fTws * (tMax - tMin) / 100.0);
+   double t = tMin + fTws * (tMax - tMin) / 100.0;
+   if (fullPack) t *= 0.8;
+   return t * cShip * (*cStamina);
 }
 
 /*! for virtual Regatta. return point loss with manoeuvre types. Depends on tws and fullPack */
@@ -1107,4 +1114,82 @@ double monotonic (void) {
    return (double) ts.tv_sec + (double) ts.tv_nsec * 1e-9;
 }
 
+/*! read all text file in buffer. Allocate memory */
+char *readTextFile (const char *fileName, char *errMessage, size_t maxLen) {
+   FILE *f;
+   struct stat st;
+   if (stat (fileName, &st) != 0){
+      snprintf (errMessage, maxLen, "In readFile: cannot stat %s\n", fileName);
+      return NULL;
+   }
+   const size_t bufferSize = (size_t) st.st_size + 1;
+   char *str = (char *) malloc (bufferSize);
+   if (str == NULL) {
+      snprintf (errMessage, maxLen, "In readFile: Malloc failed: %zu", bufferSize);
+      return NULL;
+   }
+   char *buffer = (char *) malloc (bufferSize);
+   if (buffer == NULL) {
+      snprintf (errMessage, maxLen, "In readFile: Malloc failed: %zu", bufferSize);
+      free (str);
+      return NULL;
+   }
+   buffer [0] = '\0';
+   if ((f = fopen (fileName, "r")) == NULL) {
+      snprintf (errMessage, maxLen, "In readFile: Error Cannot open: %s\n", fileName);
+      free (str);
+      free (buffer);
+      return NULL;
+   }
+   while (fgets (str, bufferSize, f) != NULL) strlcat (buffer, str, st.st_size);
+   fclose (f);
+   free (str);
+   return buffer;
+}
+
+/*! read CSV file marks (Virtual Regatta)
+   if check then polarCheck */
+bool readMarkCSVToJson (const char *fileName, char *out, size_t maxLen) {
+   FILE *f = NULL;
+   char buffer [MAX_SIZE_TEXT_FILE];
+   char str [MAX_SIZE_TEXT];
+   char *what, *name, *id, *coord0, *coord1, *status, *end;
+   double lat0 = 0.0, lon0 = 0.0, lat1 = 0.0, lon1 = 0.0;
+   char empty [] = "";
+
+   if ((f = fopen (fileName, "r")) == NULL) {
+      snprintf (out, maxLen,  "Error in readMarkCSVToJson: cannot open: %s\n", fileName);
+      return false;
+   }
+   strlcpy (out, "[\n", maxLen);
+   
+   while (fgets(buffer, sizeof buffer, f)) {
+      //buffer[strcspn(buffer, "\r\n")] = '\0';
+      char **t = g_strsplit(buffer, ";", -1);
+      if (t == NULL) continue;
+
+      what   = t[0] ? g_strstrip(t[0]) : empty;
+      name   = t[1] ? g_strstrip(t[1]) : empty;
+      id     = t[2] ? g_strstrip(t[2]) : empty;
+      coord0 = t[3] ? g_strstrip(t[3]) : empty;
+      coord1 = t[4] ? g_strstrip(t[4]) : empty;
+      status = t[5] ? g_strstrip(t[5]) : empty;
+
+      analyseCoord (coord0, &lat0, &lon0);
+      analyseCoord (coord1, &lat1, &lon1);
+
+      snprintf(str, sizeof str,
+         "  {\"what\": \"%s\", \"name\": \"%s\", \"id\": \"%s\", "
+         "\"lat0\": %.4lf, \"lon0\": %.4lf, \"lat1\": %.4lf, \"lon1\": %.4lf, \"status\": \"%s\"},\n",
+         what, name, id, lat0, lon0, lat1, lon1, status);
+
+      strlcat (out, str, maxLen);
+      g_strfreev(t);
+   }
+   end = strrchr (out, ',');
+   *end = '\0'; // trunk from last comma
+   strlcat (out, "\n]\n", maxLen);
+   fclose (f);
+   return true;
+}
 

@@ -98,9 +98,9 @@ static inline double orthoCap (double lat1, double lon1, double lat2, double lon
     const double deltaLat = lat2 - lat1;
     const double deltaLon = lon2 - lon1;
     const double avgLatRad = avgLat * DEG_TO_RAD;
-
     const double cap = RAD_TO_DEG * atan2 (deltaLon * cos (avgLatRad), deltaLat);
     const double givryCorrection = -0.5 * deltaLon * sin  (avgLatRad);  // ou fast_sin(avgLatRad)
+
     return cap + givryCorrection;
 }
 
@@ -109,7 +109,6 @@ static inline double orthoCap2 (double lat1, double lon1, double lat2, double lo
     lat1 *= DEG_TO_RAD;
     lat2 *= DEG_TO_RAD;
     double delta_lon = (lon2 - lon1) * DEG_TO_RAD;
-
     double y = sin(delta_lon) * cos(lat2);
     double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(delta_lon);
     
@@ -137,12 +136,9 @@ static inline double loxoDist (double lat1, double lon1, double lat2, double lon
    double q = delta_lat / log(tan(G_PI / 4 + lat2_rad / 2) / tan (G_PI / 4 + lat1_rad / 2));
     
    // Correct for delta_lat being very small
-   if (isnan (q)) {
-      q = cos (mean_lat);
-   }
+   if (isnan (q)) q = cos (mean_lat);
 
    // Distance formula
-  
    return hypot (delta_lat, q * delta_lon) * EARTH_RADIUS;
    // return sqrt (delta_lat * delta_lat + (q * delta_lon) * (q * delta_lon)) * EARTH_RADIUS;
 }

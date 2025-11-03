@@ -25,8 +25,8 @@
 #define LIMIT           1                       // for forwardSectorOptimize
 #define MIN_VMC_RATIO   0.5                     // for forwardSectorOptimize
 #define MAX_N_HISTORY   20                      // for saveRoute
-#define MAX_UNREACHABLE 0                       // for bestTimeDeparture. 0 mens stop after first unreeach detected.
-#define MIN_DT          0.1                     // in hours, the minimum delta time to progress, includi,ng penalties
+#define MAX_UNREACHABLE 0                       // for bestTimeDeparture. 0 means stop after first unreeach detected.
+#define MIN_DT          0.1                     // in hours, the minimum delta time to progress, including penalties
 
 /*! global variables */
 Pp      *isocArray = NULL;                      // list of isochrones Two dimensions array : maxNIsoc  * MAX_SIZE_ISOC
@@ -509,7 +509,7 @@ static void statRoute (SailRoute *route) {
       else { 
          if (route->t [i-1].amure == TRIBORD)
             route->tribordDist += route->t [i-1].od;
-         else
+         else if (route->t [i-1].amure == BABORD)
             route->babordDist += route->t [i-1].od;
       }
       findWindGrib (p.lat, p.lon, par.startTimeInHours + route->t [i-1].time, 
@@ -532,15 +532,15 @@ static void statRoute (SailRoute *route) {
       }
    } // end for
 
-   if (route->t [route->n - 1].motor) {
+   /*if (route->t [route->n - 1].motor) {
       route->motorDist += route->t [route->n - 1].od;
    }
    else {
       if (route->t [route->n - 1].amure == TRIBORD)
          route->tribordDist += route->t [route->n - 1].od;
-      else
+      else if (route->t [route->n - 1].amure == BABORD)
          route->babordDist += route->t [route->n - 1].od;
-   }
+   }*/
    p.lat = route->t [route->n - 1].lat;
    p.lon = route->t [route->n - 1].lon;
    findWindGrib (p.lat, p.lon, par.startTimeInHours + route->t [route->n-1].time, 
@@ -762,7 +762,7 @@ static inline bool goalP (const Pp *pA, const Pp *pB, const Pp *pDest, double t,
 
    penalty = 0.0;
    // printf ("distance: %.2lf, twd: %.2lf, twa : %.2lf, tws: %.2lf, cog: %.2lf, sog:%.2lf, timeTo:%.2lf \n", *distance, twd, twa, tws, cog, sog, *timeTo);
-   if (! *motor) {
+   /*if (! *motor) {
       if (pDest->amure != pB->amure) {                         // changement amure
          if (fabs (twa) < 90) penalty = par.penalty0 / 3600.0; // Tack
          else penalty = par.penalty1 / 3600.0;                 // Gybe
@@ -771,7 +771,7 @@ static inline bool goalP (const Pp *pA, const Pp *pB, const Pp *pDest, double t,
          penalty += par.penalty2 / 3600.0;                      
    }
    else penalty = 0.0;
-
+   */
    double realDt = dt - penalty;
    if (realDt < MIN_DT) realDt = MIN_DT;   // In case penalty is very big...  
    

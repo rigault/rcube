@@ -65,7 +65,7 @@
 #define MAX_N_SHP_FILES       4                 // Max number of shape file
 #define SMALL_SIZE            5                 // for short string
 #define MAX_SIZE_FORBID_ZONE  100               // Max size per forbidden zone
-#define MAX_N_FORBID_ZONE     10                // Max nummber of forbidden zones
+#define MAX_N_FORBID_ZONE     32                // Max number of forbidden zones
 #define N_METEO_ADMIN         4                 // administration: Weather Service US, DWD, etc
 
 #define MAX_N_COMPETITORS     10                // Number Max of competitors
@@ -76,7 +76,7 @@
 enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
 enum {WIND_POLAR, WAVE_POLAR, SAIL_POLAR};      // for polar information, either WIND or WAVE or SAIL
 enum {BASIC, DD, DM, DMS};                      // degre, degre decimal, degre minutes, degre minutes seconds
-enum {TRIBORD, BABORD};                         // amure
+enum {TRIBORD, BABORD};                         // amure TRIBORD = STARBOARD, BABORD = PORT
 enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION};                   // for chooseDeparture.ret values and allCompetitors check
 enum {ROUTING_STOPPED = -2, ROUTING_ERROR = -1, ROUTING_RUNNING = 0};   // for routingLaunch
 struct MeteoElmt {
@@ -357,6 +357,7 @@ typedef struct {
    char logFileName [MAX_SIZE_FILE_NAME];    // log the runs
    char wpGpxFileName [MAX_SIZE_FILE_NAME];  // To tpre Way Points in GPX format
    char dashboardVR [MAX_SIZE_FILE_NAME];    // Virtual Regatta dashboard thanks to plugin 
+   char marksFileName [MAX_SIZE_FILE_NAME];  // Virtual Regatta marks
    double staminaVR;                         // Init stamina
    int nShpFiles;                            // number of Shp files
    double startTimeInHours;                  // time of beginning of routing after time0Grib

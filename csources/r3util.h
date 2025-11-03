@@ -60,4 +60,7 @@ extern double fTimeToRecupOnePoint (double tws);
 extern char   *paramToStrJson (Par *par, char *buffer, size_t maxLen);
 extern int    nearestPort (double lat, double lon, const char *fileName, char *str, size_t maxLen);
 extern double monotonic (void);
+extern char * readTextFile (const char *fileName, char *errMessage, size_t maxLen);
+extern bool   readMarkCSVToJson (const char *fileName, char *out, size_t maxLen);
+
 

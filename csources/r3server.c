@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -35,19 +36,19 @@
 #define PATTERN                "GFS"
 #define MAX_SIZE_FEED_BACK     1024
 #define ADMIN_LEVEL            10          // level of authorization for administrator
-#define BIG_BUFFER_SIZE        (10*MILLION)
+#define BIG_BUFFER_SIZE        (30*MILLION)
 #define MAX_SIZE_MESS          100000
 
 char *bigBuffer = NULL;
 
 const char *filter[] = {".csv", ".pol", ".grb", ".grb2", ".log", ".txt", ".par", "json", NULL}; // global filter for REQ_DIR request
 
-enum {REQ_KILL = -1793, REQ_TEST = 0, REQ_ROUTING = 1, REQ_COORD = 2, REQ_RACE = 3, REQ_POLAR = 4, 
+enum {REQ_KILL = -1793, REQ_TEST = 0, REQ_ROUTING = 1, REQ_COORD = 2, REQ_FORBID = 3, REQ_POLAR = 4, 
       REQ_GRIB = 5, REQ_DIR = 6, REQ_PAR_RAW = 7, REQ_PAR_JSON = 8, 
-      REQ_INIT = 9, REQ_FEEDBACK = 10, REQ_DUMP_FILE = 11, REQ_NEAREST_PORT = 12}; // type of request
+      REQ_INIT = 9, REQ_FEEDBACK = 10, REQ_DUMP_FILE = 11, REQ_NEAREST_PORT = 12, REQ_MARKS = 13}; // type of request
 
 // level of authorization
-const int typeLevel [13] = {0, 1, 0, ADMIN_LEVEL, 0, 0, 0, 0, 0, ADMIN_LEVEL, 0, 0, 0};        
+const int typeLevel [14] = {0, 1, 0, 0, 0, 0, 0, 0, 0, ADMIN_LEVEL, 0, 0, 0, 0};        
  
 char parameterFileName [MAX_SIZE_FILE_NAME];
 
@@ -63,6 +64,7 @@ typedef struct {
    int penalty0;                             // penalty in seconds for tack
    int penalty1;                             // penalty in seconds fot Gybe
    int penalty2;                             // penalty in seconds for sail change
+   int initialAmure;                         // initial Amure of the routing calculation 0 = starboard = tribord, or 1 = port = babord
    int timeStep;                             // isoc time step in seconds
    time_t epochStart;                        // epoch time to start routing
    bool isoc;                                // true if isochrones requested
@@ -113,12 +115,146 @@ typedef struct {
    time_t mtime;
 } FileInfo;
 
+/*! Generate Json array for polygon */
+static void polygonToJson (MyPolygon *po, char *str, size_t maxLen) {
+   char temp [128];
+   double lat, lon;
+   strlcpy (str, "  [", maxLen);
+   const int n = po->n;
+   printf ("Number of points in polygon: %d\n", n);
+   for (int k = 0; k < n; k++) {
+      lat = (po->points [k].lat);
+      lon = (po->points [k].lon);
+      snprintf (temp, sizeof temp, "[%.4lf, %.4lf]%s", lat, lon, (k < n-1) ? ", " : "");
+      strlcat (str,temp, maxLen); 
+   }
+   strlcat (str, "]", maxLen);
+}
+
+/*!
+ * \brief Approximate great-circle segment length in nautical miles.
+ *
+ * This function estimates the distance between two geographic points
+ * (lat0, lon0) and (lat1, lon1) in nautical miles (NM) using a local
+ * equirectangular projection. For routing validation this is accurate
+ * enough and cheaper than a full haversine.
+ *
+ * Latitudes and longitudes are expressed in decimal degrees.
+ *
+ * \return Approximate distance in nautical miles.
+ */
+static double approxSegmentLengthNm(double lat0, double lon0, double lat1, double lon1) {
+   double dlatDeg = lat1 - lat0;
+   double dlonDeg = lon1 - lon0;
+   double latMidRad = ((lat0 + lat1) * 0.5) * DEG_TO_RAD;
+   double dlatNm = dlatDeg * 60.0;
+   double dlonNm = dlonDeg * 60.0 * cos(latMidRad);
+
+   return hypot(dlatNm, dlonNm);
+}
+/*!
+ * \brief Check if the straight segment between (lat0, lon0) and (lat1, lon1)
+ *        stays entirely over allowed sea areas.
+ *
+ * The function samples intermediate points along the geodesic segment
+ * (approximated as a straight interpolation in lat/lon space) and calls
+ * isSea(lat, lon) on each sample.
+ *
+ * Rationale:
+ * - Each endpoint is already supposed to be valid water, but in practice
+ *   a straight line between two valid nodes may cross land (e.g. cutting
+ *   across a headland or an island).
+ * - We discretize the segment into small steps in nautical miles (NM).
+ *   Finer step -> safer, but more calls to isSea().
+ *
+ * Assumptions:
+ * - isSea(lat, lon) is fast (array lookup).
+ * - Lat/lon variations between the two points are small enough that
+ *   linear interpolation in degrees is acceptable for validation.
+ *
+ * \param lat0 start latitude  in decimal degrees
+ * \param lon0 start longitude in decimal degrees
+ * \param lat1 end latitude    in decimal degrees
+ * \param lon1 end longitude   in decimal degrees
+ *
+ * \return true  if all sampled points are at sea (and not in forbidden areas)
+ * \return false if any sampled point is on land / forbidden
+ */
+static bool segmentOverSea(double lat0, double lon0, double lat1, double lon1) {
+   // 1. Defensive check on endpoints */
+   const double epsilon = 1e-12;
+   if (!isSea (tIsSea, lat0, lon0)) return false;
+   if (!isSea (tIsSea, lat1, lon1)) return false;
+
+   // 2. Degenerate segment (same point or extremely close) */
+   double dlat = lat1 - lat0;
+   double dlon = lon1 - lon0;
+   if (fabs(dlat) < epsilon  && fabs(dlon) < epsilon) return true; // Same point, already tested */
+
+   // 3. Estimate segment length in NM */
+   double lengthNm = approxSegmentLengthNm(lat0, lon0, lat1, lon1);
+
+   // 4. Choose max spacing between checks.
+   const double STEP_NM = 1.0;
+
+   // 5. Compute how many intervals we need.
+   int steps = (int)ceil(lengthNm / STEP_NM);
+
+   //Safety clamps:
+   if (steps < 1) steps = 1;
+   if (steps > 2000) steps = 2000;  // hard cap to avoid crazy loops
+   //Sample intermediate points.  We skip i=0 and i=steps because those are endpoints, already checked.
+   for (int i = 1; i < steps; i++) {
+      double t = (double)i / (double)steps;
+      double lat = lat0 + t * (lat1 - lat0);   // Linear interpolation in lat/lon space.
+      double lon = lon0 + t * (lon1 - lon0);
+      if (!isSea(tIsSea, lat, lon)) return false;
+   }
+   return true;
+}
+
+/*!
+ * \brief Check that every consecutive segment of a route is fully over sea.
+ *
+ * The route is assumed to be an ordered list of waypoints. For each pair
+ * of consecutive waypoints, segmentOverSea() is called. If any segment
+ * crosses land or a forbidden area, the function returns false.
+ *
+ * \param route pointer to SailRoute.
+ * \return -1 if all segments are OK (sea only)
+ * \return i  index of the first invalid segment [i -> i+1]
+ */
+static int checkRoute(const SailRoute *route) {
+   if (!route || route->n < 2) return -1;
+   for (int i = 0; i < route->n - 1; i++) {
+      if (!segmentOverSea (route->t[i].lat, route->t[i].lon, route->t[i+1].lat, route->t[i+1].lon)) return i;
+   }
+   return -1;
+}
+
+/*! Exclusion zone is an array of polygons */
+static void forbidToJson (char *res, size_t maxLen) {
+   char str [1000];
+   strlcpy (res, "[\n", maxLen);
+   printf ("Number of polygon: %d\n", par.nForbidZone);
+   
+   for (int i = 0; i < par.nForbidZone; i++) {
+      polygonToJson (&forbidZones [i], str, sizeof str);
+      strlcat (res, str, maxLen);
+      if (i < par.nForbidZone -1) strlcat (res, ",", maxLen);
+      strlcat (res, "\n", maxLen);
+   }
+
+   strlcat (res, "]\n", maxLen);
+}
+
 /*! generate json description of isochrones. Concatenate it to res */
 static char *isochronesToStrCatJson (char *res, size_t maxLen) {
    Pp pt;
    char str [MAX_SIZE_TEXT];
    int index;
-   g_strlcat (res, "[\n", maxLen);
+   char *savePt = res + strlen (res);
+   g_strlcat (res, ",\n\"_isoc\": \n[\n", maxLen);
    Pp *newIsoc = NULL; // array of points
    if ((newIsoc = malloc (MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
       fprintf (stderr, "In isochronesToStrJson: error in memory newIsoc allocation\n");
@@ -143,7 +279,12 @@ static char *isochronesToStrCatJson (char *res, size_t maxLen) {
       snprintf (str, sizeof (str),  "   ]%s\n", (i < nIsoc -1) ? "," : ""); // no comma for last value 
       g_strlcat (res, str, maxLen);
    }
-   g_strlcat (res, "]\n", maxLen); 
+   if (strlen (res) >= (maxLen - sizeof str - 1)) {// too big
+      res = savePt;
+      *res = '\0';
+      strlcat (res, ",\n\"_Warning_1\": \"No isochrone sent because too big!\"\n", maxLen); // no isochrone if too big !
+   }
+   else g_strlcat (res, "]\n", maxLen); 
    free (newIsoc);
    return res;
 }
@@ -151,7 +292,8 @@ static char *isochronesToStrCatJson (char *res, size_t maxLen) {
 /*! generate json description of isochrones decriptor. Conatenate te description to res */
 static char *isoDescToStrCatJson (char *res, size_t maxLen) {
    char str [MAX_SIZE_TEXT];
-   g_strlcat (res, "[\n", maxLen);
+   char *savePt = res + strlen (res);
+   g_strlcat (res, ",\n\"_isodesc\": \n[\n", maxLen);
 
    for (int i = 0; i < nIsoc; i++) {
       //double distance = isoDesc [i].distance;
@@ -164,7 +306,12 @@ static char *isoDescToStrCatJson (char *res, size_t maxLen) {
          (i < nIsoc - 1) ? "," : "");
       g_strlcat (res, str, maxLen);
    }
-   g_strlcat (res, "]\n", maxLen); 
+   if (strlen (res) >= (maxLen - sizeof str - 1)) {// too big
+      res = savePt;
+      *res = '\0';
+      strlcat (res, ",\n\"_Warning_2\": \"No isoDesc sent because too big!\"\n", maxLen); // no isochrone if too big !
+   }
+   else g_strlcat (res, "]\n", maxLen); 
    return res;
 }
 
@@ -173,6 +320,7 @@ static char  *routeToStrJson (SailRoute *route, bool isoc, bool isoDesc, char *r
    char str [MAX_SIZE_MESS] = "";
    char strSail [MAX_SIZE_NAME] = "";
    double twa = 0.0, hdg = 0.0, twd = 0.0;
+   int nSeg = -1; // for checkRoute
    if (route->n <= 0) return NULL;
 
    int iComp = (route->competitorIndex < 0) ? 0 : route->competitorIndex;
@@ -256,13 +404,18 @@ static char  *routeToStrJson (SailRoute *route, bool isoc, bool isoDesc, char *r
 
    g_strlcat (res, "]\n}\n", maxLen);
 
-   if (isoc) {
-      g_strlcat (res, ",\n\"_isoc\": \n", maxLen);
-      isochronesToStrCatJson (res, maxLen); // concat in res the isochrones
+   nSeg = checkRoute (route);
+   if (nSeg != -1) { // route is not OK, no isochrone or isodesc, just the route and warning
+      fprintf (stderr, "In routeToSrJson, checkRoute warns bad segment (no sea): %d\n", nSeg);
+      snprintf (str, sizeof str, ",\n\"_Warning_0\": \"route over sea or forbidden zone on segment: %d (%.2lf, %.2lf) to (%.2lf, %.2lf)\"\n", 
+         nSeg, route->t[nSeg].lat, route->t[nSeg].lon, route->t[nSeg + 1].lat, route->t[nSeg + 1].lon);
+      g_strlcat (res, str, maxLen);
    }
    if (isoDesc) {
-      g_strlcat (res, ",\n\"_isodesc\": \n", maxLen);
-      isoDescToStrCatJson (res, maxLen); // concat in res des descriptors
+      isoDescToStrCatJson (res, maxLen - 2);    // concat in res des descriptors
+   }
+   if (isoc) {
+      isochronesToStrCatJson (res, maxLen - 2); // concat in res the isochrones
    }
    g_strlcat (res, "}\n", maxLen);
    return res;
@@ -290,7 +443,7 @@ static char *infoCoordToJson (double lat, double lon, char *res, size_t maxLen) 
  * @param bufferSize Size of the clientAddress buffer.
  * @return true if the IP address was successfully found and stored, false if not found or error.
  */
-bool getRealIPAddress (const char* headers, char* clientAddress, size_t bufferSize) {
+static bool getRealIPAddress (const char* headers, char* clientAddress, size_t bufferSize) {
    const char* headerName = "X-Real-IP: ";
    const char* headerStart = strstr (headers, headerName);
 
@@ -316,7 +469,7 @@ bool getRealIPAddress (const char* headers, char* clientAddress, size_t bufferSi
 }
 
 /*! extract user agent */
-char* extractUserAgent (const char* saveBuffer) {
+static char* extractUserAgent (const char* saveBuffer) {
    const char* headerName = "User-Agent: ";
    const char* userAgentStart = strstr (saveBuffer, headerName);
    if (userAgentStart) {
@@ -330,7 +483,7 @@ char* extractUserAgent (const char* saveBuffer) {
 }
 
 /*! extract level */
-int extractLevel (const char* buffer) {
+static int extractLevel (const char* buffer) {
    if (!par.authent) return ADMIN_LEVEL; // No autentication, get highest level
    const char* headerName = "X-User-Level:";
    const char* levelStart = strstr (buffer, headerName);
@@ -339,7 +492,7 @@ int extractLevel (const char* buffer) {
 }
 
 /*! compare level of authorization with request */
-bool allowedLevel (ClientRequest *clientReq) {
+static bool allowedLevel (ClientRequest *clientReq) {
    if ((clientReq->type == REQ_KILL) && (clientReq->level == ADMIN_LEVEL)) {
       return true;
    }
@@ -553,14 +706,15 @@ static bool initContext (const char *parameterFileName, const char *pattern) {
    if (readPolar (true, par.polarFileName, &polMat, &sailPolMat, errMessage, sizeof (errMessage))) {
       printf ("Polar loaded   : %s\n", par.polarFileName);
    }
-   else
+   else {
       fprintf (stderr, "In initContext, Error readPolar: %s\n", errMessage);
-      
-   if (readPolar (true, par.wavePolFileName, &wavePolMat, NULL, errMessage, sizeof (errMessage)))
+   }   
+   if (readPolar (true, par.wavePolFileName, &wavePolMat, NULL, errMessage, sizeof (errMessage))) {
       printf ("Polar loaded   : %s\n", par.wavePolFileName);
-   else
+   }
+   else {
       fprintf (stderr, "In initContext, Error readPolar: %s\n", errMessage);
-  
+   }
    printf ("par.web        : %s\n", par.web);
    nIsoc = 0;
    route.n = 0;
@@ -686,6 +840,7 @@ static bool decodeHttpReq (const char *req, ClientRequest *clientReq) {
       else if (sscanf (parts[i], "penalty0=%d", &clientReq->penalty0) == 1);                    // penalty0 extraction
       else if (sscanf (parts[i], "penalty1=%d", &clientReq->penalty1) == 1);                    // penalty1 extraction
       else if (sscanf (parts[i], "penalty2=%d", &clientReq->penalty2) == 1);                    // penalty2 (sail change)  extraction
+      else if (sscanf (parts[i], "initialAmure=%d", &clientReq->initialAmure) == 1);            // initial Amure extraction
       else if (sscanf (parts[i], "epochStart=%ld",  &clientReq->epochStart) == 1);              // time startextraction
       else if (sscanf (parts[i], "polar=%255s", clientReq->polarName) == 1);                    // polar name
       else if (sscanf (parts[i], "wavePolar=%255s", clientReq->wavePolName) == 1);              // wave polar name
@@ -736,7 +891,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    char directory [MAX_SIZE_DIR_NAME];
    // printf ("startInfo after: %s, startTime: %lf\n", asctime (&startInfo), par.startTimeInHours);
    if ((clientReq->nBoats == 0) || (clientReq->nWp == 0)) {
-      snprintf (checkMessage, maxLen, "\"1: No boats or no Waypoints\"");
+      snprintf (checkMessage, maxLen, "1: No boats or no Waypoints");
       return false;
    }
    par.allwaysSea = !clientReq->forbid;
@@ -761,6 +916,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    par.constWave = clientReq->constWave;
    par.constCurrentS = clientReq->constCurrentS;
    par.constCurrentD = clientReq->constCurrentD;
+   par.staminaVR = clientReq->staminaVR;
 
    // change polar if requested
    if (clientReq->polarName [0] != '\0') {
@@ -773,7 +929,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
             printf ("Polar loaded   : %s\n", strPolar);
          }
          else {
-            snprintf (checkMessage, maxLen, "\"2: Error reading Polar: %s\"", clientReq->polarName);
+            snprintf (checkMessage, maxLen, "2: Error reading Polar: %s", clientReq->polarName);
             return false;
          }
       }  
@@ -788,7 +944,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
             printf ("Wave Polar loaded : %s\n", strPolar);
          }
          else {
-            snprintf (checkMessage, maxLen, "\"2: Error reading Wave Polar: %s\"", clientReq->wavePolName);
+            snprintf (checkMessage, maxLen, "2: Error reading Wave Polar: %s", clientReq->wavePolName);
             return false;
          }
       }  
@@ -809,7 +965,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
             printf ("Grib loaded   : %s\n", strGrib);
          }
          else {
-            snprintf (checkMessage, maxLen, "\"3: Error reading Grib: %s\"", clientReq->gribName);
+            snprintf (checkMessage, maxLen, "3: Error reading Grib: %s", clientReq->gribName);
             return false;
          }
       }  
@@ -825,7 +981,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
             printf ("Current Grib loaded   : %s\n", strGrib);
          }
          else {
-            snprintf (checkMessage, maxLen, "\"3: Error reading Current Grib: %s\"", clientReq->currentGribName);
+            snprintf (checkMessage, maxLen, "4: Error reading Current Grib: %s", clientReq->currentGribName);
             return false;
          }
       }  
@@ -843,13 +999,13 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    for (int i = 0; i < clientReq->nBoats; i += 1) {
       if (! par.allwaysSea && ! isSeaTolerant (tIsSea,  clientReq -> boats [i].lat,  clientReq -> boats [i].lon)) {
          snprintf (checkMessage, maxLen, 
-            "\"5: Competitor not in sea.\",\n\"name\": \"%s\", \"lat\": %.6lf, \"lon\": %.6lf\n",
+            "5: Competitor not in sea., name: %s, lat: %.6lf, lon: %.6lf",
             clientReq -> boats [i].name, clientReq -> boats [i].lat, clientReq -> boats [i].lon);
          return false;
       }
       if (! isInZone (clientReq -> boats [i].lat, clientReq -> boats [i].lon, &zone) && (par.constWindTws == 0)) { 
          snprintf (checkMessage, maxLen, 
-            "\"6: Competitor not in Grib wind zone.\",\n\"grib\": \"%s\", \"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf\n",
+            "6: Competitor not in Grib wind zone., grib: %s, bottomLat: %.2lf, leftLon: %.2lf, topLat: %.2lf, rightLon: %.2lf",
             gribBaseName, zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight);
          free (gribBaseName);
          return false;
@@ -863,13 +1019,13 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    for (int i = 0; i < clientReq->nWp; i += 1) {
       if (! par.allwaysSea && ! isSeaTolerant (tIsSea, clientReq->wp [i].lat, clientReq->wp [i].lon)) {
          snprintf (checkMessage, maxLen, 
-            "\"7: WP or Dest. not in sea.\",\n\"lat\": %.2lf, \"lon\": %.2lf\n",
+            "7: WP or Dest. not in sea, lat: %.2lf, lon: %.2lf",
             clientReq->wp [i].lat, clientReq->wp [i].lon);
          return false;
       }
       if (! isInZone (clientReq->wp [i].lat , clientReq->wp [i].lon , &zone) && (par.constWindTws == 0)) {
          snprintf (checkMessage, maxLen, 
-            "\"8: WP or Dest. not in Grib wind zone.\",\n\"grib\": \"%s\", \"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf\n",
+            "8: WP or Dest. not in Grib wind zone:  %s, bottomLat: %.2lf, leftLon: %.2lf, topLat: %.2lf, rightLon: %.2lf",
             gribBaseName, zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight);
          free (gribBaseName);
          return false;
@@ -890,6 +1046,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
 
    par.pOr.lat = clientReq->boats [0].lat;
    par.pOr.lon = clientReq->boats [0].lon;
+   par.pOr.amure = clientReq->initialAmure;
    par.pDest.lat = clientReq->wp [clientReq->nWp-1].lat;
    par.pDest.lon = clientReq->wp [clientReq->nWp-1].lon;
    return true;
@@ -1001,7 +1158,8 @@ static char *dumpFileToStr(const char *fileName, char *out, size_t maxLen) {
    return out;
 }
 
-static char * testToJson (int serverPort, const char *clientIP, const char *userAgent, int level, char *out, size_t maxLen) {
+/*! Provide system information */
+static char *testToJson (int serverPort, const char *clientIP, const char *userAgent, int level, char *out, size_t maxLen) {
    char strWind [MAX_SIZE_LINE] = "";
    char strCurrent [MAX_SIZE_LINE] = "";
    char strMem [MAX_SIZE_LINE] = "";
@@ -1049,10 +1207,10 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
       if (checkParamAndUpdate (clientReq, checkMessage, sizeof (checkMessage))) {
          competitors.runIndex = 0;
          routingLaunch ();
-         routeToStrJson (&route, clientReq->isoc, clientReq->isoDesc, outBuffer, maxLen); 
+         routeToStrJson (&route, clientReq->isoc, clientReq->isoDesc, outBuffer, maxLen);
       }
       else {
-         snprintf (outBuffer, maxLen, "{\"_Error\":\n\"%s\"\n}\n", checkMessage);
+         snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", checkMessage);
       }
       break;
    case REQ_COORD:
@@ -1060,10 +1218,12 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
          infoCoordToJson (clientReq->boats [0].lat, clientReq->boats [0].lon, outBuffer, maxLen);
       }
       else {
-         snprintf (outBuffer, maxLen, "{\"_Error\":\n\"No Boat\"\n}\n");
+         snprintf (outBuffer, maxLen, "{\"_Error\": \"No Boat\"\n}\n");
       }
       break;
-      
+   case REQ_FORBID:
+      forbidToJson (outBuffer, maxLen);
+      break;
    case REQ_POLAR:
       if (clientReq->polarName [0] != '\0') {
          if (strstr (clientReq->polarName, "wavepol")) {
@@ -1086,10 +1246,7 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
       else snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", "No Grib");
       break;
    case REQ_DIR:
-      if ((strstr (clientReq->dirName, "grib") != NULL) && (clientReq->level == 0)) // only GFS for level 0
-         listDirToStrJson (par.workingDir, clientReq->dirName, clientReq->sortByName, "GFS", filter, outBuffer, maxLen);
-      else
-         listDirToStrJson (par.workingDir, clientReq->dirName, clientReq->sortByName, NULL, filter, outBuffer, maxLen);
+      listDirToStrJson (par.workingDir, clientReq->dirName, clientReq->sortByName, NULL, filter, outBuffer, maxLen);
       break;
    case REQ_PAR_RAW:
       writeParam (buildRootName (TEMP_FILE_NAME, tempFileName, sizeof (tempFileName)), true, false);
@@ -1110,6 +1267,11 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
       break;
    case REQ_DUMP_FILE:  // raw dump
       dumpFileToStr (clientReq->fileName, outBuffer, maxLen);
+      break;
+   case REQ_MARKS: 
+      if (! readMarkCSVToJson (par.marksFileName, outBuffer, maxLen)) {
+         snprintf (outBuffer, maxLen, "{\"_Error\": \"Reading Mark File %s\"}\n", par.marksFileName);
+      }
       break;
    case REQ_NEAREST_PORT:
       if (clientReq->nWp > 0)
