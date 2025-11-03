@@ -32,6 +32,9 @@
    <script src="launch.js"></script>
    <script src="aisgps.js"></script>
    <script src="ports.js"></script>
+   <script src="polygons.js"></script>
+   <script src="marks.js"></script>
+   <script src="meters.js"></script>
    <script src="r3.js?v=0.2"></script>
 </head>
 <body>
@@ -70,6 +73,7 @@
             <button class="menu-link" onclick="displayWayPoints(competitors, myWayPoints);">Waypoints</button>
             <button class="menu-link" onclick="changeParam (routeParam);">Change</button>
             <button class="menu-link" onclick="manageCompetitors (competitors);">Manage Competitors</button>
+            <button class="menu-link" onclick="showMarks(marks);">VR Marks show</button>
             <button class="menu-link" onclick="stamina ();">Stamina</button>
          </div>
       </div>
@@ -87,9 +91,10 @@
          <div class="dropdown-content">
             <button class="menu-link" onclick="openTide (0, competitors[0].lat, competitors[0].lon);">SHOM</button>
             <button class="menu-link" onclick="openTide (1, competitors[0].lat, competitors[0].lon);">Marée Info</button>
-            <button class="menu-link" onclick="openMeteoFrance ();">Météo France Map</button>
+            <button class="menu-link" onclick="window.open (`https://meteofrance.com/isofronts`);">Météo France Map</button>
             <button class="menu-link" onclick="openWindy (competitors[0].lat, competitors[0].lon);">Windy</button>
             <button class="menu-link" onclick="showNoaaMapGif ();">NOAA Map</button>
+            <button class="menu-link" onclick="window.open (`https://ocean.weather.gov/shtml/A_brief.php`);">NOAA Ocean</button>
             <button class="menu-link" onclick="openGoogleMaps(competitors[0].lat, competitors[0].lon)">GoogleMap</button>
             <button class="menu-link" onclick="showOpenStreetMap(competitors[0].lat, competitors[0].lon)">OpenStreet</button>
             <button class="menu-link" onclick="showOpenSeaMap(competitors[0].lat, competitors[0].lon)">OpenSeaMap</button>
@@ -104,7 +109,7 @@
             <button class="menu-link" onclick="dumpIsoc (route);">Dump Isochrones</button>
             <button class="menu-link" onclick="dumpIsoDesc (route);">Dump IsoDesc</button>
             <button class="menu-link" onclick="parDump();">Par Dump</button>
-            <button class="menu-link" onclick="chooseFile ();">File Dump</button>
+            <button class="menu-link" onclick="chooseDumpFile ();">File Dump</button>
             <button class="menu-link" onclick="aisDump(aisData);">AIS Dump</button>
             <button class="menu-link" onclick="replay ();">Replay</button>
             <a href="doc/clihelp.md" target="_blank">CLI Help</a>
@@ -146,7 +151,7 @@
          <span id="sliderValue">1</span>
       </span>
 
-   <script>
+   <script>      
       function updateTimeLine(val) {
          document.getElementById("timeLineValue").textContent = String(val).padStart(3, '0') + "%";
          const boatName = Object.keys(route)[0];  // Extract first key from response
@@ -172,7 +177,7 @@
          const sliderVal = document.getElementById("slider").value;
          updateValue(sliderVal);
       });
-   </script>
+</script>
    </div>
    <footer class="footer">
       <span id = "infoRoute">Info</span>
@@ -258,11 +263,6 @@
       const zoom = 10;
       const url = `https://map.openseamap.org/?lat=${lat}&lon=${lon}&zoom=${zoom}`;
       openWithSwal ('OpenSeaMap', url);
-   }
-
-   function openMeteoFrance () {
-      const url = "https://meteofrance.com/isofronts";
-      window.open(url, '_blank');
    }
 
    function openWindy (lat, lon) {

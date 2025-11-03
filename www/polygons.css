@@ -1,0 +1,12 @@
+/* Styling for polygons drawn by drawPolygons() */
+.zonePolygon {
+   fill: #ffc0cb;            /* light pink (rosé) */
+   fill-opacity: 0.25;       /* transparent fill */
+   stroke: #d28aa7;          /* soft pink-ish outline */
+   stroke-width: 1.5;        /* light contour */
+}
+
+/* Optional: crisper edges on high-DPI displays */
+.leaflet-overlay-pane .zonePolygon {
+   shape-rendering: geometricPrecision;
+}
