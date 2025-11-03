@@ -26,9 +26,9 @@ let competitors = [
   { name: "noname", lat: 46, lon: -3, color: 0, marker: {}, route: [] },
 ];*/
 
-window.routeParam = {
+let routeParam = {
    iBoat: 1,               // 0 reserved for all boats
-   isoStep: 1800,          // 30 mn
+   isoStep: 900,           // 15 mn
    startTime: new Date (),
    nTry: 0,                // 0 equivalent to 1 try
    timeInterval: 0,        // 0 means not used
@@ -41,21 +41,23 @@ window.routeParam = {
    maxWind: 100,
    penalty0: 180,
    penalty1: 180,
-   penalty2: 0,
+   penalty2: 180,
    motorSpeed: 2,
    threshold: 2,
    dayEfficiency: 1.0,
    nightEfficiency: 1.0,
+   initialAmure: 0,
    cogStep: 2,
    cogRange: 90,
    jFactor: 50,
    kFactor: 40,
    nSectors: 720,
    model: "GFS",
+   staminaVR: 100,
    constWindTws: 0, constWindTwd:0, constWave:0, constCurrentS:0, constCurrentD: 0
 };
 
-let rCubeInfo = "© René Rigault";
+const rCubeInfo = "© René Rigault";
 let index = 0;
 const options = {
    key: rCubeKey,
@@ -63,7 +65,8 @@ const options = {
    lon: competitors [0].lon,
    zoom: 4,
    latlon: true,
-   timeControl: true
+   timeControl: true,
+   model: 'gfs'
 };
 let bounds;
 let marker;
@@ -85,9 +88,9 @@ let compResult = [];
 const colorMap = ["red", "green", "blue", "orange", "black"];
 
 // equivalent server side: enum {REQ_TEST, REQ_ROUTING, ...}; // type of request
-const REQ = {TEST: 0, ROUTING: 1, COORD: 2, RACE: 3, POLAR: 4, 
+const REQ = {TEST: 0, ROUTING: 1, COORD: 2, FORBID_ZONE: 3, POLAR: 4, 
              GRIB: 5, DIR: 6, PAR_RAW: 7, PAR_JSON: 8,
-             INIT: 9, FEEDBACK:10, DUMP_FILE:11, NEAREST_PORT:12}; 
+             INIT: 9, FEEDBACK:10, DUMP_FILE:11, NEAREST_PORT:12, MARKS: 13}; 
 
 const MARKER = encodeURIComponent(`<?xml version="1.0" encoding="UTF-8" standalone="no"?>
         <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
@@ -161,11 +164,12 @@ function saveAppState() {
    localStorage.setItem("POIs", JSON.stringify(getSerializablePOIs()));
    localStorage.setItem("myWayPoints", JSON.stringify(myWayPoints));
    localStorage.setItem("windyPlay", windyPlay);
+   localStorage.setItem("routeParam", JSON.stringify(routeParam));
 }
 
 /**
  * Show point waypoints and destination
- * Give the right direction to boats toward first waypoin if requested
+ * Give the right direction to boats toward first waypoint if requested
  * @param {Array} wayPoints - List of waypoints as [latitude, longitude].
  */
 function showWayPoint (wayPoints, headingRequested = true) {
@@ -173,7 +177,7 @@ function showWayPoint (wayPoints, headingRequested = true) {
       for (let boat of competitors) {
          drawOrtho (boat, wayPoints);
          if (headingRequested) {
-            let heading = orthoCap ([boat.lat, boat.lon], wayPoints [0]);
+            let heading = orthoCap (boat.lat, boat.lon, wayPoints [0][0], wayPoints [0][1]);
             // alert (`name: ${boat.name}, heading: ${heading}`);
             boat.marker.setLatLng ([boat.lat, boat.lon]);                   // Move the mark
             boat.marker._icon.setAttribute ('data-heading', heading); 
@@ -193,9 +197,7 @@ function showWayPoint (wayPoints, headingRequested = true) {
 function deleteAllPOIs () {
    // Remove each marker from the map
    for (const poi of POIs) {
-      if (poi._marker) {
-          map.removeLayer(poi._marker);
-       }
+      if (poi._marker) map.removeLayer(poi._marker);
    }
    POIs.length = 0;    // Clear the array
    saveAppState();     // Update storage
@@ -276,9 +278,7 @@ function addPOI(lat, lon) {
       confirmButtonText: "Add",
       cancelButtonText: "Cancel",
       inputValidator: (value) => {
-         if (!value) {
-            return "Name cannot be empty";
-         }
+         if (!value) return "Name cannot be empty";
       }
    }).then((result) => {
       if (result.isConfirmed) {
@@ -311,6 +311,7 @@ function loadAppState() {
    const savedPOIs = localStorage.getItem ("POIs");
    const savedWaypoints = localStorage.getItem ("myWayPoints");
    const savedWindyPlay = localStorage.getItem ("windyPlay");
+   const savedRouteParam = localStorage.getItem ("routeParam");
    if (saved) {
       const parsed = JSON.parse(saved);
       competitors = parsed.map(c => ({
@@ -326,6 +327,7 @@ function loadAppState() {
    if (savedPOIs) POIs = JSON.parse (savedPOIs);
    if (savedWaypoints) myWayPoints = JSON.parse(savedWaypoints);
    if (savedWindyPlay) windyPlay = savedWindyPlay;
+   //  if (savedRouteParam) routeParam = JSON.parse (savedRouteParam);
 }
 
 /**
@@ -369,9 +371,7 @@ function deleteCompetitor(competitor) {
  */
 function deleteCompetitorByName(name) {
     const competitor = competitors.find(c => c.name === name);
-    if (competitor) {
-        deleteCompetitor(competitor);
-    }
+    if (competitor) deleteCompetitor(competitor);
 }
 
 /** 
@@ -572,27 +572,16 @@ function updateWindyMap (route) {
  * @param {Object} routeParam - Object containing route parameters.
  * @returns {string} The formatted request body.
  */
-function buildBodyRequest (reqType, competitors, myWayPoints, routeParam) {
+function buildBodyRequest (c, myWayPoints, routeParam) {
    const waypoints = myWayPoints
       .map(wp => `${wp[0]},${wp[1]}`)
       .join(";");
-
-   // Select the boat(s)
-   let boats;
-   if (reqType === REQ.RACE) {
-      boats = competitors
-         .map(c => `${c.name}, ${c.lat}, ${c.lon}`)
-         .join(";") + ";";
-   } else {
-      let c = competitors[routeParam.iBoat - 1];
-      console.log("boat: " + `${c.name}, ${c.lat}, ${c.lon}`);
-      boats = `${c.name}, ${c.lat}, ${c.lon};`;
-   }
+   console.log("boat: " + `${c.name}, ${c.lat}, ${c.lon}`);
 
    // Define request parameters with safer defaults
    const reqParams = {
-      type: reqType,
-      boat: boats,
+      type: REQ.ROUTING,
+      boat: `${c.name}, ${c.lat}, ${c.lon};`,
       waypoints: waypoints,
       timeStep: (routeParam.isoStep ?? 1800),
       epochStart: Math.floor(routeParam.startTime.getTime() / 1000),
@@ -603,7 +592,7 @@ function buildBodyRequest (reqType, competitors, myWayPoints, routeParam) {
       isodesc: (routeParam.isoDesc ?? "false"),
       withWaves: (routeParam.withWaves ?? "false"),
       withCurrent: (routeParam.withCurrent ?? "false"),
-      timeInterval: (routeParam.timeInterval ?? 0),
+      // timeInterval: (routeParam.timeInterval ?? 0), // useless for sever
       xWind: isNaN(routeParam.xWind ?? NaN) ? 1 : routeParam.xWind,
       maxWind: isNaN(routeParam.maxWind ?? NaN) ? 100 : routeParam.maxWind,
       penalty0: isNaN(routeParam.penalty0 ?? NaN) ? 0 : routeParam.penalty0,
@@ -613,6 +602,8 @@ function buildBodyRequest (reqType, competitors, myWayPoints, routeParam) {
       threshold: isNaN(routeParam.threshold ?? NaN) ? 0 : routeParam.threshold,
       dayEfficiency: isNaN(routeParam.dayEfficiency ?? NaN) ? 1.0 : routeParam.dayEfficiency,
       nightEfficiency: isNaN(routeParam.nightEfficiency ?? NaN) ? 1.0 : routeParam.nightEfficiency,
+      initialAmure: isNaN(routeParam.initialAmure ?? NaN) ? 0 : routeParam.initialAmure,
+      staminaVR: isNaN(routeParam.staminaVR ?? NaN) ? 100 : routeParam.staminaVR,
       cogStep: isNaN(routeParam.cogStep ?? NaN) ? 5 : routeParam.cogStep,
       cogRange: isNaN(routeParam.cogRange ?? NaN) ? 90 : routeParam.cogRange,
       jFactor: isNaN(routeParam.jFactor ?? NaN) ? 0 : routeParam.jFactor,
@@ -639,7 +630,7 @@ function buildBodyRequest (reqType, competitors, myWayPoints, routeParam) {
    return requestBody;
 }
 
-/**
+/*
  * Launch HTTP request using fetch, with the request body .
  *
  * @param {String} - requestBody - the request body.
@@ -651,7 +642,8 @@ async function handleRequest (requestBody) {
    const token = btoa(`${userId}:${password}`);
    const auth = `Basic ${token}`;
    console.log ("token: " + token);
-   if (auth && userId !== "") headers.Authorization = auth;     // else stay anonymous level 0
+   local = apiUrl.includes ("localhost");
+   if (auth && userId !== "" && !local) headers.Authorization = auth;     // else stay anonymous level 0
    //alert ("UserId: " + userId + " password: " + password);
    try {
       const response = await fetch (apiUrl, {
@@ -660,21 +652,20 @@ async function handleRequest (requestBody) {
          body: requestBody,
          cache: "no-store"
       });
+      console.log (response);
 
       const data = await response.json();
 
-      console.log(JSON.stringify(data, null, 2));
+      // console.log(JSON.stringify(data, null, 2));
       const firstKey = Object.keys(data)[0];
 
-      if (firstKey.startsWith("_")) {
-         await Swal.fire({
-            title: "Warning",
-            text: firstKey + ": " + data[firstKey],
-            icon: "warning",
-            confirmButtonText: "OK"
-         });
+      if ("_Error" in data) {
+         await Swal.fire("Error", data["_Error"], "error");
          return null;
       }
+      if ("_Warning_0" in data) await Swal.fire("Warning", data["_Warning_0"], "warning");
+      if ("_Warning_1" in data) await Swal.fire("Warning", data["_Warning_1"], "warning");
+      if ("_Warning_2" in data) await Swal.fire("Warning", data["_Warning_2"], "warning");
 
       return { boatName: firstKey, routeData: data };
 
@@ -791,7 +782,7 @@ async function requestBestTime () {
    compResult.length = 0; // inhibate display of competitor dashboard
    for (let i = 0; i < routeParam.nTry; i++) {
       routeParam.startTime = new Date(saveStartTime.getTime() + i * routeParam.timeInterval * 1000);
-      let requestBody = buildBodyRequest (REQ.ROUTING, competitors, myWayPoints, routeParam);
+      let requestBody = buildBodyRequest (competitors[routeParam.iBoat - 1], myWayPoints, routeParam);
 
       if (clipBoard && i === 0) {
          navigator.clipboard.writeText(requestBody);
@@ -844,7 +835,7 @@ async function requestAllCompetitors () {
 
    for (let i = 0; i < competitors.length; i++) {
       routeParam.iBoat = i + 1;
-      let requestBody = buildBodyRequest (REQ.ROUTING, competitors, myWayPoints, routeParam);
+      let requestBody = buildBodyRequest (competitors[i], myWayPoints, routeParam);
 
       if (clipBoard && i === 0) {
          navigator.clipboard.writeText(requestBody);
@@ -891,7 +882,7 @@ async function requestOne () {
    const spinnerOverlay = document.getElementById ("spinnerOverlay");
    spinnerOverlay.style.display = "flex"; // display spinner
    compResult.length = 0; // inhibate display of competitor dashboard
-   let requestBody = buildBodyRequest (REQ.ROUTING, competitors, myWayPoints, routeParam);
+   let requestBody = buildBodyRequest (competitors[routeParam.iBoat - 1], myWayPoints, routeParam);
 
    if (clipBoard) navigator.clipboard.writeText (requestBody);
    const response = await handleRequest (requestBody);
@@ -932,7 +923,6 @@ function request () {
       requestAllCompetitors ();
       return;
    }
-
    requestOne ();
 }
 
@@ -962,99 +952,98 @@ async function replay () {
       if (!queryString) return;
 
       // Parse query string to key-value pairs
-      const params = new URLSearchParams(queryString);
-      const get = key => params.get(key);
+      const parseQueryString = qs => {
+         const out = {};
+         qs.split('&').forEach(pair => {
+            const [rawK, ...rawV] = pair.split('=');
+            const k = decodeURIComponent(rawK);
+            const v = decodeURIComponent(rawV.join('=')); // au cas où '=' dans la valeur
+            out[k] = v;
+         });
+         return out;
+      }
 
-      // --- Parse waypoints into myWayPoints ---
-      /**
-       * Parses waypoints string into array of [lat, lon]
-       * @param {string} str - Semicolon-separated list of "lat,lon"
-       */
+      const raw = parseQueryString(queryString);
+
+      // waypoints = "lat,lon;lat,lon;..."
       const parseWaypoints = str => str.split(';').map(s => {
          const [lat, lon] = s.split(',').map(Number);
          return [lat, lon];
       });
 
-      // --- Parse competitors string into array of objects ---
-      /**
-       * Parses boat string into array of competitor objects
-       * @param {string} str - Comma-separated: name,lat,lon;name,lat,lon;...
-       */
+      // boat(s) = "name, lat, lon;name, lat, lon;..."
       const parseCompetitors = str => {
-         const list = str
-         .split(';')
-         .map(s => s.trim())              // clean spaces
-         .filter(s => s.length > 0)       // skip empty entries
-         .map((entry, idx) => {
-            const [name, lat, lon] = entry.split(',').map((v, i) => i === 0 ? v.trim() : Number(v));
-            return {
-               name,
-               lat,
-               lon,
-               color: idx
-            };
-         });
-         return list;
+         return str
+            .split(';')
+            .map(s => s.trim())
+            .filter(s => s.length > 0)
+            .map((entry, idx) => {
+               const [name, lat, lon] = entry
+                  .split(',')
+                  .map((v, i) => (i === 0 ? v.trim() : Number(v)));
+               return {name, lat, lon, color: idx};
+            });
       };
 
-      // Build routeParam (excluding waypoints)
-      window.routeParam = {
-         iBoat: parseInt(get('type') || 1),
-         isoStep: parseInt(get('timeStep') || 1800),
-         startTime: new Date(),
+      const toBool = v => String(v).toLowerCase() === "true"; // "true" -> true, all rest -> false
+
+      const routeParam = {
+         iBoat: Number(raw.type) || 1,                           // "type"
+         isoStep: Number(raw.timeStep) || 900,                   // "timeStep"
          nTry: 0,
-         timeInterval: parseInt(get('timeInterval') || 0),
-         epochStart: parseInt(get('epochStart') || 0),
-         polar: get('polar'),
-         wavePolar: get('wavePolar'),
-         forbid: get('forbid') === 'true',
-         isoc: get('isoc') === 'true',
-         isoDesc: get('isodesc') === 'true',
-         withWaves: get('withWaves') === 'true',
-         withCurrent: get('withCurrent') === 'true',
-         xWind: parseFloat(get('xWind') || 1),
-         maxWind: parseFloat(get('maxWind') || 100),
-         penalty0: parseInt(get('penalty0') || 0),
-         penalty1: parseInt(get('penalty1') || 0),
-         penalty2: parseInt(get('penalty2') || 0),
-         motorSpeed: parseFloat(get('motorSpeed') || 0),
-         threshold: parseFloat(get('threshold') || 0),
-         dayEfficiency: parseFloat(get('dayEfficiency') || 1),
-         nightEfficiency: parseFloat(get('nightEfficiency') || 1),
-         cogStep: parseInt(get('cogStep') || 2),
-         cogRange: parseInt(get('cogRange') || 90),
-         jFactor: parseFloat(get('jFactor') || 80),
-         kFactor: parseFloat(get('kFactor') || 60),
-         nSectors: parseInt(get('nSectors') || 720),
-         model: get(model),
-         constWindTws: parseFloat(get('constWindTws') || 0),
-         constWindTwd: parseFloat(get('constWindTwd') || 0),
-         constWave: parseFloat(get('constWave') || 0),
-         constCurrentS: parseFloat(get('constCurrentS') || 0),
-         constCurrentD: parseFloat(get('constCurrentD') || 0)
+         timeInterval: 0,                                        // useless for server
+         epochStart: Number(raw.epochStart) || 0,
+         startTime: new Date(Number(raw.epochStart) * 1000),
+         polar: raw.polar || "",                                 // ex: "pol/first260.pol"
+         wavePolar: raw.wavePolar || "",                                 // ex: "pol/first260.pol"
+         forbid: toBool(raw.forbid),
+         isoc: toBool(raw.isoc),
+         isoDesc: toBool(raw.isodesc),
+         withWaves: toBool(raw.withWaves),
+         withCurrent: toBool(raw.withCurrent),
+         xWind: Number(raw.xWind),
+         maxWind: Number(raw.maxWind),
+         penalty0: Number(raw.penalty0),
+         penalty1: Number(raw.penalty1),
+         penalty2: Number(raw.penalty2),
+         motorSpeed: Number(raw.motorSpeed),
+         threshold: Number(raw.threshold),
+         dayEfficiency: Number(raw.dayEfficiency),
+         nightEfficiency: Number(raw.nightEfficiency),
+         initialAmure: Number(raw.initialAmure),
+         cogStep: Number(raw.cogStep),
+         cogRange: Number(raw.cogRange),
+         jFactor: Number(raw.jFactor),
+         kFactor: Number(raw.kFactor),
+         nSectors: Number(raw.nSectors),
+         model: raw.model || "GFS",
+         staminaVR: Number(raw.staminaVR),
+         constWindTws: Number(raw.constWindTws),
+         constWindTwd: Number(raw.constWindTwd),
+         constWave: Number(raw.constWave),
+         constCurrentS: Number(raw.constCurrentS),
+         constCurrentD: Number(raw.constCurrentD)
       };
 
-      routeParam.startTime = new Date (routeParam.epochStart * 1000);
+      myWayPoints = parseWaypoints(raw.waypoints); // global variable
+      competitors = parseCompetitors(raw.boat);    // global variabe
 
-      // Build global waypoints array
-      clearRoutes ();
-      myWayPoints = parseWaypoints(get('waypoints') || '');
-      polarName = routeParam.polar.split('/').pop();
-      polWaveName =  routeParam.wavePolar.split('/').pop();
-      // Build global competitors array
+      console.log("routeParam =", routeParam);
+      //console.log("wayPoints =", wayPoints);
+      console.log("competitors =", competitors);
+      polarName = routeParam.polar.split('/')[1];  // global variable
+      polWaveName =  routeParam.wavePolar.split('/')[1]; // global variable
       for (let competitor of competitors) {
          if (competitor.marker)
             competitor.marker.remove ();
       }
-      competitors = parseCompetitors(get('boat') || '');
       for (let competitor of competitors) {
          addMarker (competitor);
          setBoat (competitor, competitor.lat, competitor.lon);
       }
       showWayPoint (myWayPoints);
-
       // Trigger routing request
-      requestOne ();
+      request ();
    } catch (error) {
       console.error('Replay failed:', error);
       Swal.fire('Error', 'Unable to parse the input or start the route.', 'error');
@@ -1074,37 +1063,50 @@ async function replay () {
  * @param {number} [n=100] - Number of intermediate points to compute along the path.
  * @returns {Array<Array<number>>}  The great-circle path as an array of coordinate pairs [latitude, longitude].
  */
-function getGreatCirclePath (lat0, lon0, lat1, lon1, n = 100) {
-   let path = [];
-   let φ1 = (lat0 * Math.PI) / 180;
-   let λ1 = (lon0 * Math.PI) / 180;
-   let φ2 = (lat1 * Math.PI) / 180;
-   let λ2 = (lon1 * Math.PI) / 180;
+function getGreatCirclePath(lat0, lon0, lat1, lon1, n = 100) {
+   const epsilon = 0.001;
+   const path = [];
+
+   lat0 *= DEG_TO_RAD, lon0 *= DEG_TO_RAD, lat1 *= DEG_TO_RAD, lon1 *= DEG_TO_RAD; // deg to radius conversion
+
+   // distance angulaire centrale
+   const d = Math.acos(
+      Math.sin(lat0) * Math.sin(lat1) +
+      Math.cos(lat0) * Math.cos(lat1) * Math.cos(lon1 - lon0)
+   );
+
+   // si les deux points sont (presque) identiques
+   if ((Math.abs(lat1 - lat0) < epsilon) && (Math.abs(lon1 - lon0) < epsilon)) {
+      return [[lat0 * RAD_TO_DEG, lon0 * RAD_TO_DEG], [lat1 * RAD_TO_DEG, lon1 * RAD_TO_DEG]];
+   }
 
    for (let i = 0; i <= n; i++) {
-      let f = i / n;
-      let A = Math.sin((1 - f) * Math.acos(Math.sin(φ1) * Math.sin(φ2) + Math.cos(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1)));
-      let B = Math.sin(f * Math.acos(Math.sin(φ1) * Math.sin(φ2) + Math.cos(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1)));
+      const f = i / n;
 
-      let x = A * Math.cos(φ1) * Math.cos(λ1) + B * Math.cos(φ2) * Math.cos(λ2);
-      let y = A * Math.cos(φ1) * Math.sin(λ1) + B * Math.cos(φ2) * Math.sin(λ2);
-      let z = A * Math.sin(φ1) + B * Math.sin(φ2);
+      // slerp le long du grand cercle
+      const A = Math.sin((1 - f) * d) / Math.sin(d);
+      const B = Math.sin(f * d) / Math.sin(d);
 
-      let φ = Math.atan2(z, Math.sqrt(x * x + y * y));
-      let λ = Math.atan2(y, x);
+      const x = A * Math.cos(lat0) * Math.cos(lon0) + B * Math.cos(lat1) * Math.cos(lon1);
+      const y = A * Math.cos(lat0) * Math.sin(lon0) + B * Math.cos(lat1) * Math.sin(lon1);
+      const z = A * Math.sin(lat0) + B * Math.sin(lat1);
 
-      path.push([φ * (180 / Math.PI), λ * (180 / Math.PI)]);
+      const lat = Math.atan2(z, Math.sqrt(x * x + y * y));
+      const lon = Math.atan2(y, x);
+
+      path.push([lat * RAD_TO_DEG, lon * RAD_TO_DEG]); // rad -> deg
    }
+
    return path;
 }
 
 /**
- * Draws both the loxodromic orthodromic (great-circle) routes 
+ * Draws both theorthodromic (great-circle) routes 
  * for a given competitor and waypoints.
  *
  * This function extracts the competitor's starting position, and prepares the orthodromic route.
  *
- * @param {Object} competitors - competitor is an aovject containing at least name, lat, lon.
+ * @param {Object} competitors - competitor is an object containing at least name, lat, lon.
  * @param {Array<Array<number>>} myWayPoints - Array of waypoints as [latitude, longitude] pairs.
  */
 function drawOrtho (competitor, myWayPoints) {
@@ -1190,7 +1192,7 @@ function setBoat (competitor, lat, lon) {
    drawOrtho (competitor, myWayPoints);
 
    if (myWayPoints.length > 0) {
-      let heading = orthoCap([lat, lon], myWayPoints[0]);
+      let heading = orthoCap(lat, lon, myWayPoints[0][0], myWayPoints [0][1]);
       competitor.marker._icon.setAttribute ('data-heading', heading);
       updateIconStyle (competitor.marker);
    }
@@ -1231,7 +1233,7 @@ function addWaypoint (lat, lon) {
    if (myWayPoints.length === 0) {
       for (let boat of competitors) {
          // position heading of boat at first waypoint
-         let heading = orthoCap([boat.lat, boat.lon], [lat, lon]);
+         let heading = orthoCap(boat.lat, boat.lon, lat, lon);
          boat.marker.setLatLng ([boat.lat, boat.lon]);                   // Move the mark
          boat.marker._icon.setAttribute('data-heading', heading); 
          updateIconStyle (boat.marker);
@@ -1298,10 +1300,15 @@ function move (iComp, firstTrack, index) {
  * Update bind popup
  */
 function updateBindPopup (competitor) {
+   const epsilon = 0.1;
    let [wp, lat, lon, time, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor] = route [competitor.name].track [index];
    hdg = (360 + hdg) % 360;
    const propulse = (motor ? "Motor": "Sail: " + sail) ?? "-";
-   let theDate = new Date (routeParam.startTime.getTime() + time * 1000);
+   const theDate = new Date (routeParam.startTime.getTime() + time * 1000);
+   const directDist = orthoDist(competitor.lat, competitor.lon, lat, lon);
+   const avrHdg = (directDist > epsilon) ? orthoCap(competitor.lat, competitor.lon, lat, lon) : 0.0; 
+
+   
    // alert ("updateBindPopup name: " + competitor.name);
    if (sog !== undefined)
       competitor.marker.bindPopup (`${popup4Comp(competitor)}<br>
@@ -1309,7 +1316,8 @@ function updateBindPopup (competitor) {
          ${latLonToStr (lat, lon, DMSType)}<br>
          Twd: ${twd.toFixed(0)}° Tws: ${tws.toFixed(2)} kn<br>
          Hdg: ${hdg.toFixed(0)}° Twa: ${twa.toFixed(0)}°<br>
-         Sog: ${sog.toFixed(2)} kn ${propulse}<br>`);
+         Sog: ${sog.toFixed(2)} kn ${propulse}<br><br>
+         Average Hdg: ${avrHdg.toFixed(0)}° Direct Distance: ${directDist.toFixed(2)} NM<br>`);
 }
 
 /**
@@ -1705,7 +1713,7 @@ function refreshMarker (competitor, iComp) {
    marker.bindPopup (popup4Comp (competitor));
    competitor.marker = marker;
    if (myWayPoints.length > 0) {
-      let heading = orthoCap([competitor.lat, competitor.lon], myWayPoints [0]);
+      let heading = orthoCap(competitor.lat, competitor.lon, myWayPoints [0][0], myWayPoints [0][1]);
       competitor.marker._icon.setAttribute('data-heading', heading); 
       updateIconStyle (competitor.marker);
    }
@@ -1785,6 +1793,12 @@ function additionalInit () {
    updateStatusBar ();
    showWayPoint (myWayPoints, windyPlay);
    showPOI (POIs);
+
+   const polygonsLayer = L.layerGroup().addTo(map);
+   marks = getMarks (map);
+
+   drawPolygons(map, polygonsLayer)
+      .catch(err => console.error(err));
    
    if (gpsActivated && gpsTimer > 0) {
       fetchGpsPosition();
@@ -1794,6 +1808,9 @@ function additionalInit () {
       fetchAisPosition();
       setInterval (fetchAisPosition, aisTimer * 1000);
    }
+
+   meters (map);
+
 }
 
 // Initializes a Leaflet map with OpenStreetMap base and OpenSeaMap seamarks overlay,
@@ -1831,4 +1848,6 @@ function initMap(containerId) {
    // map.fitBounds(routeLine.getBounds());
    // updateRouteDisplay (0);
 }
+
+
 

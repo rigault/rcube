@@ -1,3 +1,6 @@
+/**
+ * display information about point (lat, lon) of competitor 0
+ */
 function coordStatus () {
    if (! competitors || ! competitors [0]) return;
    const c = competitors [0];
@@ -35,48 +38,23 @@ function coordStatus () {
    });
 }
 
-
+/**
+ * Set DMS Degree Minute Second Display style
+ * update global DMSType variable
+ */
 function updateDMS() {
-  // Fallback if DMSType is not set
-  if (!DMSType || !Object.values(DMS_DISPLAY).includes(DMSType)) {
-    DMSType = DMS_DISPLAY.BASIC;
-  }
-
-  const html = `
-    <form id="dms-form">
-      <label for="dms-select" style="display:block;margin-bottom:8px;">Choose a display format:</label>
-      <select id="dms-select" class="swal2-select" style="min-width:180px;">
-        <option value="BASIC"${DMSType === DMS_DISPLAY.BASIC ? " selected" : ""}>BASIC</option>
-        <option value="DD"${DMSType === DMS_DISPLAY.DD ? " selected" : ""}>DD</option>
-        <option value="DM"${DMSType === DMS_DISPLAY.DM ? " selected" : ""}>DM</option>
-        <option value="DMS"${DMSType === DMS_DISPLAY.DMS ? " selected" : ""}>DMS</option>
-      </select>
-    </form>
-  `;
-
   Swal.fire({
     title: "DMS display choice",
-    html,
     confirmButtonText: "Confirm",
     showCancelButton: true,
     focusConfirm: false,
-    preConfirm: () => {
-      const popup = Swal.getPopup();
-      const value = popup.querySelector('#dms-select').value;
-
-      // Validate against enum keys
-      if (!Object.prototype.hasOwnProperty.call(DMS_DISPLAY, value)) {
-        Swal.showValidationMessage("Invalid selection");
-        return false;
-      }
-
-      // Update the global selection
-      DMSType = DMS_DISPLAY[value];
-      return value; // optional: return for .then()
-    }
+    input: 'select',
+    inputOptions:  ['BASIC', 'DD', 'DM', 'DMS'],
+    inputPlaceholder: 'DMS Type'
   }).then((result) => {
     if (result.isConfirmed) {
-      console.log("DMS display set to:", DMSType);
+      console.log("DMS display set to:", result.value);
+      DMSType = Number (result.value);
     }
   });
 }
@@ -171,6 +149,7 @@ Menu <b>Route/Launch</b> to launch route calculation.`,
       showCancelButton: true,
       confirmButtonText: messages[language].button,
       cancelButtonText: "OK",
+      //buttonsStyling: false,
       customClass: {
          confirmButton: 'swal-init-confirm',
          cancelButton: 'swal-init-cancel'
@@ -181,22 +160,6 @@ Menu <b>Route/Launch</b> to launch route calculation.`,
       }
    });
 }
-
-/// Ajouter les styles CSS pour personnaliser les boutons
-const style = document.createElement('style');
-style.innerHTML = `
-    .swal-init-cancel {
-        background-color: orange !important;
-        color: white !important;
-    }
-    .swal-init-confirm {
-        background: none !important;
-       remove(filepath border: none !important;
-        color: inherit !important;
-        box-shadow: none !important;
-    }
-`;
-document.head.appendChild(style);
 
 /**
  * Get Grib name from server, fit map in grib bounds and display init Info
@@ -232,17 +195,47 @@ function getServerInit () {
    });
 }
 
+
+function helpInfoHtml(data, full) {
+  const head = `
+    <style>
+      .swal-links { color:#444; text-decoration:none; font-weight:bold; }
+      .swal-links:hover { text-decoration:underline; color:#222; }
+    </style>
+    <strong>Rcube:</strong><br>
+    <strong>Version:</strong> 1.0.0<br><br>
+    <strong>© 2025 rene.rigault@wanadoo.fr</strong><br><br>
+  `;
+
+  const bodyFull = `
+    <strong>Références :</strong><br>
+    <a href="https://www.windy.com/" class="swal-links" target="_blank">Windy</a><br>
+    <a href="https://leafletjs.com/" class="swal-links" target="_blank">Leaflet</a><br>
+    <strong>from server:</strong><br>
+    ${data["Prog-version"]}<br>
+    GRIB Reader: ${data["Grib Reader"]}<br>
+    GRIB Wind Memory: ${data["Memory for Grib Wind"]}<br>
+    GRIB Current Memory: ${data["Memory for Grib Current"]}<br>
+    API server port: ${data["API server port"]}<br>
+    Memory usage in KB: ${data["Memory usage in KB"]}<br>
+    Authorization-Level: ${data["Authorization-Level"]}<br>
+    Client IP address: ${data["Client IP Address"]}<br>
+    User Agent: ${data["User Agent"]}<br>
+    Compilation-date: ${data["Compilation-date"]}<br>
+    Client side Windy model: ${store.get('product')}
+  `;
+
+  return full ? head + bodyFull : head; // court = seulement l'en-tête
+}
+
 /**
  * Display help Info
  * Retrieve some info from server
  */
-async function helpInfo () {
+async function helpInfo (full = false) {
    const formData = `type=${REQ.TEST}`;
    const headers = { "Content-Type": "application/x-www-form-urlencoded" };
-   const token = btoa(`${userId}:${password}`);
-   const auth = `Basic ${token}`;
    console.log ("Request sent:", formData);
-   if (auth && userId !== "") headers.Authorization = auth;     // else stay anonymous level 0
    fetch (apiUrl, {
       method: "POST",
       headers,
@@ -255,40 +248,15 @@ async function helpInfo () {
       // Dialog box display
       Swal.fire({
          title: "Help Info",
-         html: `
-            <style>
-               .swal-links {
-                  color: #444; /* Dark gray */
-                  text-decoration: none;
-                  font-weight: bold;
-               }
-               .swal-links:hover {
-                  text-decoration: underline;
-                  color: #222; /* Darker */
-               }
-         </style>
-            <strong>Rcube:</strong><br>
-            <strong>Version:</strong> 1.0.0<br><br>
-            <strong>© 2025 rene.rigault@wanadoo.fr</strong><br><br>
-            <strong>Références :</strong><br>
-            <a href="https://www.windy.com/" class="swal-links" target="_blank">Windy</a><br>
-            <a href="https://leafletjs.com/" class="swal-links" target="_blank">Leaflet</a><br>
-            <strong>from server:</strong><b>
-            ${data ["Prog-version"]}<br>
-            GRIB Reader: ${data ["Grib Reader"]}<br>
-            GRIB Wind Memory: ${data ["Memory for Grib Wind"]}<br>
-            GRIB Current Memory: ${data ["Memory for Grib Current"]}<br>
-            API server port:  ${data ["API server port"]}<br>
-            Memory usage in KB:  ${data ["Memory usage in KB"]}<br>
-            Authorization-Level:  ${data ["Authorization-Level"]}<br>
-            Client IP address:  ${data ["Client IP Address"]}<br>
-            User Agent:  ${data ["User Agent"]}<br>
-            Compilation-date: ${data ["Compilation-date"]}<br>
-         `,
+         html:  helpInfoHtml(data, full),
          icon: "info",
          confirmButtonText: "OK",
          confirmButtonColor: "orange",
+         showDenyButton: true,
+         denyButtonText: full ? "Less" : "More",
          customClass: { popup: "swal-wide" },
+      }).then((result) => {
+         if (result.isDenied) helpInfo(!full);
       });
    })
    .catch (error => {

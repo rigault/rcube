@@ -1,6 +1,148 @@
 /* jshint esversion: 6 */
 
 /**
+ * Analyze a sailing track and render a pie/donut chart of time spent
+ * on each point of sail.
+ *
+ * @param {Array} track - Array of points, each point shaped like:
+ *   [indexWp, lat, lon, time, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor]
+ * @param {string} containerId - DOM element id where the Plotly chart will be drawn
+ * @returns {Object} stats - Raw stats including time buckets and totalTime
+ */
+function statRoute(track, containerId) {
+   // Accumulators of time spent (in seconds) per point of sail
+   const buckets = {
+      pres: 0,
+      bonPlein: 0,
+      travers: 0,
+      largue: 0,
+      ventArriere: 0
+   };
+
+   // Walk segment by segment [i -> i+1] to estimate duration per heading range
+   for (let i = 0; i < track.length - 1; i++) {
+      let [ , , , timeI, , , , , , twaI ] = track[i];
+      let [ , , , timeNext ] = track[i + 1];
+
+      let dt = timeNext - timeI;
+      if (!Number.isFinite(dt) || dt < 0) {
+         // skip broken segment
+         continue;
+      }
+      let twaAbs = Math.abs(twaI);
+      if (twaAbs <= 55) buckets.pres += dt; 
+      else if (twaAbs <= 80) buckets.bonPlein += dt;
+      else if (twaAbs <= 100) buckets.travers += dt;
+      else if (twaAbs <= 160) buckets.largue += dt;
+      else if (twaAbs <= 180) buckets.ventArriere += dt;
+   }
+
+   const labels = [
+      "Près (≤55°)",
+      "Bon plein (55°–80°)",
+      "Travers (80°–100°)",
+      "Largue (100°–160°)",
+      "Vent arrière (160°–180°)"
+   ];
+
+   const values = [
+      buckets.pres,
+      buckets.bonPlein,
+      buckets.travers,
+      buckets.largue,
+      buckets.ventArriere
+   ];
+
+   const totalTime = values.reduce((a, b) => a + b, 0);
+
+   // Draw donut only if Plotly is available and we got a container
+   if (containerId && typeof Plotly !== "undefined") {
+      const data = [{
+         type: "pie",
+         hole: 0.4, // donut style
+         labels: labels,
+         values: values,
+         sort: false,           // keep logical sail order
+         direction: "clockwise",
+         textinfo: "none",      // no text directly on slices -> cleaner
+         hovertemplate:
+            "%{label}" +
+            "<br>%{percent:.1%} Time" +
+            "<br>%{value:.0f} s<extra></extra>",
+         showlegend: true,
+         legend: { orientation: "h" }
+      }];
+
+      const layout = {
+         // no title here; Swal title is enough
+         height: 320,
+         margin: { t: 10, b: 10, l: 10, r: 10 },
+         showlegend: true,
+         legend: {
+            orientation: "h",
+            x: 0.5,
+            xanchor: "center",
+            y: -0.05
+         }
+      };
+
+      Plotly.newPlot(containerId, data, layout);
+   }
+
+   return {
+      buckets,
+      totalTime
+   };
+}
+
+/**
+ * Show a SweetAlert2 modal with the route stats
+ * (donut chart + summary table).
+ *
+ * @param {Object} routeData 
+ */
+function displayStatRoute(routeData) {
+   // Get first available boat name in routeData
+   let boatName = null;
+   if (routeData) {
+      const keys = Object.keys(routeData);
+      if (keys.length > 0) boatName = keys[0];
+   }
+
+   // Basic validation
+   if (!routeData || !boatName || !routeData[boatName]) {
+      Swal.fire("Error", `The route for "${boatName || "N/A"}" does not exist.`, "error");
+      return;
+   }
+
+   const track = routeData[boatName].track;
+   if (!Array.isArray(track) || track.length < 2) {
+      Swal.fire("Error", `No usable track data for "${boatName}".`, "error");
+      return;
+   }
+
+   Swal.fire({
+      title: `Points of sails - ${boatName}`,
+      html: `
+         <div style="display:flex; flex-direction:column; gap:1rem; align-items:center; width:100%;">
+            <div id="routeStatsPlot" style="width:320px; height:320px;"></div>
+            <div id="routeStatsText"style="font-size:0.9rem; width:100%; max-width:360px;"></div>
+         </div>
+      `,
+      width: 520,
+      showConfirmButton: true,
+      showCancelButton: true,
+      confirmButtonText: "Back",
+
+      didOpen: () => {
+         // 1. compute stats + render donut
+         const stats = statRoute(track, "routeStatsPlot");
+      }
+   }).then ((res) => {if (res.isConfirmed) showRouteReport (route)});  
+}
+
+
+/**
  * Calculates the number of sail changes and tack/gybe transitions (amure changes)
  * from a given sailing track.
  *
@@ -20,15 +162,49 @@ function statChanges (track) {
    let nAmureChange = 0;
    let oldSail = NIL;
    let oldTwa = NIL; 
+   let sumDist = 0;
    for (let i = 0; i < track.length; i++) {
       let [indexWp, lat, lon, time, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor] = track[i];
       if (oldSail !== NIL && oldSail !== sail) nSailChange += 1;
       if (oldTwa !== NIL && oldTwa * twa < 0) nAmureChange += 1;
       oldSail = sail;
       oldTwa = twa;
+      sumDist += dist; 
    }
-   return { nSailChange, nAmureChange };
+   return { nSailChange, nAmureChange, sumDist };
 }
+
+function controlDistance (boat, sumDist) {
+   const sum = boat.motorDist + boat.portDist + boat.starboardDist;
+   Swal.fire({
+      icon: 'info',
+      title: 'distance',
+      html: `sumDist: ${sumDist.toFixed(2)}<br> totDist: ${boat.totDist.toFixed(2)}<br> motor + port + starbord dist: ${sum.toFixed(2)}`,
+   });
+}
+
+function buildMeta (boat) {
+   const total = boat.totDist;
+   const pMoteur  = total > 0 ? (boat.motorDist  / total * 100).toFixed(0) : 0;
+   const pTribord = total > 0 ? (boat.starboardDist / total * 100).toFixed(0) : 0;
+   const pBabord  = total > 0 ? (boat.portDist  / total * 100).toFixed(0) : 0;
+   const { nSailChange, nAmureChange, sumDist } = statChanges(boat.track);
+
+   const content = 
+   `<div style="border: 1px; width: 800px; margin: 0 auto; text-align: center;"> 
+      <div style="margin-bottom:20px; display:flex; justify-content:center; font-size:15px; ">
+         Total Distance: ${total.toFixed(2)} nm, Average Speed: ${(3600 * boat.totDist/boat.duration).toFixed(2)} kn Sail, Sail Changes: ${nSailChange}, Amure Changes: ${nAmureChange}
+      </div>
+      <div style="font-size:0.9rem; display:flex; justify-content:center; gap: 10px; ">
+         <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#999;margin-right:4px;"></span>Motor ${pMoteur}%&nbsp; </div>
+         <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:green;margin-right:4px;"></span>Starboard ${pTribord}%&nbsp;</div>
+         <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:red;margin-right:4px;"></span>Port ${pBabord}%&nbsp;</div>
+      </div>
+   </div>
+`;
+   return content;
+}
+
 
 /**
  * Displays a graphical representation of the route data using Plotly.
@@ -102,9 +278,9 @@ function showRouteReport (routeData) {
       waveData.push (w.toFixed (2));
       windArrows.push ({ time: currentTime, twd });
 
-      if (!sailLegend[sail]) continue;
+      if (!sailLegend[sail.toUpperCase()]) continue;
       // for sail line
-      let color = sailLegend[sail].bg;
+      let color = sailLegend[sail.toUpperCase()].bg;
       let dash = (twa >= 0) ? 'solid' : 'dot';
       let bord = (twa >= 0) ? 'Tribord' : 'Babord';
       let hoverText = `${sail}<br>${bord}`;
@@ -152,10 +328,11 @@ function showRouteReport (routeData) {
       textangle: 90 + twd
    }));
 
-   let reachable = (boat.destinationReached) ? 'Destination Reached' : 'Destination unreached';  
-
+   const lastDate = new Date(routeParam.startTime.getTime() + boat.duration * 1000);
+   const formattedStartDate = dateToStr (routeParam.startTime);
+   const formattedLastDate = dateToStr (lastDate);
    let layout = {
-      title: `${reachable} for ${boatName}`,
+      //title: `${boat.totDist} nm`,
       xaxis: { 
          title: 'Time',
          tickformat: '%H:%M\n%d-%b', // Display hours + dates
@@ -172,42 +349,15 @@ function showRouteReport (routeData) {
 
    // Create a container for metadata
    let metaDataContainer = document.createElement('div');
-   metaDataContainer.style = "display: flex; justify-content: space-around; width: 100%; margin-top: 20px;";
+   //metaDataContainer.style = "display: flex; justify-content: space-around; width: 100%; margin-top: 20px;";
 
-   let metaDataLeft = document.createElement('div');
-   const lastDate = new Date(routeParam.startTime.getTime() + boat.duration * 1000);
-   const formattedStartDate = dateToStr (routeParam.startTime);
-   const formattedLastDate = dateToStr (lastDate);
    const isocTimeStepFormatted = formatDurationShort (isocTimeStep);
-   metaDataLeft.innerHTML = `
-      <div style="text-align: left; max-width: 500px;">
-         <strong>🛥️ Boat:</strong> ${boatName} <br>
-         <strong>🚀 Start Time:</strong> ${formattedStartDate}<br>
-         <strong>🎯 ETA:</strong> ${formattedLastDate}<br>
-         <strong>⏳ Duration:</strong> ${durationFormatted} <br>
-         <strong>📏 Distance:</strong> ${boat.totDist} NM <br>
-         <strong>⚙️  Motor Distance:</strong> ${boat.motorDist} NM <br>
-         <strong>📈  Average Speed:</strong> ${(3600 * boat.totDist/boat.duration).toFixed (2)} Kn <br>
-         <strong>⌚ Isoc Time Step:</strong> ${isocTimeStepFormatted} <br>
-         <strong>📍 Steps:</strong> ${trackPoints} <br>
-         <strong>🖥️ Calculation Time:</strong> ${boat.calculationTime} s <br>
-      </div>
-   `;
-   let { nSailChange, nAmureChange } = statChanges(boat.track);
-   let metaDataRight = document.createElement('div');
-   metaDataRight.innerHTML = `
-      <div style="text-align: left; max-width: 300px;">
-         <strong>N Sail Changes:</strong> ${nSailChange} <br>
-         <strong>N Amure Changes:</strong> ${nAmureChange} <br>
-         <strong>🌊 Polar:</strong> ${boat.polar} <br>
-         <strong>Wave Polar:</strong> ${boat.wavePolar} <br>
-         <strong>📄 Grib:</strong> ${boat.grib} <br>
-         <strong>Current Grib:</strong> ${boat.currentGrib} <br>
-      </div>
-   `;
-   // Append elements to the main container
-   metaDataContainer.appendChild(metaDataLeft);
-   metaDataContainer.appendChild(metaDataRight);
+   metaDataContainer.innerHTML = buildMeta(boat);
+   const footer = `<strong>${boatName} </strong> Calculation Time: ${boat.calculationTime} s, \
+                   Isoc Time Step: ${isocTimeStepFormatted}, Steps: ${trackPoints},\
+                   Polar: ${boat.polar}, Wave Polar:</strong> ${boat.wavePolar}\
+                   Grib: ${boat.grib}, Current Grib: ${boat.currentGrib}`;
+  
 
    // Create the final container
    let container = document.createElement('div');
@@ -215,23 +365,25 @@ function showRouteReport (routeData) {
    container.appendChild (graphContainer);
    container.appendChild (metaDataContainer);
 
+   let reachable = (boat.destinationReached) ? `🎯 Destination Reached after ${durationFormatted}` : '😩Destination unreached';  
+   reachable += ` <i><small>Start Time: ${formattedStartDate}, &nbsp; ETA: ${formattedLastDate}</small></i>`;
+
    // Show Swal with full-width settings
    Swal.fire({
-      title: '📊 Route Description',
+      title: `${reachable}`,
       html: '<div id="swal-container"></div>',
-      icon: 'info',
-      confirmButtonText: 'OK',
-      confirmButtonColor: 'orange',
       background: '#fefefe',
-      showCloseButton: true,
+      showCancelButton: true,
+      confirmButtonText: "Stat",
       width: '95vw',       // Ensures full width
       heightAuto: false,   // Prevents automatic height limitation
+      footer: footer,
       didOpen: () => {
          document.getElementById('swal-container').appendChild(container);
          // Force Plotly to adjust after Swal opens
          Plotly.relayout(graphContainer, { 'width': window.innerWidth * 0.9 });
       }
-   });
+   }).then ((res) => {if (res.isConfirmed) displayStatRoute (route)});  
 }
 
 /**
@@ -275,14 +427,16 @@ function dumpRoute (routeData) {
    const lastDate = new Date (routeParam.startTime.getTime() + boat.duration * 1000);
    let currentTime;
    let len = boat.track.length;  
+   let oldStamina = 100;
    // Prepare table data
    let tableData = boat.track.map((point, index) => {
       if (!Array.isArray(point) || point.length < 10) {
          console.warn(`Invalid track data at index ${index}:`, point);
          return null; // Skip invalid data
       }
-
       let [indexWp, lat, lon, time, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor, id, father] = point;
+      let changeLow =  (stamina < oldStamina); 
+      oldStamina = stamina;
       return {
          Step: index,
          WP: indexWp === -1 ? `<span style="color:green">Dest.</span>`
@@ -300,7 +454,7 @@ function dumpRoute (routeData) {
             }
             else {
                sailName = sail ?? 'NA';
-               entry = sailLegend [sailName] || { bg: 'lightgray', luminance: 200 };
+               entry = sailLegend [sailName.toUpperCase()] || { bg: 'lightgray', luminance: 200 };
                fg = getTextColorFromLuminance(entry.luminance);
             }
             return `<span style="background-color:${entry.bg}; color:${fg}; padding:2px 6px; border-radius:4px;">${sailName}</span>`;
@@ -316,42 +470,28 @@ function dumpRoute (routeData) {
                : '-',
          Gust: g !== undefined ? (g * MS_TO_KN).toFixed(2) : '-', // Convert gusts to knots
          Waves: w !== undefined ? w.toFixed(2) : '-',
-         Stamina: stamina !== undefined ? stamina : '-',
+         Stamina: stamina !== undefined
+               ? `<span style="color:${stamina >= 100 ? 'green' : changeLow ? 'red' : 'black'}">${Math.round(stamina)}</span>`
+               : '-',
          Id: id !== undefined ? id : '-',
          Father: father !== undefined ? father : '-'
       };
    }).filter(row => row !== null); // Remove null values
    
    let trackPoints = boat.track.length;
-   let { nSailChange, nAmureChange } = statChanges(boat.track);
+   let { nSailChange, nAmureChange, sumDist } = statChanges(boat.track);
    const durationFormatted = formatDuration (boat.duration);
    const formattedStartDate = dateToStr (routeParam.startTime);
    const formattedLastDate = dateToStr (lastDate);
    const isocTimeStepFormatted = formatDurationShort (isocTimeStep);
+
    // Metadata information
    let metadataHTML = `
-      <div style="display: flex; justify-content: space-between; padding: 0 30px";>
-      <div style="text-align: left; margin-bottom: 15px; margin-left: 50px;">
-         <strong>Boat:</strong> ${boatName} <br>
-         <strong>Start Time:</strong> ${formattedStartDate}<br>
-         <strong>ETA:</strong> ${formattedLastDate}<br>
-         <strong>Duration:</strong> ${durationFormatted} <br>
-         <strong>Distance:</strong> ${boat.totDist} NM <br>
-         <strong>Motor Distance:</strong> ${boat.motorDist} NM <br>
-         <strong>Average Speed:</strong> ${(3600 * boat.totDist/boat.duration).toFixed (2)} Kn <br>
-         <strong>Isoc Time Step:</strong> ${isocTimeStepFormatted} <br>
-         <strong>Steps:</strong> ${trackPoints} <br>
-         <strong>lastStepDuration:</strong> ${lastStepDurationFormatted (boat.lastStepDuration)} <br>
-         <strong>Calculation Time:</strong> ${boat.calculationTime} s <br>
-      </div>
-      <div style="text-align: left; max-width: 300px;">
-         <strong>N Sail Changes:</strong> ${nSailChange} <br>
-         <strong>N Amure Changes:</strong> ${nAmureChange} <br>
-         <strong>Polar:</strong> ${boat.polar} <br>
-         <strong>Wave Polar:</strong> ${boat.wavePolar} <br>
-         <strong>Grib:</strong> ${boat.grib} <br>
-         <strong>Current Grib:</strong> ${boat.currentGrib} <br>
-      </div>
+      <div style="margin-bottom: 15px; ">
+         <strong>TotalDist: ${boat.totDist} NM, </strong> Motor: ${boat.motorDist} NM, Port: ${boat.portDist} NM, StartBoard: ${boat.starboardDist} NM<br>
+         <strong>Average Speed: ${(3600 * boat.totDist/boat.duration).toFixed (2)} Kn</strong></br>
+         <strong>Sail Changes:</strong> ${nSailChange} 
+         <strong>Amure Changes:</strong> ${nAmureChange}
       </div>
    `;
 
@@ -373,25 +513,30 @@ function dumpRoute (routeData) {
          <td>${row.Step}</td><td>${row.WP}</td><td>${row.Coord}</td>
          <td>${row['Date Time']}</td><td>${row.Sail}</td><td>${row.DIST}</td>
          <td>${row.SOG}</td><td>${row.HDG}</td><td>${row.TWD}</td><td>${row.TWA}</td><td>${row.TWS}</td>
-         <td>${row.Gust}</td><td>${row.Waves}</td><td>${Math.round (row.Stamina)}</td>
+         <td>${row.Gust}</td><td>${row.Waves}</td><td>${row.Stamina}</td>
          <td>${row.Id}</td> <td>${row.Father}</td>
       </tr>`;
    });
 
    tableHTML += '</tbody></table>';
    tableContainer.innerHTML = tableHTML;
-   let reachable = (boat.destinationReached) ? 'Destination Reached' : 'Destination unreached';  
+   let reachable = (boat.destinationReached) ? `🎯 Destination Reached after ${durationFormatted}` : '😩Destination unreached';  
+   reachable += ` <i><small>Start Time: ${formattedStartDate}, &nbsp; ETA: ${formattedLastDate}</small></i>`;
+
    if (boat.routingRet === -1) reachable += " ERROR in route"; 
+   const footer = `<strong>${boatName} </strong> Calculation Time: ${boat.calculationTime} s, \
+                   Isoc Time Step: ${isocTimeStepFormatted}, Steps: ${trackPoints},\
+                   lastStepDuration: ${lastStepDurationFormatted (boat.lastStepDuration)},\
+                   Polar: ${boat.polar}, Wave Polar:</strong> ${boat.wavePolar}\
+                   Grib: ${boat.grib}, Current Grib: ${boat.currentGrib}`;
    // Display table in a Swal popup
    Swal.fire({
-      title: `${reachable} for ${boatName}`,
+      title: `${reachable}`,
       html: tableContainer,
-      icon: 'info',
-      confirmButtonText: 'OK',
-      confirmButtonColor: 'orange',
       background: '#fefefe',
       showCloseButton: true,
       width: '95vw', // Ensure full width
+      footer: footer,
       heightAuto: false
    });
 }
@@ -476,8 +621,7 @@ function dumpIsoDesc(route) {
    Swal.fire({
       title: "Isochrone Descriptors",
       html: html,
-      width: "80%",
-      confirmButtonText: "Close"
+      width: "80%"
    });
 }
 
@@ -544,7 +688,6 @@ function dumpIsoc (route) {
       title: "Isochrone Dump",
       html: html,
       width: "80%",
-      confirmButtonText: "Close"
    });
 }
 

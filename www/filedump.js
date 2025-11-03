@@ -1,21 +1,6 @@
 /* jshint esversion: 6 */
 
 /**
- * Format file size
- * @param {number} bytes
- * @returns {string}
- */
-function formatFileSize(bytes) {
-   if (bytes >= 1_000_000) {
-      return (bytes / 1_000_000).toFixed(1) + " MB";
-   } else if (bytes >= 1_000) {
-      return (bytes / 1_000).toFixed(1) + " KB";
-   } else {
-      return bytes + " bytes";
-   }
-}
-
-/**
  * Escape HTML special characters to safely display text inside HTML
  * @param {string} unsafe
  * @returns {string}
@@ -47,24 +32,10 @@ function dumpFile(dir, fileName) {
       cache: "no-store"
    })
    .then(response => {
-      if (!response.ok) {
-         throw new Error(`HTTP error! Status: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       return response.text(); // raw text
    })
    .then(text => {
-      let parsed;
-      try {
-         parsed = JSON.parse(text);
-      } catch (e) {
-         parsed = null;
-      }
-
-      if (parsed && parsed._Error) {
-         Swal.fire("Error", parsed._Error, "error");
-         return;
-      }
-
       Swal.fire({
          title: `File: ${fileName}`,
          html: `
@@ -77,7 +48,7 @@ function dumpFile(dir, fileName) {
          showCancelButton: false,
          confirmButtonText: "Close",
          denyButtonText: "Download",
-         //cancelButtonText: "Cancel"
+         footer: `chars: ${text.length.toLocaleString()}`
       }).then(result => {
          if (result.isDenied) {
             downloadTextFile(fileName, text);
@@ -109,71 +80,15 @@ function downloadTextFile(filename, content) {
    URL.revokeObjectURL(url); // cleaning
 }
 
-
 /**
  * Choose a file then launch dumpFile
  * @param {string} dir
  */
-function chooseFile (dir = "") {
-   const formData = `type=${REQ.DIR}&dir=${encodeURIComponent(dir)}`;
-   console.log("Request sent:", formData);
-
-   fetch(apiUrl, {
-      method: "POST",
-      headers: {
-         "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: formData
-   })
-   .then(response => {
-      if (!response.ok) {
-         throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-      return response.json();
-   })
-   .then(data => {
-      if (!Array.isArray(data) || data.length === 0) {
-         Swal.fire("Error", "No file found", "error");
-         return;
-      }
-
-      // Création du menu déroulant AVEC la taille et la date
-      const fileOptions = data.map(file => {
-         const fileName = file[0];
-         const fileSize = formatFileSize(file[1]);
-         const fileDate = file[2];
-         return `<option value="${fileName}">${fileName} (${fileSize} - ${fileDate})</option>`;
-      }).join("");
-
-      // Dialog box display
-      Swal.fire({
-         title: "Select a File",
-         html: `
-            <div class="swal-wide">
-               <select id="fileSelect" class="swal2-select">
-                  ${fileOptions}
-               </select>
-            </div>
-         `,
-         showCancelButton: true,
-         confirmButtonText: "Confirm",
-         cancelButtonText: "Cancel",
-         customClass: { popup: "swal-wide" },
-         preConfirm: () => {
-            const selectedFile = document.getElementById("fileSelect").value;
-            if (!selectedFile) {
-               Swal.showValidationMessage("Select a file.");
-            }
-            return selectedFile;
-         }
-      }).then(result => {
-         if (result.isConfirmed) {
-            dumpFile (dir, result.value);
-         }
-      });
-   })
-   .catch(error => {
-      console.error("Error requesting file:", error);
-      Swal.fire("Erreur", "Impossible to get file list", "error");
-   });
+async function chooseDumpFile (dir="") {
+   const fileName = await chooseFile(dir, "", false, 'Select File'); // wait selection
+   if (!fileName) { console.log("No file"); return; }
+   dumpFile (dir, fileName);
 }
+
+
+

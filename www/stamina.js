@@ -1,18 +1,25 @@
+const extractStam = '{"recovery":{"points":1,"loWind":0,"hiWind":30,"loTime":5,"hiTime":15},"tiredness":[20,50],"consumption":{"points":{"tack":10,"gybe":10,"sail":20},"winds":{"0":1,"10":1.2,"20":1.5,"30":2},"boats":{"0":1,"5":1.2,"15":1.5,"50":2}},"impact":{"0":2,"100":0.5}}';
+
 const shipParam = [
-  {
-    name: "Imoca",
-    cShip: 1.2,
-    tMin: [300, 300, 420],
-    tMax: [660, 660, 600]
-  },
-  {
-    name: "Normal",
-    cShip: 1.0,
-    tMin: [300, 300, 336],
-    tMax: [660, 660, 480]
-  }
+   {
+      name: "Imoca",
+      cShip: 1.2,
+      tMin: [300, 300, 420],
+      tMax: [660, 660, 600]
+   },
+   {
+      name: "Ultim",
+      cShip: 1.5,
+      tMin: [300, 300, 420],
+      tMax: [660, 660, 600]
+   },
+   {
+      name: "Normal",
+      cShip: 1.0,
+      tMin: [300, 300, 336],
+      tMax: [660, 660, 480]
+   }
 ];
-const kPenalty = 0.015;
 
 /**
  * Compute the penalty in seconds for a manoeuvre type in Virtual Regatta.
@@ -25,7 +32,7 @@ const kPenalty = 0.015;
  * @param {object} staminaK - stamina coefficient.
  * @returns {number} Penalty time in seconds, or -1 if the type is invalid.
  */
-function fPenalty (shipIndex, type, tws, energy, staminaK) {
+function fPenalty (shipIndex, type, tws, energy, staminaK, fullPack) {
    if (type < 0 || type > 2) {
       console.error(`In fPenalty, type unknown: ${type}`);
       return -1;
@@ -34,8 +41,9 @@ function fPenalty (shipIndex, type, tws, energy, staminaK) {
    const tMin = shipParam[shipIndex].tMin[type];
    const tMax = shipParam[shipIndex].tMax[type];
    const fTws = 50.0 - 50.0 * Math.cos(Math.PI * ((Math.max(10.0, Math.min(tws, 30.0)) - 10.0) / 20.0));
-
-   return cShip * staminaK * (tMin + fTws * (tMax - tMin) / 100.0);
+   let t = tMin + fTws * (tMax - tMin) / 100.0;
+   if (fullPack) t *= 0.8;
+   return t * cShip * staminaK;
 }
 
 /**
@@ -89,7 +97,7 @@ function fTimeToRecupOnePoint (tws) {
  */
 function stamina() {
    if (! window.matchMedia('(orientation: landscape)').matches) {
-      Swal.fire('Stamina Warning', 'Passe en mode Lay out', 'warning');
+      Swal.fire('Stamina Warning', 'Switch to Lay out', 'warning');
       return;
    }
 
@@ -152,9 +160,10 @@ function stamina() {
       title: "Stamina & Penalty Calculator",
       html: htmlContent,
       customClass: "stamina-popup",  // see css associated
-      showConfirmButton: false,
+      showCancelButton: true,
       showCloseButton: true,
       focusConfirm: false,
+      confirmButtonText: "More",
       didOpen: (popup) => {
          const shipSelect   = popup.querySelector("#vrShipSelect");
          const twsRange     = popup.querySelector("#vrTwsRange");
@@ -173,6 +182,7 @@ function stamina() {
          }
 
          function update () {
+            const kPenalty = 0.015;
             const shipIndex = parseInt(shipSelect.value);
             const tws = parseFloat(twsRange.value);
             const energy = parseFloat(energyRange.value);
@@ -186,7 +196,7 @@ function stamina() {
             recoverTime.textContent =  formatTimeSecToMnS (recup);
 
             for (let i = 0; i < 3; i++) {
-               const time = fPenalty (shipIndex, i, tws, energy, staminaOut);
+               const time = fPenalty (shipIndex, i, tws, energy, staminaOut, fullPack);
                const loss = fPointLoss (shipIndex, i, tws, fullPack);
                timeCells[i].textContent =  formatTimeSecToMnS(time);
                lossCells[i].textContent = (100 * loss).toFixed(0) + " %";
@@ -200,6 +210,13 @@ function stamina() {
 
          update ();
       }
+   }).then ((result)=>{
+      const content = JSON.stringify(JSON.parse(extractStam), null, 2);
+      if (result.isConfirmed) {
+         Swal.fire ({
+            title: 'extractStam',
+            html: `<pre style="text-align:left;white-space:pre-wrap;margin:0">${content}</pre>`
+         });
+      }
    });
 }
-

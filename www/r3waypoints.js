@@ -1,107 +1,111 @@
-const EARTH_RADIUS_NM = 3440.065; // Rayon moyen de la Terre en milles nautiques
-const DEG2RAD = Math.PI / 180;
-const RAD2DEG = 180 / Math.PI;
+const EARTH_RADIUS_NM = 3440.065; // Earth average radius in Nautical Miles
+const DEG_TO_RAD = Math.PI / 180;
+const RAD_TO_DEG = 180 / Math.PI;
 
 /**
  * Computes the initial orthodromic (great-circle) bearing from one point to another.
  *
  * This function calculates the initial heading (bearing) in degrees required 
- * to travel from the first point (`prev`) to the second (`curr`) along a great-circle route.
+ * to travel from the first point (lat0, lon0) to the second (lat1, lon1) along a great-circle route.
  * 
- * @param {Array<number>} prev - The starting point as an array [latitude, longitude] in degrees.
- * @param {Array<number>} curr - The destination point as an array [latitude, longitude] in degrees.
+ * @param {number} lat0 - The latitude starting point
+ * @param {number} lon0 - The longitude starting point
+ * @param {number} lat1 - The latitude destination point
+ * @param {number} lon1 - The longitude destination point
  * @returns {number} The initial bearing in degrees, ranging from 0 to 360°.
  */
-function orthoCap (prev, curr) {
-   if ((curr === undefined) || (prev === undefined)) return 0;
-   // Conversion des degrés en radians
-   const toRadians = deg => deg * Math.PI / 180;
-   const toDegrees = rad => rad * 180 / Math.PI;
-    
-   const lat1 = toRadians(prev[0]);
-   const lon1 = toRadians(prev[1]);
-   const lat2 = toRadians(curr[0]);
-   const lon2 = toRadians(curr[1]);
-
-   const dLon = lon2 - lon1;
-
-   // Formule de calcul du cap initial (bearing) en radians
-   const y = Math.sin(dLon) * Math.cos(lat2);
-   const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+function orthoCap (lat0, lon0, lat1, lon1) {
+   lat0 *= DEG_TO_RAD;
+   lon0 *= DEG_TO_RAD;
+   lat1 *= DEG_TO_RAD;
+   lon1 *= DEG_TO_RAD;
+   
+   const dLon = lon1 - lon0;
+   const y = Math.sin(dLon) * Math.cos(lat1);
+   const x = Math.cos(lat0) * Math.sin(lat1) - Math.sin(lat0) * Math.cos(lat1) * Math.cos(dLon);
    const heading = Math.atan2(y, x);
 
-   return (toDegrees (heading) + 360) % 360;
+   return ((RAD_TO_DEG * heading) + 360) % 360;
 }
 
 /**
  * Calculates the orthodromic (great-circle) distance between two points.
  *
- * @param {Array<number>} prev - Starting point [latitude, longitude] in degrees.
- * @param {Array<number>} curr - Destination point [latitude, longitude] in degrees.
+ * @param {number} lat0 - The latitude starting point
+ * @param {number} lon0 - The longitude starting point
+ * @param {number} lat1 - The latitude destination point
+ * @param {number} lon1 - The longitude destination point
  * @returns {number} Distance in nautical miles.
  */
-function orthoDist (prev, curr) {
-  if ((curr === undefined) || (prev === undefined)) return 0;
-  const [lat1, lon1] = prev.map(deg => deg * DEG2RAD);
-  const [lat2, lon2] = curr.map(deg => deg * DEG2RAD);
+function orthoDist (lat0, lon0, lat1, lon1) {
+   lat0 *= DEG_TO_RAD;
+   lon0 *= DEG_TO_RAD;
+   lat1 *= DEG_TO_RAD;
+   lon1 *= DEG_TO_RAD;
+   
+   const deltaSigma = Math.acos(
+      Math.sin(lat0) * Math.sin(lat1) +
+      Math.cos(lat0) * Math.cos(lat1) * Math.cos(lon1 - lon0)
+   );
 
-  const deltaSigma = Math.acos(
-    Math.sin(lat1) * Math.sin(lat2) +
-    Math.cos(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1)
-  );
-
-  return EARTH_RADIUS_NM * deltaSigma;
+   return EARTH_RADIUS_NM * deltaSigma;
 }
 
 /**
  * Computes the initial loxodromic (rhumb line) bearing from one point to another.
  *
- * @param {Array<number>} prev - Starting point [latitude, longitude] in degrees.
- * @param {Array<number>} curr - Destination point [latitude, longitude] in degrees.
+ * @param {number} lat0 - The latitude starting point
+ * @param {number} lon0 - The longitude starting point
+ * @param {number} lat1 - The latitude destination point
+ * @param {number} lon1 - The longitude destination point
  * @returns {number} Initial bearing in degrees from 0 to 360.
  */
-function loxoCap (prev, curr) {
-  if ((curr === undefined) || (prev === undefined)) return 0;
-  const [lat1, lon1] = prev.map(deg => deg * DEG2RAD);
-  const [lat2, lon2] = curr.map(deg => deg * DEG2RAD);
-  let dLon = lon2 - lon1;
+function loxoCap (lat0, lon0, lat1, lon1) {
+   lat0 *= DEG_TO_RAD;
+   lon0 *= DEG_TO_RAD;
+   lat1 *= DEG_TO_RAD;
+   lon1 *= DEG_TO_RAD;
+   let dLon = lon1 - lon0;
 
-  const dPhi = Math.log(Math.tan(Math.PI / 4 + lat2 / 2) / Math.tan(Math.PI / 4 + lat1 / 2));
+   const dPhi = Math.log(Math.tan(Math.PI / 4 + lat1 / 2) / Math.tan(Math.PI / 4 + lat0 / 2));
 
-  // Corriger dLon pour franchissement de l'antiméridien
-  if (Math.abs(dLon) > Math.PI) {
-    dLon = dLon > 0 ? -(2 * Math.PI - dLon) : (2 * Math.PI + dLon);
-  }
+   // Correct dLon for antimeridian cross
+   if (Math.abs(dLon) > Math.PI) {
+      dLon = dLon > 0 ? -(2 * Math.PI - dLon) : (2 * Math.PI + dLon);
+   }
 
-  let bearing = Math.atan2(dLon, dPhi) * RAD2DEG;
-  return (bearing + 360) % 360;
+   let bearing = Math.atan2(dLon, dPhi) * RAD_TO_DEG;
+   return (bearing + 360) % 360;
 }
 
 /**
  * Calculates the loxodromic (rhumb line) distance between two points.
  *
- * @param {Array<number>} prev - Starting point [latitude, longitude] in degrees.
- * @param {Array<number>} curr - Destination point [latitude, longitude] in degrees.
+ * @param {number} lat0 - The latitude starting point
+ * @param {number} lon0 - The longitude starting point
+ * @param {number} lat1 - The latitude destination point
+ * @param {number} lon1 - The longitude destination point
  * @returns {number} Distance in nautical miles.
  */
-function loxoDist (prev, curr) {
-  if ((curr === undefined) || (prev === undefined)) return 0;
-  const [lat1, lon1] = prev.map(deg => deg * DEG2RAD);
-  const [lat2, lon2] = curr.map(deg => deg * DEG2RAD);
-  let dLon = Math.abs(lon2 - lon1);
-  const dLat = lat2 - lat1;
+function loxoDist (lat0, lon0, lat1, lon1) {
+   lat0 *= DEG_TO_RAD;
+   lon0 *= DEG_TO_RAD;
+   lat1 *= DEG_TO_RAD;
+   lon1 *= DEG_TO_RAD;
+   let dLon = Math.abs(lon1 - lon0);
+   const dLat = lat1 - lat0;
 
-  const dPhi = Math.log(Math.tan(Math.PI / 4 + lat2 / 2) / Math.tan(Math.PI / 4 + lat1 / 2));
+   const dPhi = Math.log(Math.tan(Math.PI / 4 + lat1 / 2) / Math.tan(Math.PI / 4 + lat0 / 2));
 
-  const q = Math.abs(dPhi) > 1e-12 ? dLat / dPhi : Math.cos(lat1);
+   const q = Math.abs(dPhi) > 1e-12 ? dLat / dPhi : Math.cos(lat0);
 
-  // Corriger dLon pour franchissement de l'antiméridien
-  if (dLon > Math.PI) {
-    dLon = 2 * Math.PI - dLon;
-  }
+   // Correct dLon for antimeridian cross
+   if (dLon > Math.PI) {
+      dLon = 2 * Math.PI - dLon;
+   }
 
-  const distance = Math.sqrt(dLat * dLat + q * q * dLon * dLon);
-  return EARTH_RADIUS_NM * distance;
+   const distance = Math.sqrt(dLat * dLat + q * q * dLon * dLon);
+   return EARTH_RADIUS_NM * distance;
 }
 
 /**
@@ -165,14 +169,15 @@ function displayWayPoints(competitors, wayPoints) {
       let totalLoxo = 0;
       let copyText = "Waypoint\tCoord.\tOrtho Cap (°)\tOrtho Dist (NM)\tLoxo Cap (°)\tLoxo Dist (NM)\n";
 
-      let prev = [competitor.lat, competitor.lon];
+      let prevLat = competitor.lat, prevLon = competitor.lon;
+      console.log ("N waypoints: "+ wayPoints.length);
       for (let i = 0; i < wayPoints.length; i++) {
-         const curr = wayPoints[i];
-         const strCoord = latLonToStr (curr [0], curr [1], DMSType);
-         const orthoC = orthoCap(prev, curr).toFixed(1);
-         const orthoD = orthoDist(prev, curr).toFixed(2);
-         const loxoC = loxoCap(prev, curr).toFixed(1);
-         const loxoD = loxoDist(prev, curr).toFixed(2);
+         const strCoord = latLonToStr (wayPoints [i][0], wayPoints [i][1], DMSType);
+         const orthoC = orthoCap(prevLat, prevLon, wayPoints [i][0], wayPoints [i][1]).toFixed(1);
+         const orthoD = orthoDist(prevLat, prevLon, wayPoints [i][0], wayPoints [i][1]).toFixed(2); 
+         console.log (orthoC, orthoD, prevLat, prevLon, wayPoints [i][0], wayPoints [i][1]);
+         const loxoC = loxoCap(prevLat, prevLon, wayPoints [i][0], wayPoints [i][1]).toFixed(1);
+         const loxoD = loxoDist(prevLat, prevLon, wayPoints [i][0], wayPoints [i][1]).toFixed(2);
 
          totalOrtho += parseFloat(orthoD);
          totalLoxo += parseFloat(loxoD);
@@ -190,7 +195,7 @@ function displayWayPoints(competitors, wayPoints) {
 
          copyText += `${label}\t${strCoord}\t${orthoC}\t${orthoD}\t${loxoC}\t${loxoD}\n`;
 
-         prev = curr;
+         prevLat = wayPoints [i][0], prevLon = wayPoints [i][1];
       }
 
       // Totals row
@@ -237,7 +242,7 @@ function displayWayPoints(competitors, wayPoints) {
 
    Swal.fire({
       title: "Waypoint Distances",
-       html: container,
+      html: container,
       width: "90%",
       scrollbarPadding: false,
       confirmButtonText: "Close"

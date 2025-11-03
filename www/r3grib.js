@@ -67,10 +67,7 @@ function gribInfo(dir, model, gribName) {
    const formatLat = x => (x < 0) ? -x + "°S" : x + "°N";
    const formatLon = x => (x < 0) ? -x + "°W" : x + "°E";
    const headers = { "Content-Type": "application/x-www-form-urlencoded" };
-   const token = btoa(`${userId}:${password}`);
-   const auth = `Basic ${token}`;
    // console.log ("token: " + token);
-   if (auth && userId !== "") headers.Authorization = auth;     // else stay anonymous level 0
 
    fetch(apiUrl, {
       method: "POST",
@@ -97,22 +94,23 @@ function gribInfo(dir, model, gribName) {
       if (dir === "grib") {
          if (typeof gribLimits !== 'undefined') {
             if (model) gribLimits.name = model;
+            else gribLimits.name = gribName;
             gribLimits.bottomLat = data.bottomLat;
             gribLimits.leftLon = data.leftLon;
             gribLimits.topLat = data.topLat;
             gribLimits.rightLon = data.rightLon;
             const bounds = [[gribLimits.bottomLat, gribLimits.leftLon],[gribLimits.topLat, gribLimits.rightLon]];
             map.fitBounds(bounds);
-            updateStatusBar ();
          }
       }
-
+      else gribLimits.currentName = gribName;
+      updateStatusBar ();
       let shortNames = Array.isArray(data.shortNames) ? data.shortNames.join(", ") : "Not present";
 
       let rows = [
          ["Centre", `${data.centreName} (ID ${data.centreID})`],
          ["Time Run", `${data.runStart.slice(11, 13)}Z`],
-         ["Ftom To UTC", `${data.runStart} - ${data.runEnd}`],
+         ["From To UTC", `${data.runStart} - ${data.runEnd}`],
          ["File", `${data.fileName} (${data.fileSize.toLocaleString("fr-FR")} bytes, ${data.fileTime})`],
          ["latStep lonStep", `${data.latStep}° / ${data.lonStep}°`],
          ["Zone", `${data.nLat} x ${data.nLon} values: lat: ${formatLat (data.topLat)} to ${formatLat (data.bottomLat)}, lon: ${formatLon (data.leftLon)} to ${formatLon (data.rightLon)}`],
@@ -137,10 +135,10 @@ function gribInfo(dir, model, gribName) {
 
       Swal.fire({
          title: "Grib Info",
+         width: '600px',
          html: content,
          icon: "success",
-         confirmButtonText: "OK",
-         confirmButtonColor: "#FFA500"
+         confirmButtonText: "OK"
       });
    })
    .catch(error => {
@@ -149,8 +147,7 @@ function gribInfo(dir, model, gribName) {
          title: "Error",
          text: error.message,
          icon: "error",
-         confirmButtonText: "OK",
-         confirmButtonColor: "#FFA500"
+         confirmButtonText: "OK"
       });
    });
 }
@@ -173,80 +170,16 @@ async function selectModel() {
    gribInfo ("grib", model);
 }
 
+
+
 /**
  * choose a grib file then launch gribInfo 
  * @param {string} directory
- * @param {string} current grib name
+ * @param {string} grib name
  */
-function chooseGrib (dir, fileName) {
-   const formData = `type=${REQ.DIR}&dir=${dir}`;
-   console.log ("Request sent:", formData);
-   const headers = { "Content-Type": "application/x-www-form-urlencoded" };
-   const token = btoa(`${userId}:${password}`);
-   const auth = `Basic ${token}`;
-   console.log ("token: " + token);
-   if (auth && userId !== "") headers.Authorization = auth;     // else stay anonymous level 0
-   fetch(apiUrl, {
-      method: "POST",
-      headers,
-      body: formData,
-      cache: "no-store"
-   })
-   .then(response => response.json())
-   .then(data => {
-      if (!Array.isArray(data) || data.length === 0) {
-         Swal.fire ("Error", "No Grib File found", "error");
-         return;
-      }
-
-      // Création du menu déroulant SANS la taille et la date
-      const fileOptions = data.map (file => {
-         const selected = file[0] === fileName ? "selected" : "";
-         return `<option value="${file[0]}" ${selected}>${file[0]}</option>`;
-      }).join("");
-      // Dialog box display
-      Swal.fire({
-         title: "Grib Select",
-         html: `
-            <div class="swal-wide">
-               <select id="gribSelect" class="swal2-select">
-                  ${fileOptions}
-               </select>
-            </div>
-         `,
-         showCancelButton: true,
-         confirmButtonText: "Confirm",
-         cancelButtonText: "Cancel",
-         customClass: { popup: "swal-wide" },
-         preConfirm: () => {
-         const selectedFile = document.getElementById ("gribSelect").value;
-            if (!selectedFile) {
-               Swal.showValidationMessage("Select file.");
-            }
-            return selectedFile;
-         }
-      }).then(result => {
-         if (result.isConfirmed) {
-            if (dir === "grib") {
-               gribLimits.name = result.value; // update file selected for wind grib only
-            }  
-            else // current
-               gribLimits.currentName = result.value;
-
-            gribInfo (dir, "", result.value);
-            updateStatusBar ();
-            console.log ("gribLimits: " + gribLimits);
-            let currentZoom = map.getZoom();
-               map.setZoom (currentZoom - 1);
-               setTimeout (() => {
-               map.setZoom (currentZoom);
-            }, 1000); // Merdique mais ça marche
-         }
-      });
-   })
-   .catch(error => {
-      console.error("Error requesting grib:", error);
-      Swal.fire("Erreur", "Impossible to get file list", "error");
-   });
+async function chooseGrib (dir, gribName) {
+   const fileName = await chooseFile(dir, "", false, 'Grib Select'); // wait selection
+   if (!fileName) { console.log("No file"); return; }
+   gribInfo (dir, "", fileName);
 }
 

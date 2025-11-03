@@ -29,7 +29,7 @@ let gpsPolyline = null;
 function showBoatPosition (gpsData) {
    const lat = gpsData.lat;
    const lon = gpsData.lon;
-   const dms = toDMSString (lat, lon);
+   const dms = latLonToStr (lat, lon, DMSType);
 
    const altStr = gpsData["alt m"] !== undefined
       ? `Altitude: ${gpsData["alt m"]} m<br>`
@@ -151,7 +151,7 @@ function aisDump (aisData) {
       html += `<td style="border:1px solid #ccc; padding:4px;">${item.country}</td>`;
       html += `<td style="border:1px solid #ccc; padding:4px;">${item.mindist}</td>`;
       html += `<td style="border:1px solid #ccc; padding:4px;">${item.mmsi}</td>`;
-      html += `<td style="border:1px solid #ccc; padding:4px;">${toDMSString (item.lat, item.lon)}</td>`;
+      html += `<td style="border:1px solid #ccc; padding:4px;">${latLonToStr (item.lat, item.loni, DMSType)}</td>`;
       html += `<td style="border:1px solid #ccc; padding:4px;">${item.sog.toFixed(2).toString().padStart(5, '0')}</td>`;
       html += `<td style="border:1px solid #ccc; padding:4px;">${cog.toString().padStart(3, '0')}°</td>`;
       html += `<td style="border:1px solid #ccc; padding:4px;">${epochToStrDate(item.lastupdate)}</td>`;
@@ -210,7 +210,7 @@ function showAIS(aisData) {
          Country: ${boat.country}<br>
          MinDist: ${boat.mindist} Kn<br>
          MMSI: ${boat.mmsi}<br>
-         Coordinate: ${toDMSString (boat.lat, boat.lon)}<br>
+         Coordinate: ${latLonToStr (boat.lat, boat.lon, DMSType)}<br>
          SOG: ${boat.sog.toFixed(2)} Kn<br>
          COG: ${cog}°<br>
          LastUpdate: ${epochToStrDate(boat.lastupdate)}

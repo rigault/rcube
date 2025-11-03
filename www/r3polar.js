@@ -31,7 +31,6 @@ function polarInfo (polType, polarName) {
          title: "Erreur",
          text: error,
          icon: "error",
-         confirmButtonColor: "#FFA500",
          confirmButtonText: "OK"
       });
    });
@@ -65,7 +64,6 @@ function showPolarTable (polType, polarName, data) {
       tableHTML += `<th>${tws}</th>`;
    });
    tableHTML += "</tr>";
-   //const sailNames = Object.keys(sailLegend);
    const sailNames = data.legend;
    console.log("sailNames: " + JSON.stringify(sailNames));
 
@@ -79,7 +77,7 @@ function showPolarTable (polType, polarName, data) {
 
          if (sailDataValid) {
             let sailValue = data.arraySail[rowIndex + 1]?.[colIndex + 1] || 0;
-            const sailName = sailNames[sailValue];
+            const sailName = sailNames[sailValue].toUpperCase ();
             const entry = sailLegend[sailName] || { bg: 'lightgray', luminance: 200 };
             const textColor = getTextColorFromLuminance(entry.luminance);
             cellStyle += `background-color: ${entry.bg};color: ${textColor};font-weight: bold;`;
@@ -97,7 +95,7 @@ function showPolarTable (polType, polarName, data) {
    if (legendValid) {
       legendHTML = "<div style='display: flex; justify-content: center; margin-top: 20px; flex-wrap: wrap;'>";
       data.legend.forEach(name => {
-         const { bg, luminance } = sailLegend[name] ?? sailLegend.NA;
+         const { bg, luminance } = sailLegend[name.toUpperCase()] ?? sailLegend.NA;
          const textColor = getTextColorFromLuminance(luminance);
          legendHTML += `
             <div style='
@@ -119,9 +117,8 @@ function showPolarTable (polType, polarName, data) {
       title: (polType === POL_TYPE.WIND_POLAR) ? `Speed in Knots Max: ${data.max}` : `Height in meters Max: ${data.max}`,
       html: tableHTML + legendHTML,
       width: "100%",
-      showCancelButton: true,
+      // showCancelButton: true,
       confirmButtonText: 'Back',
-      cancelButtonText: 'Cancel',     
       footer: `polarName: ${polarName}, nCol: ${data.nCol}, 
          nLine: ${data.nLine}, max: ${data.max}, nSail: ${data.nSail}, fromJson: ${data.fromJson}`,
    }).then((result) => {
@@ -164,12 +161,25 @@ function symmetrizeData(twaValues, speeds) {
 }
 
 /** calculate max and VMG values */ 
-function findMaxSpeed (speeds) {
+function oldFindMaxSpeed(speeds) {
    return Math.max(...speeds);
 }
 
+/** calculate max and twa at max values */ 
+function findMaxSpeed(twaValues, speeds) {
+   let bestSpeed = -1, bestAngle = -1;
+   for (let i = 0; i < twaValues.length; i++) {
+      if (speeds [i] > bestSpeed) {
+         bestSpeed = speeds [i];
+         bestAngle = twaValues [i];
+      }
+   }
+   if (bestAngle > 180) bestAngle = 360 - bestAngle;
+   return { angle: bestAngle, speed: bestSpeed };
+}
+
 /** calculate best VMG (Velocity Made Good) when wind is front */ 
-function bestVmg (twaValues, speeds) {
+function bestVmg(twaValues, speeds) {
    let bestSpeed = -1, bestAngle = -1;
    for (let i = 0; i < twaValues.length; i++) {
       if (twaValues[i] > 90) break;
@@ -179,6 +189,7 @@ function bestVmg (twaValues, speeds) {
          bestAngle = twaValues[i];
       }
    }
+   if (bestAngle > 180) bestAngle = 360 - bestAngle;
    return { angle: bestAngle, speed: bestSpeed };
 }
 
@@ -190,9 +201,10 @@ function bestVmgBack(twaValues, speeds) {
       let vmg = Math.abs(speeds[i] * Math.cos(twaValues[i] * Math.PI / 180));
       if (vmg > bestSpeed) {
          bestSpeed = vmg;
-         bestAngle = twaValues[i];
+         bestAngle = twaValues[i]; 
       }
    }
+   if (bestAngle > 180) bestAngle = 360 - bestAngle;
    return { angle: bestAngle, speed: bestSpeed };
 }
 
@@ -205,9 +217,8 @@ function moreInfoAboutPol(polType, polarName, data) {
    Swal.fire({
      title: `Additional information for: ${lab}`,
      width: '60%',
-     showCancelButton: true,
+     //showCancelButton: true,
      confirmButtonText: 'Back',
-     cancelButtonText: 'Cancel',
      footer: `polarName: ${polarName}, nCol: ${data.nCol}, 
          nLine: ${data.nLine}, max: ${data.max}, nSail: ${data.nSail}, fromJson: ${data.fromJson}`,
      html: `
@@ -237,22 +248,26 @@ function moreInfoAboutPol(polType, polarName, data) {
  */
 function generatePolarPlotly (polType, polarName, data) {
    if (!data.array || data.array.length < 2) return;
-   let maxMaxVal = Math.ceil (data.max);
 
+   const maxMaxVal = Math.ceil (data.max);
    const windSpeeds = data.array[0].slice(1).map(v => parseFloat(v)).filter(v => !isNaN(v));
    const twaValues = data.array.slice(1).map(row => parseFloat(row[0])).filter(v => !isNaN(v));
-   let maxTWS = Math.ceil(windSpeeds[windSpeeds.length - 1] * 1.1);
+   const maxTWS = Math.ceil(windSpeeds[windSpeeds.length - 1] * 1.1);
    const initialTWS = (polType === POL_TYPE.WIND_POLAR) ? 15 : 0;
    const what =  (polType === POL_TYPE.WIND_POLAR) ? "TWS" : "Height";
    // polType = POL_TYPE.WIND_POLAR;
 
    const chartContainer = document.createElement("div");
    chartContainer.innerHTML = `
-      <label for="windSpeed">${what}:</label>
-      <input type="range" id="windSpeedSlider" min="${windSpeeds[0]}" max="${maxTWS}" step="0.1" value="${initialTWS}">
-      <span id="windSpeedValue">${initialTWS}</span>
+      <div style="gap: 100px;">
+         <label style="font-size: 18px;" for="windSpeed">${what}</label>
+         <input type="range" style="width:75%; margin:10px; padding: 10px;"
+            id="windSpeedSlider" min="${windSpeeds[0]}" max="${maxTWS}" step="0.1" value="${initialTWS}"
+         > 
+         <span id="windSpeedValue" style= "font-size: 18px;">${initialTWS.toFixed(2)}</span>
+      </div>
       <div id="polarPlotly" style="width: 100%; height: 400px;"></div>
-      <p><strong>Max:</strong> <span id="maxSpeed">-</span></p>
+      <p><strong>Max:</strong> <span id="maxSpeed">-</span> kn at <span id="maxSpeedAngle">-</span>°</p>
    `;
     if (polType === POL_TYPE.WIND_POLAR) {
        chartContainer.innerHTML += `
@@ -271,7 +286,8 @@ function generatePolarPlotly (polType, polarName, data) {
       showCancelButton: true,
       confirmButtonText: 'Dump Table',
       denyButtonText: 'More',
-      cancelButtonText: 'Cancel',     
+      cancelButtonText: 'Back',     
+      cancelButtonColor: 'orange',
       denyButtonColor: '#6b7280',
    }).then((result) => {
       if (result.isConfirmed) {
@@ -282,17 +298,66 @@ function generatePolarPlotly (polType, polarName, data) {
       }
    });
 
+   function fVMG(twa, speed) {
+      if (twa <= 90)
+         return speed * Math.cos(twa * Math.PI / 180);
+      else
+         return Math.abs(speed * Math.cos(twa * Math.PI / 180));
+   }
+
+   function nearestIndex(value, candidatesArray) {
+      let bestIndex = 0;
+      let bestDelta = Math.abs(value - candidatesArray[0]);
+
+      for (let i = 1; i < candidatesArray.length; i++) {
+         const d = Math.abs(value - candidatesArray[i]);
+         if (d < bestDelta) {
+            bestDelta = d;
+            bestIndex = i;
+         }
+      }
+      return bestIndex;
+   }
+
+   function fSail(twa, tws) {
+      if (twa > 180) twa = 360 - twa;
+      if (!data.arraySail || !Array.isArray(data.arraySail) || data.arraySail.length === 0 || !data.legend) return "NA";
+      const sailTable = data.arraySail;
+      const sailNames = data.legend;
+
+      // Ligne 0 = TWS (sauf [0][0])
+      const twsHeader = sailTable[0];          // [-1, 0, 6, 8, 10, ...]
+      // Colonne 0 =TWA
+      const twaHeader = sailTable.map(row => row[0]); // [-1, 0, 10, 20, 30, ...]
+
+      const twsIndex = nearestIndex(tws, twsHeader);
+      const twaIndex = nearestIndex(twa, twaHeader);
+      const sailValue = sailTable[twaIndex][twsIndex] || 0;
+      const sailName = sailNames[sailValue] || sailNames[0] || "NA";
+      return sailName.toUpperCase();
+   }
+
    function updatePlot (polType, tws) {
-      document.getElementById ("windSpeedValue").innerText = `${tws.toFixed(1)}`;
+      document.getElementById ("windSpeedValue").innerText = `${tws.toFixed(2)} kn`;
 
       let speeds = interpolateSpeeds(tws, windSpeeds, data);
       let { fullTwa, fullSpeeds } = symmetrizeData(twaValues, speeds);
 
-      let maxSpeed = findMaxSpeed(fullSpeeds);
+      const customdata = fullTwa.map((twaVal, i) => {
+         const thisSpeed = fullSpeeds[i];
+         return [
+            fVMG(twaVal, thisSpeed),      // customdata[0] = vmg
+            fSail(twaVal, tws),           // customdata[1] = sail
+            twaVal < 180 ? twaVal : 360 - twaVal
+         ];
+      });
+
+      let max = findMaxSpeed(fullTwa, fullSpeeds);
       let vmg = bestVmg(fullTwa, fullSpeeds);
       let vmgBack = bestVmgBack(fullTwa, fullSpeeds);
 
-      document.getElementById("maxSpeed").innerText = maxSpeed.toFixed(2);
+      document.getElementById("maxSpeed").innerText = max.speed.toFixed(2);
+      document.getElementById("maxSpeedAngle").innerText = max.angle.toFixed(0);
       if (polType === POL_TYPE.WIND_POLAR) { 
          document.getElementById("bestVmg").innerText = vmg.speed.toFixed(2);
          document.getElementById("bestVmgAngle").innerText = vmg.angle.toFixed(0);
@@ -306,15 +371,22 @@ function generatePolarPlotly (polType, polarName, data) {
          theta: fullTwa,
          name: `Value: ${tws.toFixed(1)}`,
          line: { color: "black" },
-         //line: { color: lineColor },
-         hovertemplate: `TWA: %{theta}<br>Speed: %{r:.2f} Kn<extra></extra>`
+         customdata: customdata,
+         hovertemplate:
+            'TWA: %{customdata[2]}°<br>' +
+            'Speed: %{r:.2f} kn<br>' +
+            'VMG: %{customdata[0]:.2f} kn<br>' +
+            'Sail: %{customdata[1]}<extra></extra>'
       };
 
       const layout = {
          polar: {
+            bgcolor: "white",
             radialaxis: { visible: true, range: [0, maxMaxVal || 1] },
             angularaxis: { direction: "clockwise", rotation: 90 }
          },
+         plot_bgcolor: "green",
+         paper_bgcolor: "white",
          showlegend: false
       };
 
@@ -333,72 +405,21 @@ function generatePolarPlotly (polType, polarName, data) {
  * @param {string} directory
  * @param {string} current polar name
  */
-function choosePolar (dir, currentPolar) {
-   const formData = `type=${REQ.DIR}&dir=${dir}&sortByName=true`;
-   console.log ("Requête envoyée:", formData);
-   const polType = (dir === "pol") ? POL_TYPE.WIND_POLAR : POL_TYPE.WAVE_POLAR;
+async function choosePolar(dir, currentPolar) {
+  const polType = (dir === "pol") ? POL_TYPE.WIND_POLAR : POL_TYPE.WAVE_POLAR;
 
-   fetch(apiUrl, {
-      method: "POST",
-      headers: {
-         "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: formData
-   })
-   .then(response => response.json())
-   .then(data => {
-      if (!data) {
-         Swal.fire("Erreur", "No polar file found", "error");
-         return;
-      }
-     
-      console.log("polar: " + JSON.stringify(data));
+  const fileName = await chooseFile(dir, currentPolar, true, 'Polar Select'); // wait selection
+  if (!fileName) { console.log("No file."); return; }
 
-      // Création du menu déroulant SANS la taille et la date
-      const fileOptions = data.map(file => {
-         const selected = file[0] === currentPolar ? "selected" : "";
-         return `<option value="${file[0]}" ${selected}>${file[0]}</option>`;
-      }).join("");
+  if (polType === POL_TYPE.WIND_POLAR) {
+    polarName = fileName;        // update global variable
+    saveAppState();              // save in local context
+    polarInfo(polType, polarName); 
+  } else {
+    polWaveName = fileName;
+    polarInfo(polType, polWaveName);
+  }
 
-      // Affichage de la boîte de dialogue
-      Swal.fire({
-         title: "Polar Select",
-         html: `
-            <div class="swal-wide">
-               <select id="polarSelect" class="swal2-select">
-                  ${fileOptions}
-               </select>
-            </div>
-         `,
-         showCancelButton: true,
-         confirmButtonText: "Confirm",
-         cancelButtonText: "Cancel",
-         customClass: { popup: "swal-wide" },
-         preConfirm: () => {
-            const selectedFile = document.getElementById("polarSelect").value;
-            if (!selectedFile) {
-               Swal.showValidationMessage ("Select File");
-            }
-            return selectedFile;
-         }
-      }).then(result => {
-         if (result.isConfirmed) {
-            if (polType === POL_TYPE.WIND_POLAR) {
-               polarName = result.value; // Mise à jour du fichier sélectionné
-               saveAppState ();          // save in local context
-               polarInfo (polType, polarName);
-            }
-            else {
-               polWaveName = result.value;
-               polarInfo (polType, polWaveName);
-            }
-            updateStatusBar ();
-         }
-      });
-   })
-   .catch(error => {
-      console.error ("Error in file polar request:", error);
-      Swal.fire ("Erreur", "Impossible to get File List", "error");
-   });
+  updateStatusBar();
 }
 

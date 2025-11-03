@@ -2,31 +2,24 @@ const MS_TO_KN = (3600.0/1852.0);   // conversion meter/second to knots
 
 const DMS_DISPLAY = {BASIC: 0, DD: 1, DM: 2, DMS: 3};
 
-/*const sailLegend = {
-  NA:     { bg: "black",  luminance: 0 },
-  C0:     { bg: "green",  luminance: 85 },
-  HG:     { bg: "purple", luminance: 48 },
-  Jib:    { bg: "gray",   luminance: 128 },
-  LG:     { bg: "blue",   luminance: 29 },
-  LJ:     { bg: "yellow", luminance: 210 },
-  Spi:    { bg: "orange", luminance: 170 },
-  SS:     { bg: "red",    luminance: 76 }
-};*/
-
 const sailLegend = {
-  NA:     { bg: "black",  luminance: 0 },
-  Jib:    { bg: "gray",   luminance: 128 },
-  Spi:    { bg: "orange", luminance: 170 },
-  SS:     { bg: "red",    luminance: 76 },
-  Staysail: { bg: "red",    luminance: 76 },
-  LJ:     { bg: "yellow", luminance: 210 },
-  LightJib: { bg: "yellow",   luminance: 210 },
-  C0:     { bg: "green",  luminance: 85 },
-  Code0:    { bg: "green",  luminance: 85 },
-  HG:     { bg: "purple", luminance: 48 },
-  HeavyGnk: { bg: "purple", luminance: 48 },
-  LG:     { bg: "blue",   luminance: 29 },
-  LightGnk: { bg: "blue",   luminance: 29 },
+  NA:        { bg: "black",  luminance: 0 },
+  JIB:       { bg: "gray",   luminance: 128 },
+  SPI:       { bg: "orange", luminance: 170 },
+  SS:        { bg: "red",    luminance: 76 },
+  STAYSAIL:  { bg: "red",    luminance: 76 },
+  LJ:        { bg: "yellow", luminance: 210 },
+  LIGHTJIB:  { bg: "yellow", luminance: 210 },
+  LIGHT_JIB: { bg: "yellow", luminance: 210 },
+  C0:        { bg: "green",  luminance: 85 },
+  CODE0:     { bg: "green",  luminance: 85 },
+  CODE_0:    { bg: "green",  luminance: 85 },
+  HG:        { bg: "purple", luminance: 48 },
+  HEAVYGNK:  { bg: "purple", luminance: 48 },
+  HEAVY_GNK: { bg: "purple", luminance: 48 },
+  LG:        { bg: "blue",   luminance: 29 },
+  LIGHTGNK:  { bg: "blue",   luminance: 29 },
+  LIGHT_GNK: { bg: "blue",   luminance: 29 },
 };
 
 /**
@@ -212,12 +205,86 @@ function findNearestPort(lat, lon) {
    let minDistance =Infinity;
    let nearest = null;
    for (let p of ports) {
-      const dist = orthoDist([lat, lon], [p.lat, p.lon]);
+      const dist = orthoDist(lat, lon, p.lat, p.lon);
       if (dist < minDistance) {
          minDistance = dist;
          nearest = p;
       }
    }
    return { idPort: nearest.id, namePort: nearest.name };
+}
+
+/**
+ * Choose a file
+ * @param {string} dir
+ * @param {string} currentFile
+ * @param {boolean} byName sort by name if true, by date otherwise
+ * @returns {Promise<string|null>} le nom du fichier ou null si annulé
+ */
+async function chooseFile(dir, currentFile, byName, boxTitle) {
+  const formData = `type=${REQ.DIR}&dir=${encodeURIComponent(dir)}${byName ? "&sortByName=true" : ""}`;
+  console.log("Request:", formData);
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: formData
+    });
+
+    const data = await response.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      await Swal.fire("Erreur", "No file found", "error");
+      return null;
+    }
+
+    console.log("Response:", JSON.stringify(data));
+
+    // data = [ [name, size, date], ... ] → on extrait les noms
+    const names = data.map(row => row[0]);
+
+    // SweetAlert2 'select' attend un objet { value: label }
+    const inputOptions = Object.fromEntries(names.map(n => [n, n]));
+
+    const { isConfirmed, value } = await Swal.fire({
+      title: boxTitle ?? "File Select",
+      input: "select",
+      inputOptions,
+      inputValue: names.includes(currentFile) ? currentFile : names[0],
+      position: "top",
+      showCancelButton: true,
+      confirmButtonText: "Confirm",
+      cancelButtonText: "Cancel",
+      customClass: { popup: "swal-wide" }
+    });
+
+    if (!isConfirmed) return null;
+
+    console.log("Selected file:", value);
+    return value; // <- directement le nom du fichier
+  } catch (error) {
+    console.error("Error in file request:", error);
+    await Swal.fire("Erreur", "Impossible to get File List", "error");
+    return null;
+  }
+}
+
+/**
+ * Download a text file
+ * @param {string} filename
+ * @param {string} content
+ */
+function downloadTextFile(filename, content) {
+   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+   const url = URL.createObjectURL(blob);
+
+   const a = document.createElement("a");
+   a.href = url;
+   a.download = filename;
+   document.body.appendChild(a);
+   a.click();
+   document.body.removeChild(a);
+
+   URL.revokeObjectURL(url); // cleaning
 }
 

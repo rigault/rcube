@@ -24,10 +24,25 @@ function changeParam(routeParam) {
                <div class="form-group"><label>Sail Change (sec):</label><input type="number" id="penalty2" value="${routeParam.penalty2 || ''}"></div>
                <div class="form-group"><label>Motor Speed:</label><input type="number" id="motorSpeed" step="0.1" value="${routeParam.motorSpeed || ''}"></div>
                <div class="form-group"><label>Threshold Motor:</label><input type="number" id="threshold" step="0.1" value="${routeParam.threshold || ''}"></div>
-               <div class="form-group"><label>Day Efficiency:</label><input type="number" id="dayEfficiency" min="0.50" max="1.50" step="0.01" value="${routeParam.dayEfficiency || ''}"></div>
-               <div class="form-group"><label>Night Efficiency:</label><input type="number" id="nightEfficiency" min="0.50" max="1.50" step="0.01" value="${routeParam.nightEfficiency || ''}"></div>
+               <div class="form-group"><label>Day Efficiency:</label>
+                  <input type="number" id="dayEfficiency" min="0.50" max="1.50" step="0.01" value="${routeParam.dayEfficiency || ''}">
+               </div>
+               <div class="form-group"><label>Night Efficiency:</label>
+                  <input type="number" id="nightEfficiency" min="0.50" max="1.50" step="0.01" value="${routeParam.nightEfficiency || ''}">
+               </div>
+               <div class="form-group"><label>Stamina</label><input type="number" min = "0" max = "110" id="staminaVR" value="${routeParam.staminaVR || ''}"></div>
+               <div class="form-group"><label>Initial:</label>
+                  <label class="radio-pill" for="amureTribord">
+                     <input type="radio" id="amureTribord" name="initialAmure" value="0" ${Number(routeParam?.initialAmure ?? 0) === 0 ? 'checked' : ''}>
+                     Tri.
+                  </label>
+                  <label class="radio-pill" for="amureBabord">
+                     <input type="radio" id="amureBabord" name="initialAmure" value="1" ${Number(routeParam?.initialAmure ?? 0) === 1 ? 'checked' : ''}>
+                     Bab.
+                  </label>
+              </div>
             </div>
-            
+
             <div id="technical" class="tab-content">
                <div class="form-group"><label>COG Step:</label><input type="number" id="cogStep" min="2" max="10" value="${routeParam.cogStep || ''}"></div>
                <div class="form-group"><label>COG Range:</label><input type="number" id="cogRange" min="50" max="180" value="${routeParam.cogRange || ''}"></div>
@@ -62,6 +77,8 @@ function changeParam(routeParam) {
             threshold: parseFloat(document.getElementById('threshold').value),
             dayEfficiency: parseFloat(document.getElementById('dayEfficiency').value),
             nightEfficiency: parseFloat(document.getElementById('nightEfficiency').value),
+            staminaVR: parseInt(document.getElementById('staminaVR').value),
+            initialAmure: Number(Swal.getPopup().querySelector('input[name="initialAmure"]:checked')?.value ?? 0),
             cogStep: parseInt(document.getElementById('cogStep').value),
             cogRange: parseInt(document.getElementById('cogRange').value),
             jFactor: parseFloat(document.getElementById('jFactor').value),
@@ -96,6 +113,33 @@ function switchTab (event, tabId) {
    document.getElementById(tabId).classList.add('active');
 }
 
+/*! provide raw json params */
+function displayJsonParams () {
+   const pretty = JSON.stringify(routeParam, null, 2); // ← indenté
+
+   Swal.fire({
+     title: `JSON routeParam`,
+     width: '60%',
+     confirmButtonText: 'Back',
+     html: `
+       <pre style="
+         text-align:left; 
+         white-space:pre; 
+         margin:0; 
+         max-height:60vh; 
+         overflow:auto; 
+         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+         font-size: 12px;
+         line-height: 1.35;
+       ">${pretty}</pre>
+     `
+   }).then((result) => {
+      if (result.isConfirmed) {
+         parDump ();
+      }
+   })
+}
+
 /**
  * display parameter file, after launching fetch request to server 
  *
@@ -125,11 +169,11 @@ function parDump() {
       Swal.fire({
          title: "Parameter Info",
          html: content,
-         icon: "success",
-         confirmButtonText: "OK",
+         denyButtonText: "More",
+         showDenyButton: true,
          width: "60%",
          confirmButtonColor: "#FFA500"
-      });
+      }).then ((r) => {if (r.isDenied) displayJsonParams ();})
    })
    .catch(error => {
       console.error("Catched error:", error);

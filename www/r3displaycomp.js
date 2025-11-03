@@ -47,7 +47,7 @@ async function manageCompetitors(competitors) {
    });
    html += `</table>`;
    html += `<input type="file" id="csvInput" accept=".csv" style="display:none">
-            <button onclick="document.getElementById('csvInput').click()">Import</button>`;
+            <button class='btn-import' onclick="document.getElementById('csvInput').click()">Import</button>`;
 
    html += palette;
 
@@ -68,6 +68,7 @@ async function manageCompetitors(competitors) {
       },
 
       preConfirm: () => {
+         clearRoutes ();
          let updatedCompetitors = [];
          for (let index = 0; index < competitors.length; index++) {
             let name = document.getElementById(`name${index}`).value.trim();
@@ -101,13 +102,12 @@ async function manageCompetitors(competitors) {
             competitor.marker.setLatLng ([competitor.lat, competitor.lon]); // Move the mark
             drawOrtho (competitor, myWayPoints);
             if (myWayPoints.length > 0) {
-               let heading = orthoCap([competitor.lat, competitor.lon], myWayPoints [0]);
+               let heading = orthoCap(competitor.lat, competitor.lon, myWayPoints [0][0], myWayPoints [0][1]);
                competitor.marker._icon.setAttribute ('data-heading', heading);
                updateIconStyle (competitor.marker);
             }
             competitor.marker.bindPopup (popup4Comp (competitor));
          }
-         clearRoutes ();
          // boatName = competitors [0].name;
          if (myWayPoints.length > 0)
             showDestination (myWayPoints [myWayPoints.length - 1][0], myWayPoints [myWayPoints.length - 1][1]); // last element
@@ -216,7 +216,7 @@ function importCSV (file, competitors) {
                 }
              });
 
-             // 🔁 relaunch  manageCompetitors()
+             // relaunch  manageCompetitors()
              manageCompetitors(competitors);
          }
       });
