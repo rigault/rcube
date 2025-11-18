@@ -12,9 +12,10 @@
 #include "../csources/r3types.h"
 #include "../csources/r3util.h"
 #include "../csources/inline.h"
-#include <grib_api.h>  // for ProductKind
+#include <grib_api.h>         // for ProductKind
 
-#define  EPSILON 0.001        // for approximat value
+#define EPSILON  0.001        // for approximat value
+#define GUST_GFS 180          // id of gust in GFS files
 
 FlowP *tGribData [2] = {NULL, NULL};   // wind, current
 
@@ -175,8 +176,8 @@ bool readGribParameters (const char *fileName, Zone *zone) {
 
 /*! find index in gribData table */
 static inline long indexOf (int timeStep, double lat, double lon, const Zone *zone) {
-   long iLat = indLat (lat, zone);
-   long iLon = indLon (lon, zone);
+   const long iLat = indLat (lat, zone);
+   const long iLon = indLon (lon, zone);
    int iT = -1;
    for (iT = 0; iT < (int) zone->nTimeStamp; iT++) {
       if (timeStep == zone->timeStamp [iT])
@@ -200,7 +201,6 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
    double lat, lon, val, indicatorOfParameter;
    char shortName [MAX_SIZE_SHORT_NAME];
    size_t lenName;
-   const long GUST_GFS = 180;
    //char str [MAX_SIZE_LINE];
    zone->wellDefined = false;
    if (! readGribLists (fileName, zone)) {
@@ -284,7 +284,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
          // printf ("lon : %.2lf\n", lon);
          iGrib = indexOf (timeStep, lat, lon, zone);
    
-         if (iGrib == -1) {
+         if (iGrib <= -1) {
             fprintf (stderr, "In readGribAll: Error iGrib : %ld\n", iGrib); 
             free (tGribData [iFlow]); 
             tGribData [iFlow] = NULL;

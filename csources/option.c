@@ -51,6 +51,7 @@ static bool initScenarioOption (void) {
 
 /*! Manage command line option reduced to one character */
 void optionManage (char option) {
+   const long iterations = 100000;
 	FILE *f = NULL;
    char directory [MAX_SIZE_DIR_NAME];
    char *buffer = NULL;
@@ -59,7 +60,6 @@ void optionManage (char option) {
    char errMessage [MAX_SIZE_TEXT] = "";
    char str [MAX_SIZE_LINE] = "";
    clock_t start, end;
-   const long iterations = 100000;
    int sail;
 
    struct tm tm0;

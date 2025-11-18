@@ -72,6 +72,7 @@
 #define MAX_N_SAIL            32                // Max number of sails in PolMat object
 #define MAX_N_SECTORS         3600              // Max number of sectors for optimization of sectors
 #define LIMIT_SOG             100               // for SOG error detection
+#define MAX_SIZE_INFO         512               // for checkArrival
 
 enum {WIND, CURRENT};                           // for grib information, either WIND or CURRENT
 enum {WIND_POLAR, WAVE_POLAR, SAIL_POLAR};      // for polar information, either WIND or WAVE or SAIL
@@ -303,6 +304,7 @@ typedef struct {
    int    competitorIndex;                      // index of competitor. See CompetitorsList.
    int    nSailChange;                          // stat: number of sail chage
    int    nAmureChange;                         // stat: number of amure change
+   char   lastPointInfo [MAX_SIZE_INFO];        // for checkArrival
    SailPoint *t;                                // array of points (maxNIsoc + 0), dynamic allocation
 } SailRoute;
 
@@ -407,7 +409,7 @@ typedef struct {
    char mailPw [MAX_SIZE_NAME];              // password for smtp and imap
    bool storeMailPw;                         // store Mail PW
    int  nForbidZone;                         // number of forbidden zones
-   char forbidZone [MAX_N_FORBID_ZONE][MAX_SIZE_LINE]; // array of forbid zones
+   //char forbidZone [MAX_N_FORBID_ZONE][MAX_SIZE_LINE]; // array of forbid zones
    int techno;                               // additionnal info display for tech experts
    struct {                                  // list of NEMEA ports with for each item, portName and speed 
       char portName [MAX_SIZE_NAME];

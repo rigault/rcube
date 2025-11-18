@@ -35,9 +35,9 @@ MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 const struct MeteoElmt meteoTab [N_METEO_ADMIN] = {{7, "Weather service US"}, {78, "DWD Germany"}, {85, "Meteo France"}, {98,"ECMWF European"}};
 
 /*! sail attributes */
-const size_t SAIL_NAME_SIZE = 7;
-const char *SAIL_NAME [] = {"C0", "HG", "Jib", "LG", "LJ", "Spi", "SS"}; // for sail polars
-// const char *colorStr [] = {"green", "purple", "gray", "blue", "yellow", "orange", "red"};
+const size_t sailNameSize = 7;
+const char *sailName [] = {"C0", "HG", "Jib", "LG", "LJ", "Spi", "SS"}; // for sail polars
+const char *colorStr [] = {"green", "purple", "gray", "blue", "yellow", "orange", "red"};
 
 /*! list of wayPoint */
 WayPointList wayPoints;
@@ -77,19 +77,13 @@ char *fSailName (int val, char *str, size_t maxLen) {
    example : "pol/bibi.toto.csv" with suffix "sailpol" will give: "pol/bibi.toto.sailpol" */
 char *newFileNameSuffix (const char *fileName, const char *suffix, char *newFileName, size_t maxLen) {
    const char *lastDot = strrchr(fileName, '.'); // find last point position
-   const char *baseName = fileName;
-   size_t baseLen;
-
-   if (lastDot != NULL) // // length of base
-      baseLen = lastDot - fileName;
-   else
-      baseLen = strlen (fileName);
+   const size_t baseLen = (lastDot == NULL) ? strlen (fileName) : (size_t) (lastDot - fileName); // lenght of base
 
    // check resulting lenght is in maxLen
    if (baseLen + strlen (suffix) + 1 >= maxLen) { // for the  '.'
       return NULL; // not enough space
    }
-   g_strlcpy (newFileName, baseName, baseLen + 1);
+   g_strlcpy (newFileName, fileName, baseLen + 1);
    strcat (newFileName, ".");
    strcat (newFileName, suffix);
 
@@ -110,9 +104,9 @@ bool isEmpty (const char *str) {
 char *formatThousandSep (char *buffer, size_t maxLen, long value) {
    char str [MAX_SIZE_LINE];
    snprintf (str, MAX_SIZE_LINE, "%ld", value);
-   int length = strlen (str);
-   int nSep = length / 3;
-   int mod = length % 3;
+   const int length = strlen (str);
+   const int nSep = length / 3;
+   const int mod = length % 3;
    int i = 0, j = 0;
    for (i = 0; i < mod; i++)
       buffer [j++] = str [i];
@@ -135,7 +129,7 @@ char *formatThousandSep (char *buffer, size_t maxLen, long value) {
 /*! true if name terminates with slash */
 bool hasSlash(const char *name) {
    if (!name || !*name) return false;
-   size_t len = strlen(name);         
+   const size_t len = strlen(name);         
    return name[len - 1] == '/';
 }
 
@@ -255,7 +249,7 @@ struct tm gribDateToTm (long intDate, double nHours) {
    tm0.tm_mon = ((intDate % 10000) / 100) - 1;
    tm0.tm_mday = intDate % 100;
    tm0.tm_isdst = -1;                     // avoid adjustments with hours summer winter
-   int totalMinutes = (int)(nHours * 60);
+   const int totalMinutes = (int)(nHours * 60);
    tm0.tm_min += totalMinutes;            // adjust tm0 struct (manage day, mon year overflow)
    mktime (&tm0);  
    return tm0;
@@ -285,15 +279,14 @@ char *newDateWeekDayVerbose (long intDate, double nHours, char *res, size_t maxL
 
 /*! convert lat to str according to type */
 char *latToStr (double lat, int type, char* str, size_t maxLen) {
-   double mn = 60 * lat - 60 * (int) lat;
-   double sec = 3600 * lat - (3600 * (int) lat) - (60 * (int) mn);
-   char c = (lat > 0) ? 'N' : 'S';
+   const double mn = 60 * lat - 60 * (int) lat;
+   const double sec = 3600 * lat - (3600 * (int) lat) - (60 * (int) mn);
+   const char c = (lat > 0) ? 'N' : 'S';
 
    if (lat > 90.0 || lat < -90.0) {
       g_strlcpy (str, "Lat Errror", maxLen);
       return str;
    }
-
    switch (type) {
    case BASIC: snprintf (str, maxLen, "%.2lf°", lat); break;
    case DD: snprintf (str, maxLen, "%06.2lf°%c", fabs (lat), c); break;
@@ -308,9 +301,9 @@ char *latToStr (double lat, int type, char* str, size_t maxLen) {
 
 /*! convert lon to str according to type */
 char *lonToStr (double lon, int type, char *str, size_t maxLen) {
-   double mn = 60 * lon - 60 * (int) lon;
-   double sec = 3600 * lon - (3600 * (int) lon) - (60 * (int) mn);
-   char c = (lon > 0) ? 'E' : 'W';
+   const double mn = 60 * lon - 60 * (int) lon;
+   const double sec = 3600 * lon - (3600 * (int) lon) - (60 * (int) mn);
+   const char c = (lon > 0) ? 'E' : 'W';
 
    if (lon > 180.0 || lon < -180.0) {
       g_strlcpy (str, "Lon Errror", maxLen);
@@ -330,10 +323,9 @@ char *lonToStr (double lon, int type, char *str, size_t maxLen) {
 
 /*! convert hours in string with days, hours, minutes */
 char *durationToStr (double duration, char *res, size_t maxLen) {
-   int nDays, nHours, nMin;
-   nDays = duration / 24;
-   nHours = fmod (duration, 24.0);
-   nMin = 60 * fmod (duration, 1.0);
+   const int nDays = duration / 24;
+   const int nHours = fmod (duration, 24.0);
+   const int nMin = 60 * fmod (duration, 1.0);
    if (nDays == 0) snprintf (res, maxLen, "%02d:%02d", nHours, nMin); 
    else snprintf (res, maxLen, "%d Days %02d:%02d", nDays, nHours, nMin);
    // printf ("Duration: %.2lf hours, equivalent to %d days, %02d:%02d\n", duration, nDays, nHours, nMin);
@@ -396,11 +388,11 @@ double offsetLocalUTC (void) {
 
 /*! return str representing grib date */
 char *gribDateTimeToStr (long date, long time, char *str, size_t maxLen) {
-   int year = date / 10000;
-   int mon = (date % 10000) / 100;
-   int day = date % 100;
-   int hour = time / 100;
-   int min = time % 100;
+   const int year = date / 10000;
+   const int mon = (date % 10000) / 100;
+   const int day = date % 100;
+   const int hour = time / 100;
+   const int min = time % 100;
    snprintf (str, maxLen, "%4d/%02d/%02d %02d:%02d", year, mon, day, hour, min);
    return str;
 }
@@ -439,11 +431,11 @@ time_t wronggribDateTimeToEpoch (long date, long time) {
 
 /*! convert long date found in grib file in seconds time_t (UTC, via timegm) */
 time_t gribDateTimeToEpoch (long date, long timehhmm) {
-   int year   = (int)(date / 10000);
-   int month  = (int)((date % 10000) / 100);
-   int day    = (int)(date % 100);
-   int hour   = (int)(timehhmm / 100);
-   int minute = (int)(timehhmm % 100);
+   const int year   = (int)(date / 10000);
+   const int month  = (int)((date % 10000) / 100);
+   const int day    = (int)(date % 100);
+   const int hour   = (int)(timehhmm / 100);
+   const int minute = (int)(timehhmm % 100);
 
    /* garde-fous rapides */
    if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31 ||
@@ -463,7 +455,7 @@ time_t gribDateTimeToEpoch (long date, long timehhmm) {
    tm_utc.tm_sec   = 0;
    tm_utc.tm_isdst = 0;   // UTC 
 
-   time_t t = timegm(&tm_utc);  
+   const time_t t = timegm(&tm_utc);  
    if (t == (time_t)-1) {
       fprintf(stderr, "Invalid date/time: %04d-%02d-%02d %02d:%02d UTC\n",
              year, month, day, hour, minute);
@@ -484,13 +476,13 @@ time_t gribDateTimeToEpoch (long date, long timehhmm) {
 
 /*! calculate difference in hours between departure time and time 0 */
 double getDepartureTimeInHour (struct tm *start) {
-   time_t theTime0 = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]);
+   const time_t theTime0 = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]);
    start->tm_isdst = -1;                                       // avoid adjustments with hours summer winter
-   time_t startTime = mktime (start);                          
+   const time_t startTime = mktime (start);                          
    return (startTime - theTime0)/3600.0;                       // calculated in hours
 } 
 
-/*! find name, lat and lon */
+/*! find name, lat and lon with format: lat, lon or [lat, lon */
 bool analyseCoord (const char *strCoord, double *lat, double *lon) {
    if (!strCoord || !lat || !lon) return false; 
    char *pt = NULL;
@@ -537,46 +529,43 @@ void updateIsSeaWithForbiddenAreas (void) {
    if (tIsSea == NULL) return;
    if (par.nForbidZone <= 0) return;
    for (int i = 0; i < SIZE_T_IS_SEA; i++) {
-      double lon = (i % 3601) / 10 - 180.0;
-      double lat = 90.0 - (i / (3601 *10));
+      const double lon = (i % 3601) / 10 - 180.0;
+      const double lat = 90.0 - (i / (3601 *10));
       if (isInForbidArea (lat, lon))
          tIsSea [i] = 0;
    }
 }
 
-/*! read forbid zone */
+/*! read forbid zone format
+   [[lat, lon], [lat, lon] ...]
+...*/
 static void forbidZoneAdd (char *line, int n) {
+   int idx = 0;
    char *latToken, *lonToken;
    // printf ("Forbid Zone    : %d\n", n);
-
    Point *temp = (Point *) realloc (forbidZones [n].points, MAX_SIZE_FORBID_ZONE * sizeof(Point));
    if (temp == NULL) {
       fprintf (stderr, "In forbidZoneAdd, Error realloc with n = %d\n", n);
       return;
    }
    forbidZones [n].points = temp;
-
-   if (((latToken = strtok (line, ",")) != NULL) && \
-      ((lonToken = strtok (NULL, ";")) != NULL)) { // first point
-
-      forbidZones [n].points[0].lat = getCoord (latToken, MIN_LAT, MAX_LAT);  
-      forbidZones [n].points[0].lon = getCoord (lonToken, MIN_LON, MAX_LON);
-      forbidZones [n].n = 1;
-      while ((lonToken != NULL) && (latToken != NULL) && (forbidZones [n].n < MAX_SIZE_FORBID_ZONE)) {
-         if ((latToken = strtok (NULL, ",")) != NULL) {         // lat
-            forbidZones [n].points[forbidZones [n].n].lat = getCoord (latToken, MIN_LAT, MAX_LAT);  
-            if ((lonToken = strtok (NULL, ";")) != NULL) {      // lon
-               double lon = getCoord (lonToken, MIN_LON, MAX_LON);
-               forbidZones [n].points[forbidZones [n].n].lon = lon;
-               forbidZones [n].n += 1;
-            }
-         }
-      }
+   
+   if (((latToken = strtok (line, ",")) == NULL) || ((lonToken = strtok (NULL, "]")) == NULL)) return;
+   forbidZones [n].points[idx].lat = getCoord (latToken, MIN_LAT, MAX_LAT);  
+   forbidZones [n].points[idx].lon = getCoord (lonToken, MIN_LON, MAX_LON);
+   idx = 1;
+   while ((idx < MAX_SIZE_FORBID_ZONE) && ((latToken = strtok (NULL, ",")) != NULL) && ((lonToken = strtok (NULL, "]")) != NULL)) {
+      printf ("latToken: %s, lonToken: %s\n", latToken, lonToken);
+      forbidZones [n].points[idx].lat = getCoord (latToken, MIN_LAT, MAX_LAT);  
+      forbidZones [n].points[idx].lon = getCoord (lonToken, MIN_LON, MAX_LON);
+      idx += 1;
    }
+   forbidZones [n].n = idx;
 }
 
 /*! read parameter file and build par struct */
 bool readParam (const char *fileName, bool initDisp) {
+   bool inWp = false, inForbidZone = false, inCompetitor = true;
    FILE *f = NULL;
    char *pt = NULL;
    char str [MAX_SIZE_LINE];
@@ -618,10 +607,12 @@ bool readParam (const char *fileName, bool initDisp) {
       while (isspace (*pLine)) pLine++;
       // printf ("%s", pLine);
       if ((!*pLine) || *pLine == '#' || *pLine == '\n') continue;
-      if ((pt = strchr (pLine, '#')) != NULL)               // comment elimination
+      if ((pt = strchr (pLine, '#')) != NULL)                    // comment elimination
          *pt = '\0';
+      if (strncmp (pLine, "-", 1) != 0) inWp = inForbidZone = inCompetitor = false;
 
-      if (sscanf (pLine, "DESC:%255[^\n]", par.description) > 0)
+      if (strncmp (pLine, "---", 3) == 0) {}                     // ignore for  yaml compatibility
+      else if (sscanf (pLine, "DESC:%255[^\n]", par.description) > 0)
          g_strstrip (par.description);
       else if (sscanf (pLine, "ALLWAYS_SEA:%d", &par.allwaysSea) > 0);
       else if (sscanf (pLine, "WD:%255s", par.workingDir) > 0);  // should be first !!!
@@ -629,46 +620,46 @@ bool readParam (const char *fileName, bool initDisp) {
          buildRootName (str, par.poiFileName, sizeof (par.poiFileName));
       else if (sscanf (pLine, "PORT:%255s", str) > 0)
          buildRootName (str, par.portFileName, sizeof (par.portFileName));
-      else if (strstr (pLine, "POR:") != NULL) {
-         if (analyseCoord (strchr (pLine, ':') + 1, &par.pOr.lat, &par.pOr.lon)) {
+      else if (sscanf (pLine, "POR: [%255[^]]" , str)) {
+         if (analyseCoord (str , &par.pOr.lat, &par.pOr.lon)) {
             //par.pOr.lon = lonCanonize (par.pOr.lon);
-            par.pOr.id = -1;
-            par.pOr.father = -1;
+            par.pOr.id = par.pOr.father = -1;
          }
       } 
-      else if (strstr (pLine, "PDEST:") != NULL) {
-         if (analyseCoord (strchr (pLine, ':') + 1, &par.pDest.lat, &par.pDest.lon)) {
+      else if (sscanf (pLine, "PDEST: [%255[^]]" , str)) {
+         if (analyseCoord (str, &par.pDest.lat, &par.pDest.lon)) {
             //par.pDest.lon = lonCanonize (par.pDest.lon);
-            par.pDest.id = 0;
-            par.pDest.father = 0;
+            par.pDest.id = par.pDest.father = 0;
          }
       }
-      else if (strstr (pLine, "WP:") != NULL) {
+      else if  (strstr (pLine, "WP:") != NULL) inWp = true;  // format is WP: then -
+      else if (inWp &&  (sscanf (pLine, "- [%255[^]]", str))) {
          if (wayPoints.n > MAX_N_WAY_POINT)
             fprintf (stderr, "In readParam, Error: number of wayPoints exceeded; %d\n", MAX_N_WAY_POINT);
          else {
-            if (analyseCoord (strchr (pLine, ':') + 1, &wayPoints.t [wayPoints.n].lat, &wayPoints.t [wayPoints.n].lon)) {
+            if (analyseCoord (str, &wayPoints.t [wayPoints.n].lat, &wayPoints.t [wayPoints.n].lon)) {
                wayPoints.n += 1;
             }
          }
       }
-      else if  (strstr (pLine, "COMPETITOR:") != NULL) {
+      else if  (strstr (pLine, "COMPETITORS:") != NULL) inCompetitor = true;  // format is COMPETITORS: then -
+      else if (inCompetitor && 
+         (sscanf (pLine, "- [%d, %255[^]]", &competitors.t [competitors.n].colorIndex, str) == 2) && 
+         ((pt = strrchr (str, ',' )) != NULL)) {
+
          if (competitors.n > MAX_N_COMPETITORS)
             fprintf (stderr, "In readParam, Error number of competitors exceeded; %d\n", MAX_N_COMPETITORS);
          else {
-            if (sscanf (pLine, "COMPETITOR:%d;%255[^;];%255s", &competitors.t [competitors.n].colorIndex, str,
-                        competitors.t [competitors.n].name) > 2) {
-               g_strstrip (competitors.t [competitors.n].name);
-               if (analyseCoord (str, &competitors.t [competitors.n].lat, &competitors.t [competitors.n].lon)) {
-                  if (competitors.n == 0) {
-                     par.pOr.lat = competitors.t [0].lat;
-                     par.pOr.lon = competitors.t [0].lon;
-                  }
-                  competitors.n += 1;
+            strlcpy (competitors.t [competitors.n].name, pt + 1, MAX_SIZE_NAME);
+            g_strstrip (competitors.t [competitors.n].name);
+            if (analyseCoord (str, &competitors.t [competitors.n].lat, &competitors.t [competitors.n].lon)) {
+               if (competitors.n == 0) {
+                  par.pOr.lat = competitors.t [0].lat;
+                  par.pOr.lon = competitors.t [0].lon;
                }
-               else fprintf (stderr, "In readParam, COMPETITOR: Coordinates Error: %s\n", str);
+               competitors.n += 1;
             }
-            else fprintf (stderr, "In readParam, COMPETITOR: Syntax Error: %s\n", pLine);
+            else fprintf (stderr, "In readParam, COMPETITORS: Coordinates Error: %s\n", str);
          }
       }
       else if (sscanf (pLine, "POR_NAME:%255s", par.pOrName) > 0);
@@ -779,14 +770,11 @@ bool readParam (const char *fileName, bool initDisp) {
       else if (sscanf (pLine, "SHP_POINTS_DISP:%d", &par.shpPointsDisp) > 0);
       else if (sscanf (pLine, "GOOGLE_API_KEY:%1024s", par.googleApiKey) > 0);
       else if (sscanf (pLine, "WINDY_API_KEY:%1024s", par.windyApiKey) > 0);
-      else if (sscanf (pLine, "WEBKIT:%255[^\n]", par.webkit) > 0)
-         g_strstrip (par.webkit);
-      else if (strstr (pLine, "FORBID_ZONE:") != NULL) {
+      else if (sscanf (pLine, "WEBKIT:%255[^\n]", par.webkit) > 0) g_strstrip (par.webkit);
+      else if (strstr (pLine, "FORBID_ZONES:") != NULL) inForbidZone = true;
+      else if (inForbidZone && ((pt = strstr (pLine, "- [[")) != NULL)) {
          if (par.nForbidZone < MAX_N_FORBID_ZONE) {
-            pLine = strchr (pLine, ':') + 1;
-            g_strstrip (pLine);
-            g_strlcpy (par.forbidZone [par.nForbidZone], pLine, MAX_SIZE_LINE);
-            forbidZoneAdd (pLine, par.nForbidZone);
+            forbidZoneAdd (pLine + 2, par.nForbidZone);
             par.nForbidZone += 1;
          }
          else fprintf (stderr, "In readParam, MAX_N_FORBID_ZONE: %d\n", MAX_N_FORBID_ZONE);
@@ -827,8 +815,8 @@ static void fprintfNoZero (FILE *f, const char *fmt, int param) {
 }
 
 /*! write parameter file from struct par 
-   header or not, password or not */
-bool writeParam (const char *fileName, bool header, bool password) {
+   header or not, password or not yaml style or not */
+bool writeParam (const char *fileName, bool header, bool password, bool yaml) {
    char strLat [MAX_SIZE_NAME] = "";
    char strLon [MAX_SIZE_NAME] = "";
    FILE *f = NULL;
@@ -836,139 +824,149 @@ bool writeParam (const char *fileName, bool header, bool password) {
       fprintf (stderr, "In writeParam, Error Cannot write: %s\n", fileName);
       return false;
    }
-   if (header) 
-      fprintf (f, "Name             Value\n");
-   fprintfNoNull (f, "DESC:            %s\n", par.description);
-   fprintfNoNull (f, "WD:              %s\n", par.workingDir);
-   fprintf (f, "ALLWAYS_SEA:     %d\n", par.allwaysSea);
+   if (header) fprintf (f, "Name              Value\n");
+   if (yaml) fprintf (f, "---\n");
+   fprintfNoNull (f, "DESC:             %s\n", par.description);
+   fprintfNoNull (f, "WD:               %s\n", par.workingDir);
+   fprintf (f, "ALLWAYS_SEA:      %d\n", par.allwaysSea);
    
    latToStr (par.pOr.lat, par.dispDms, strLat, sizeof (strLat));
    lonToStr (par.pOr.lon, par.dispDms, strLon, sizeof (strLon));
-   fprintf (f, "POR:             %.2lf,%.2lf #%s,%s\n", par.pOr.lat, par.pOr.lon, strLat, strLon);
+   fprintf (f, "POR:              [%.2lf, %.2lf]\n", par.pOr.lat, par.pOr.lon);
 
    latToStr (par.pDest.lat, par.dispDms, strLat, sizeof (strLat));
    lonToStr (par.pDest.lon, par.dispDms, strLon, sizeof (strLon));
-   fprintf (f, "PDEST:           %.2lf,%.2lf #%s,%s\n", par.pDest.lat, par.pDest.lon, strLat, strLon);
+   fprintf (f, "PDEST:            [%.2lf, %.2lf]\n", par.pDest.lat, par.pDest.lon);
 
-   fprintfNoNull (f, "POR_NAME:        %s\n", par.pOrName);
-   fprintfNoNull (f, "PDEST_NAME:      %s\n", par.pDestName);
-   for (int i = 0; i < wayPoints.n; i++)
-      fprintf (f, "WP:              %.2lf,%.2lf\n", wayPoints.t [i].lat, wayPoints.t [i].lon);
-
-   for (int i = 0; i < competitors.n; i++) { // other competitors
-      latToStr (competitors.t [i].lat, par.dispDms, strLat, sizeof (strLat));
-      lonToStr (competitors.t [i].lon, par.dispDms, strLon, sizeof (strLon));
-      fprintf (f, "COMPETITOR:        %2d; %s,%s; %s\n", competitors.t[i].colorIndex, strLat, strLon, competitors.t[i].name);
+   fprintfNoNull (f, "POR_NAME:         %s\n", par.pOrName);
+   fprintfNoNull (f, "PDEST_NAME:       %s\n", par.pDestName);
+   if (wayPoints.n > 0) {
+      fprintf (f, "WP:\n");
+      for (int i = 0; i < wayPoints.n; i++) {
+         fprintf (f, "  - [%.2lf, %.2lf]\n", wayPoints.t [i].lat, wayPoints.t [i].lon);
+      }
    }
-   fprintfNoNull (f, "WEB:             %s\n", par.web);
+   if (competitors.n > 0) {
+      fprintf (f, "COMPETITORS:\n");
+      for (int i = 0; i < competitors.n; i++) { // competitors
+         latToStr (competitors.t [i].lat, par.dispDms, strLat, sizeof (strLat));
+         lonToStr (competitors.t [i].lon, par.dispDms, strLon, sizeof (strLon));
+         fprintf (f, "  - [%d, %s, %s, %s]\n", competitors.t[i].colorIndex, strLat, strLon, competitors.t[i].name);
+      }
+   }
+   fprintfNoNull (f, "WEB:              %s\n", par.web);
    for (int i = 0; i < par.nShpFiles; i++)
-      fprintf (f, "SHP:             %s\n", par.shpFileName [i]);
-   fprintfNoNull (f, "POI:             %s\n", par.poiFileName);
-   fprintfNoNull (f, "PORT:            %s\n", par.portFileName);
-   fprintfNoNull (f, "MARKS:           %s\n", par.marksFileName);
-   fprintfNoNull (f, "TRACE:           %s\n", par.traceFileName);
-   fprintfNoNull (f, "POLAR:           %s\n", par.polarFileName);
-   fprintfNoNull (f, "WAVE_POL:        %s\n", par.wavePolFileName);
-   fprintfNoNull (f, "ISSEA:           %s\n", par.isSeaFileName);
-   fprintfNoNull (f, "MID_COUNTRY:     %s\n", par.midFileName);
-   fprintfNoNull (f, "TIDES:           %s\n", par.tidesFileName);
-   fprintfNoNull (f, "HELP:            %s\n", par.helpFileName);
-   fprintfNoNull (f, "CLI_HELP:        %s\n", par.cliHelpFileName);
-   fprintfNoNull (f, "VR_DASHBOARD:    %s\n", par.dashboardVR);
-   fprintfNoNull (f, "WP_GPX_FILE:     %s\n", par.wpGpxFileName);
-   fprintfNoNull (f, "DUMPI:           %s\n", par.dumpIFileName);
-   fprintfNoNull (f, "DUMPR:           %s\n", par.dumpRFileName);
-   fprintfNoNull (f, "PAR_INFO:        %s\n", par.parInfoFileName);
-   fprintfNoNull (f, "LOG:             %s\n", par.logFileName);
-   fprintfNoNull (f, "FEEDBACK:        %s\n", par.feedbackFileName);
-   fprintfNoNull (f, "CURRENT_GRIB:    %s\n", par.currentGribFileName);
-   fprintfNoNull (f, "CGRIB:           %s\n", par.gribFileName);
-   fprintf (f, "MOST_RECENT_GRIB:%d\n", par.mostRecentGrib);
-   fprintf (f, "GRIB_RESOLUTION: %.2lf\n", par.gribResolution);
-   fprintfNoZero (f, "GRIB_TIME_STEP:  %d\n", par.gribTimeStep);
-   fprintfNoZero (f, "GRIB_TIME_MAX:   %d\n", par.gribTimeMax);
-   fprintf (f, "VR_STAMINA:      %.2lf\n", par.staminaVR);
-   fprintfNoZero (f, "VR_DASHB_UTC:    %d\n", par.dashboardUTC);
+      fprintf (f, "SHP:              %s\n", par.shpFileName [i]);
+   fprintfNoNull (f, "POI:              %s\n", par.poiFileName);
+   fprintfNoNull (f, "PORT:             %s\n", par.portFileName);
+   fprintfNoNull (f, "MARKS:            %s\n", par.marksFileName);
+   fprintfNoNull (f, "TRACE:            %s\n", par.traceFileName);
+   fprintfNoNull (f, "POLAR:            %s\n", par.polarFileName);
+   fprintfNoNull (f, "WAVE_POL:         %s\n", par.wavePolFileName);
+   fprintfNoNull (f, "ISSEA:            %s\n", par.isSeaFileName);
+   fprintfNoNull (f, "MID_COUNTRY:      %s\n", par.midFileName);
+   fprintfNoNull (f, "TIDES:            %s\n", par.tidesFileName);
+   fprintfNoNull (f, "HELP:             %s\n", par.helpFileName);
+   fprintfNoNull (f, "CLI_HELP:         %s\n", par.cliHelpFileName);
+   fprintfNoNull (f, "VR_DASHBOARD:     %s\n", par.dashboardVR);
+   fprintfNoNull (f, "WP_GPX_FILE:      %s\n", par.wpGpxFileName);
+   fprintfNoNull (f, "DUMPI:            %s\n", par.dumpIFileName);
+   fprintfNoNull (f, "DUMPR:            %s\n", par.dumpRFileName);
+   fprintfNoNull (f, "PAR_INFO:         %s\n", par.parInfoFileName);
+   fprintfNoNull (f, "LOG:              %s\n", par.logFileName);
+   fprintfNoNull (f, "FEEDBACK:         %s\n", par.feedbackFileName);
+   fprintfNoNull (f, "CURRENT_GRIB:     %s\n", par.currentGribFileName);
+   fprintfNoNull (f, "CGRIB:            %s\n", par.gribFileName);
+   fprintf (f, "MOST_RECENT_GRIB: %d\n", par.mostRecentGrib);
+   fprintf (f, "GRIB_RESOLUTION:  %.2lf\n", par.gribResolution);
+   fprintfNoZero (f, "GRIB_TIME_STEP:   %d\n", par.gribTimeStep);
+   fprintfNoZero (f, "GRIB_TIME_MAX:    %d\n", par.gribTimeMax);
+   fprintf (f, "VR_STAMINA:       %.2lf\n", par.staminaVR);
+   fprintfNoZero (f, "VR_DASHB_UTC:     %d\n", par.dashboardUTC);
 
-   fprintf (f, "START_TIME:      %.2lf\n", par.startTimeInHours);
-   fprintf (f, "T_STEP:          %.2lf\n", par.tStep);
-   fprintf (f, "RANGE_COG:       %d\n", par.rangeCog);
-   fprintf (f, "COG_STEP:        %d\n", par.cogStep);
-   fprintf (f, "PENALTY0:        %d\n", par.penalty0);
-   fprintf (f, "PENALTY1:        %d\n", par.penalty1);
-   fprintf (f, "PENALTY2:        %d\n", par.penalty2);
-   fprintf (f, "MOTOR_S:         %.2lf\n", par.motorSpeed);
-   fprintf (f, "THRESHOLD:       %.2lf\n", par.threshold);
-   fprintf (f, "DAY_EFFICIENCY:  %.2lf\n", par.dayEfficiency);
-   fprintf (f, "NIGHT_EFFICIENCY:%.2lf\n", par.nightEfficiency);
-   fprintf (f, "X_WIND:          %.2lf\n", par.xWind);
-   fprintf (f, "MAX_WIND:        %.2lf\n", par.maxWind);
-   fprintf (f, "WITH_WAVES:      %d\n", par.withWaves);
-   fprintf (f, "WITH_CURRENT:    %d\n", par.withCurrent);
-   fprintfNoZero (f, "SPECIAL:         %d\n", par.special);
+   fprintf (f, "START_TIME:       %.2lf\n", par.startTimeInHours);
+   fprintf (f, "T_STEP:           %.2lf\n", par.tStep);
+   fprintf (f, "RANGE_COG:        %d\n", par.rangeCog);
+   fprintf (f, "COG_STEP:         %d\n", par.cogStep);
+   fprintf (f, "PENALTY0:         %d\n", par.penalty0);
+   fprintf (f, "PENALTY1:         %d\n", par.penalty1);
+   fprintf (f, "PENALTY2:         %d\n", par.penalty2);
+   fprintf (f, "MOTOR_S:          %.2lf\n", par.motorSpeed);
+   fprintf (f, "THRESHOLD:        %.2lf\n", par.threshold);
+   fprintf (f, "DAY_EFFICIENCY:   %.2lf\n", par.dayEfficiency);
+   fprintf (f, "NIGHT_EFFICIENCY: %.2lf\n", par.nightEfficiency);
+   fprintf (f, "X_WIND:           %.2lf\n", par.xWind);
+   fprintf (f, "MAX_WIND:         %.2lf\n", par.maxWind);
+   fprintf (f, "WITH_WAVES:       %d\n", par.withWaves);
+   fprintf (f, "WITH_CURRENT:     %d\n", par.withCurrent);
+   fprintfNoZero (f, "SPECIAL:          %d\n", par.special);
 
    if (par.constWave != 0)
-      fprintf (f, "CONST_WAVE:      %.6lf\n", par.constWave);
+      fprintf (f, "CONST_WAVE:       %.6lf\n", par.constWave);
 
    if (par.constWindTws != 0) {
-      fprintf (f, "CONST_WIND_TWS:  %.6lf\n", par.constWindTws);
-      fprintf (f, "CONST_WIND_TWD:  %.2lf\n", par.constWindTwd);
+      fprintf (f, "CONST_WIND_TWS:   %.6lf\n", par.constWindTws);
+      fprintf (f, "CONST_WIND_TWD:   %.2lf\n", par.constWindTwd);
    }
    if (par.constCurrentS != 0) {
-      fprintf (f, "CONST_CURRENT_S: %.6f\n", par.constCurrentS);
-      fprintf (f, "CONST_CURRENT_D: %.2lf\n", par.constCurrentD);
+      fprintf (f, "CONST_CURRENT_S:  %.6f\n", par.constCurrentS);
+      fprintf (f, "CONST_CURRENT_D:  %.2lf\n", par.constCurrentD);
    }
 
-   fprintfNoZero (f, "OPT:             %d\n", par.opt);
-   fprintfNoZero (f, "ISOC_DISP:       %d\n", par.style);
-   fprintfNoZero (f, "STEP_ISOC_DISP:  %d\n", par.stepIsocDisp);
-   fprintfNoZero (f, "COLOR_DISP:      %d\n", par.showColors);
-   fprintfNoZero (f, "DMS_DISP:        %d\n", par.dispDms);
-   fprintfNoZero (f, "WIND_DISP:       %d\n", par.windDisp);
-   fprintfNoZero (f, "INFO_DISP:       %d\n", par.infoDisp);
-   fprintfNoZero (f, "INDICATOR_DISP:  %d\n", par.indicatorDisp);
-   fprintfNoZero (f, "CURRENT_DISP:    %d\n", par.currentDisp);
-   fprintfNoZero (f, "WAVE_DISP:       %d\n", par.waveDisp);
-   fprintfNoZero (f, "GRID_DISP:       %d\n", par.gridDisp);
-   fprintfNoZero (f, "LEVEL_POI_DISP:  %d\n", par.maxPoiVisible);
-   fprintfNoZero (f, "SPEED_DISP:      %d\n", par.speedDisp);
-   fprintfNoZero (f, "AIS_DISP:        %d\n", par.aisDisp);
-   fprintfNoZero (f, "SHP_POINTS_DISP: %d\n", par.shpPointsDisp);
-   fprintfNoZero (f, "TECHNO_DISP:     %d\n", par.techno);
-   fprintfNoZero (f, "CLOSEST_DISP:    %d\n", par.closestDisp);
-   fprintfNoZero (f, "FOCAL_DISP:      %d\n", par.focalDisp);
-   fprintf (f, "J_FACTOR:        %d\n", par.jFactor);
-   fprintf (f, "K_FACTOR:        %d\n", par.kFactor);
-   fprintf (f, "N_SECTORS:       %d\n", par.nSectors);
-   fprintfNoZero (f, "PYTHON:          %d\n", par.python);
-   fprintfNoZero (f, "CURL_SYS:        %d\n", par.curlSys);
-   fprintfNoNull (f, "SMTP_SCRIPT:     %s\n", par.smtpScript);
-   fprintfNoNull (f, "IMAP_TO_SEEN:    %s\n", par.imapToSeen);
-   fprintfNoNull (f, "IMAP_SCRIPT:     %s\n", par.imapScript);
-   fprintfNoNull (f, "WINDY_API_KEY:   %s\n", par.windyApiKey);
-   fprintfNoNull (f, "GOOGLE_API_KEY:  %s\n", par.googleApiKey);
-   fprintfNoNull (f, "WEBKIT:          %s\n", par.webkit);
-   fprintfNoNull (f, "SMTP_SERVER:     %s\n", par.smtpServer);
-   fprintfNoNull (f, "SMTP_USER_NAME:  %s\n", par.smtpUserName);
-   fprintfNoNull (f, "SMTP_TO:         %s\n", par.smtpTo);
-   fprintfNoNull (f, "IMAP_SERVER:     %s\n", par.imapServer);
-   fprintfNoNull (f, "IMAP_USER_NAME:  %s\n", par.imapUserName);
-   fprintfNoNull (f, "IMAP_MAIL_BOX:   %s\n", par.imapMailBox);
+   fprintfNoZero (f, "OPT:              %d\n", par.opt);
+   fprintfNoZero (f, "ISOC_DISP:        %d\n", par.style);
+   fprintfNoZero (f, "STEP_ISOC_DISP:   %d\n", par.stepIsocDisp);
+   fprintfNoZero (f, "COLOR_DISP:       %d\n", par.showColors);
+   fprintfNoZero (f, "DMS_DISP:         %d\n", par.dispDms);
+   fprintfNoZero (f, "WIND_DISP:        %d\n", par.windDisp);
+   fprintfNoZero (f, "INFO_DISP:        %d\n", par.infoDisp);
+   fprintfNoZero (f, "INDICATOR_DISP:   %d\n", par.indicatorDisp);
+   fprintfNoZero (f, "CURRENT_DISP:     %d\n", par.currentDisp);
+   fprintfNoZero (f, "WAVE_DISP:        %d\n", par.waveDisp);
+   fprintfNoZero (f, "GRID_DISP:        %d\n", par.gridDisp);
+   fprintfNoZero (f, "LEVEL_POI_DISP:   %d\n", par.maxPoiVisible);
+   fprintfNoZero (f, "SPEED_DISP:       %d\n", par.speedDisp);
+   fprintfNoZero (f, "AIS_DISP:         %d\n", par.aisDisp);
+   fprintfNoZero (f, "SHP_POINTS_DISP:  %d\n", par.shpPointsDisp);
+   fprintfNoZero (f, "TECHNO_DISP:      %d\n", par.techno);
+   fprintfNoZero (f, "CLOSEST_DISP:     %d\n", par.closestDisp);
+   fprintfNoZero (f, "FOCAL_DISP:       %d\n", par.focalDisp);
+   fprintf (f, "J_FACTOR:         %d\n", par.jFactor);
+   fprintf (f, "K_FACTOR:         %d\n", par.kFactor);
+   fprintf (f, "N_SECTORS:        %d\n", par.nSectors);
+   fprintfNoZero (f, "PYTHON:           %d\n", par.python);
+   fprintfNoZero (f, "CURL_SYS:         %d\n", par.curlSys);
+   fprintfNoNull (f, "SMTP_SCRIPT:      %s\n", par.smtpScript);
+   fprintfNoNull (f, "IMAP_TO_SEEN:     %s\n", par.imapToSeen);
+   fprintfNoNull (f, "IMAP_SCRIPT:      %s\n", par.imapScript);
+   fprintfNoNull (f, "WINDY_API_KEY:    %s\n", par.windyApiKey);
+   fprintfNoNull (f, "GOOGLE_API_KEY:   %s\n", par.googleApiKey);
+   fprintfNoNull (f, "WEBKIT:           %s\n", par.webkit);
+   fprintfNoNull (f, "SMTP_SERVER:      %s\n", par.smtpServer);
+   fprintfNoNull (f, "SMTP_USER_NAME:   %s\n", par.smtpUserName);
+   fprintfNoNull (f, "SMTP_TO:          %s\n", par.smtpTo);
+   fprintfNoNull (f, "IMAP_SERVER:      %s\n", par.imapServer);
+   fprintfNoNull (f, "IMAP_USER_NAME:   %s\n", par.imapUserName);
+   fprintfNoNull (f, "IMAP_MAIL_BOX:    %s\n", par.imapMailBox);
+   fprintf (f, "AUTHENT:          %d\n", par.authent);
    for (int i = 0; i < par.nNmea; i++)
-      fprintf (f, "NMEA:            %s %d\n", par.nmea [i].portName, par.nmea [i].speed); 
+      fprintf (f, "NMEA:             %s %d\n", par.nmea [i].portName, par.nmea [i].speed); 
 
-   for (int i = 0; i < par.nForbidZone; i++) {
-      fprintf (f, "FORBID_ZONE:     ");
-      for (int j = 0; j < forbidZones [i].n; j++) {
-         latToStr (forbidZones [i].points [j].lat, par.dispDms, strLat, sizeof (strLat));
-         lonToStr (forbidZones [i].points [j].lon, par.dispDms, strLon, sizeof (strLon));
-         fprintf (f, "%s,%s; ", strLat, strLon);
+   if (par.nForbidZone > 0) {
+      fprintf (f, "FORBID_ZONES:\n");
+      for (int i = 0; i < par.nForbidZone; i++) {
+         fprintf (f, "  - [");
+         for (int j = 0; j < forbidZones [i].n; j++) {
+            latToStr (forbidZones [i].points [j].lat, par.dispDms, strLat, sizeof (strLat));
+            lonToStr (forbidZones [i].points [j].lon, par.dispDms, strLon, sizeof (strLon));
+            fprintf (f, "[%s, %s]%s", strLat, strLon, j < forbidZones [i].n - 1 ? ", " : "");
+         }
+         if (yaml) fprintf (f, "] # yamllint disable-line\n");
+         else fprintf (f, "]\n");
       }
-      fprintf (f, "\n");
    }
    if (password)
-      fprintf (f, "MAIL_PW:         %s\n", par.mailPw);
-   fprintf (f, "AUTHENT:         %d\n", par.authent);
+      fprintf (f, "MAIL_PW:          %s\n", par.mailPw);
 
    fclose (f);
    return true;
@@ -999,11 +997,11 @@ double fPenalty (int shipIndex, int type, double tws, double energy, double *cSt
       return -1;
    };
    const double kPenalty = 0.015;
-   double cShip = shipParam [shipIndex].cShip;
-   *cStamina = 2 - fmin (energy, 100.0) * kPenalty;
-   double tMin = shipParam [shipIndex].tMin [type];
-   double tMax = shipParam [shipIndex].tMax [type];
-   double fTws = 50.0 - 50.0 * cos (G_PI * ((fmax (10.0, fmin (tws, 30.0))-10.0)/(30.0 - 10.0)));
+   const double cShip = shipParam [shipIndex].cShip;
+   *cStamina = 2.0 - fmin (energy, 100.0) * kPenalty;
+   const double tMin = shipParam [shipIndex].tMin [type];
+   const double tMax = shipParam [shipIndex].tMax [type];
+   const double fTws = 50.0 - 50.0 * cos (G_PI * ((fmax (10.0, fmin (tws, 30.0))-10.0)/(30.0 - 10.0)));
    //printf ("cShip: %.2lf, cStamina: %.2lf, tMin: %.2lf, tMax: %.2lf, fTws: %.2lf\n", cShip, cStamina, tMin, tMax, fTws);
    double t = tMin + fTws * (tMax - tMin) / 100.0;
    if (fullPack) t *= 0.8;
@@ -1012,10 +1010,10 @@ double fPenalty (int shipIndex, int type, double tws, double energy, double *cSt
 
 /*! for virtual Regatta. return point loss with manoeuvre types. Depends on tws and fullPack */
 double fPointLoss (int shipIndex, int type, double tws, bool fullPack) {
-   const double fPCoeff = (type == 2 && fullPack) ? 0.8 : 1;
-   double loss = (type == 2) ? 0.2 : 0.1;
-   double cShip = shipParam [shipIndex].cShip;
-   double fTws = (tws <= 10.0) ? 0.02 * tws + 1 : 
+   const double fPCoeff = fullPack ? 0.8 : 1.0;
+   const double loss = (type == 2) ? 0.2 : 0.1;
+   const double cShip = shipParam [shipIndex].cShip;
+   const double fTws = (tws <= 10.0) ? 0.02 * tws + 1.0 : 
                  (tws <= 20.0) ? 0.03 * tws + 0.9 : 
                  (tws <= 30) ? 0.05 * tws + 0.5 :  
                  2.0;
@@ -1024,10 +1022,10 @@ double fPointLoss (int shipIndex, int type, double tws, bool fullPack) {
 
 /*! for virtual Regatta. return type in second to get back one energy point */
 double fTimeToRecupOnePoint (double tws) {
-   const double timeToRecupLow = 5;   // minutes
-   const double timeToRecupHigh = 15; // minutes
-   double fTws = 1.0 - cos (G_PI * (fmin (tws, 30.0)/30.0));
-   return 60 * (timeToRecupLow + fTws * (timeToRecupHigh - timeToRecupLow) / 2.0);
+   const double timeToRecupLow = 5.0 * 60.0;   // 5 minutes in secondes
+   const double timeToRecupHigh = 15.0 * 60.0; // 15 minutes in seconds
+   const double fTws = 1.0 - cos (G_PI * (fmin (tws, 30.0)/30.0));
+   return timeToRecupLow + fTws * (timeToRecupHigh - timeToRecupLow) / 2.0;
 }
 
 /*! Return JSON formatted subset of parameters into 'out'.
@@ -1191,5 +1189,26 @@ bool readMarkCSVToJson (const char *fileName, char *out, size_t maxLen) {
    strlcat (out, "\n]\n", maxLen);
    fclose (f);
    return true;
+}
+
+/*! replace multiple spaces by just one */
+void normalizeSpaces(char *s) {
+    char *src = s;
+    char *dst = s;
+    bool inSpace = false;
+
+    while (*src) {
+        if (*src == ' ') {
+            if (!inSpace) {
+                *dst++ = ' ';
+                inSpace = true;
+            }
+        } else {
+            *dst++ = *src;
+            inSpace = false;
+        }
+        src++;
+    }
+    *dst = '\0';
 }
 

@@ -17,13 +17,13 @@
 static bool strtodNew(const char *str, double *v){
    if (str == NULL || v == NULL || (!isNumber(str))) return false;
 
-   size_t len = strlen(str);
+   const size_t len = strlen(str);
    char *mutableStr = (char *)malloc(len + 1);
    if (!mutableStr) return false;
 
    // Replace comma with dots
    for (size_t i = 0; i <= len; ++i) {
-      char c = str[i];
+      const char c = str[i];
       mutableStr[i] = (c == ',') ? '.' : c;  // copy also '\0'
    }
 
@@ -299,7 +299,7 @@ static char *findListPol (bool isTws, int maxN, char *str, const char *startWith
    }
    pt += strlen (startWith);
    for (n = 1; pt != NULL && n < maxN; n += 1) {
-      double val = strtod (pt, &endPtr);
+      const double val = strtod (pt, &endPtr);
       if (endPtr == pt) break;
       if (isTws) polMat->t [0][n] = sailPolMat->t [0][n] = val;
       else polMat->t [n][0] = sailPolMat->t [n][0] = val;
@@ -350,7 +350,7 @@ static bool readPolarJson (const char *fileName, PolMat *polMat, PolMat *sailPol
       return false;
    }
    strlcpy (start, begin, (ptr-begin));
-   int len = strlen (start);
+   const int len = strlen (start);
    if (start [len - 1] == ',') start [len - 1 ] = '\0';     // last comma elimination if exist 
    snprintf (polMat->jsonHeader, sizeof polMat->jsonHeader, "{%s\n}", start); // header extracted
 
@@ -376,6 +376,7 @@ static bool readPolarJson (const char *fileName, PolMat *polMat, PolMat *sailPol
 /*! Launch readPolarCsv or readPolarJson according to type */
 bool readPolar (bool check, const char *fileName, PolMat *mat, PolMat *sailPolMat, char *errMessage, size_t maxLen) {
    char sailPolFileName [MAX_SIZE_NAME] = "";
+   char bidon [MAX_SIZE_LINE];
    bool res = false;
    if (!mat) return false;
    *mat = (PolMat){0}; // set all to zero
@@ -388,13 +389,13 @@ bool readPolar (bool check, const char *fileName, PolMat *mat, PolMat *sailPolMa
       res = readPolarCsv (fileName, mat, errMessage, maxLen);
       if (res && sailPolMat != NULL) {  // read additional polar for sail numbers
          newFileNameSuffix (fileName, "sailpol", sailPolFileName, sizeof (sailPolFileName));
-         if (readPolarCsv (sailPolFileName, sailPolMat, errMessage, maxLen)) { 
+         if (readPolarCsv (sailPolFileName, sailPolMat, bidon, sizeof bidon)) { // sailPolFile not mandatory 
             mat->nSail = sailPolMat->maxAll; // Number of sail max is the number of sails
-            for (size_t i = 0; i < mat->nSail && i < SAIL_NAME_SIZE; i += 1) 
-               strlcpy (mat->tSail [i].name, SAIL_NAME [i], MAX_SIZE_NAME);
+            for (size_t i = 0; i < mat->nSail && i < sailNameSize; i += 1) 
+               strlcpy (mat->tSail [i].name, sailName [i], MAX_SIZE_NAME);
 
-            if (SAIL_NAME_SIZE < mat->nSail) {
-               fprintf (stderr, "in readPolar, Error: size of SAIL_NAME: %zu not enough for nSail: %zu\n", SAIL_NAME_SIZE, mat->nSail);
+            if (sailNameSize < mat->nSail) {
+               fprintf (stderr, "in readPolar, Error: size of sailName: %zu not enough for nSail: %zu\n", sailNameSize, mat->nSail);
             }
          }
          else mat->nSail = 1;

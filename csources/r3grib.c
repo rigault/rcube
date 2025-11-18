@@ -87,10 +87,10 @@ static bool geoIntersectGrib (const Zone *zone1, const Zone *zone2) {
 
 /*! true if (wind) zone and zone 2 intersect in time */
 static bool timeIntersectGrib (const Zone *zone1, const Zone *zone2) {
-	time_t timeMin1 = gribDateTimeToEpoch (zone1->dataDate [0], zone1->dataTime [0]);
-	time_t timeMin2 = gribDateTimeToEpoch (zone2->dataDate [0], zone2->dataTime [0]);
-	time_t timeMax1 = timeMin1 + 3600 * (zone1-> timeStamp [zone1 -> nTimeStamp -1]);
-	time_t timeMax2 = timeMin2 + 3600 * (zone2-> timeStamp [zone2 -> nTimeStamp -1]);
+	const time_t timeMin1 = gribDateTimeToEpoch (zone1->dataDate [0], zone1->dataTime [0]);
+	const time_t timeMin2 = gribDateTimeToEpoch (zone2->dataDate [0], zone2->dataTime [0]);
+	const time_t timeMax1 = timeMin1 + 3600 * (zone1-> timeStamp [zone1 -> nTimeStamp -1]);
+	const time_t timeMax2 = timeMin2 + 3600 * (zone2-> timeStamp [zone2 -> nTimeStamp -1]);
 	
 	return (timeMin2 < timeMax1) && (timeMax2 > timeMin1);
 }
@@ -270,12 +270,10 @@ bool checkGribToStr (char *buffer, size_t maxLen) {
    buffer [0] = '\0';
 
    bool OK = (checkGribInfoToStr (WIND, &zone, buffer, maxLen));
-   if (OK)  
-      buffer [0] = '\0';
-   if (! checkGribInfoToStr (CURRENT, &currentZone, buffer, maxLen))
-      OK = false;
-   if (OK)  
-      buffer [0] = '\0';
+   if (OK) buffer [0] = '\0';
+   if (! checkGribInfoToStr (CURRENT, &currentZone, buffer, maxLen)) OK = false;
+   if (OK) buffer [0] = '\0';
+
    if (currentZone.nbLat > 0) { // current exist
       // check geo intersection between current and wind
       if (! geoIntersectGrib (&zone, &currentZone)) {
@@ -355,7 +353,7 @@ static inline long indLat (double lat, const Zone *zone) {
 
 /*! return indice of lon in gribData wind or current */
 static inline long indLon (double lon, const Zone *zone) {
-   if (lon < zone->lonLeft) lon += 360;
+   if (lon < zone->lonLeft) lon += 360.0;
    return (long) round ((lon - zone->lonLeft)/zone->lonStep);
 }
 
@@ -610,10 +608,12 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
 
    tm_info = localtime_r (&st.st_mtime, &tm_buf);
    if (tm_info) strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S", tm_info);
-
+   
+   char *gribBaseName = g_path_get_basename (fileName);
    snprintf (str, sizeof (str),  "  \"fileName\": \"%s\", \"fileSize\": %ld, \"fileTime\": \"%s\",\n", 
-            gribName, st.st_size, strTime);
+            gribBaseName, st.st_size, strTime);
    g_strlcat (out, str, maxLen);
+   free (gribBaseName);
 
    if ((gZone.nDataDate != 1) || (gZone.nDataTime != 1)) {
       snprintf (infoStr, sizeof (infoStr), "Warning number of Date: %zu, number of Time: %zu", gZone.nDataDate, gZone.nDataTime);

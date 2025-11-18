@@ -12,8 +12,9 @@ extern MyPolygon forbidZones [MAX_N_FORBID_ZONE];
 extern struct MeteoElmt meteoTab [N_METEO_ADMIN];
 
 /* sail attributes */
-extern const size_t SAIL_NAME_SIZE;
-extern const char *SAIL_NAME [];
+extern const size_t sailNameSize;
+extern const char *sailName [];
+extern const char *colorStr [];
 
 /*! polar description */
 extern PolMat polMat;
@@ -49,7 +50,7 @@ extern char   *newDate (long intDate, double myTime, char *res, size_t maxLen);
 extern char   *newDateWeekDay (long intDate, double myTime, char *res, size_t maxLen);
 extern char   *newDateWeekDayVerbose (long intDate, double myTime, char *res, size_t maxLen);
 extern bool   readParam (const char *fileName, bool initDisp);
-extern bool   writeParam (const char *fileName, bool header, bool password);
+extern bool   writeParam (const char *fileName, bool header, bool password, bool yaml);
 extern bool   readIsSea (const char *fileName);
 extern void   updateIsSeaWithForbiddenAreas (void);
 extern bool   hasSlash (const char *name);
@@ -62,5 +63,4 @@ extern int    nearestPort (double lat, double lon, const char *fileName, char *s
 extern double monotonic (void);
 extern char * readTextFile (const char *fileName, char *errMessage, size_t maxLen);
 extern bool   readMarkCSVToJson (const char *fileName, char *out, size_t maxLen);
-
-
+extern void   normalizeSpaces (char *s);

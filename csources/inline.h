@@ -291,4 +291,91 @@ static inline double maxSpeedInPolarAt (double tws, const PolMat *mat) {
    return max;
 }
 
+/*!
+ * @brief Compute the intermediate point on the great circle from P1 to P2.
+ *
+ * This function returns the point Pr (latR, lonR) lying on the orthodromic
+ * (great-circle) route from P1 (lat1, lon1) to P2 (lat2, lon2), at a distance
+ * d_nm (nautical miles) from P1.
+ *
+ * Latitudes and longitudes are in degrees.
+ * Distance d_nm is in nautical miles.
+ *
+ * The result (latR, lonR) is given in degrees.
+ *
+ * Edge cases:
+ * - If P1 and P2 are (almost) identical, Pr = P1.
+ * - If d_nm <= 0, Pr = P1.
+ * - If d_nm >= orthodromic distance P1->P2, Pr = P2.
+ */
+static inline void orthoFindInterPoint(double lat1, double lon1,
+                         double lat2, double lon2,
+                         double d_nm,
+                         double *latR, double *lonR) {
+   if (!latR || !lonR) return;
+
+   /* Total orthodromic distance P1 -> P2 (nautical miles) */
+   double total_nm = orthoDist(lat1, lon1, lat2, lon2);
+
+   /* Degenerate or almost zero distance: return origin */
+   if (total_nm <= 1e-9) {
+      *latR = lat1;
+      *lonR = lon1;
+      return;
+   }
+
+   /* Clamp requested distance into [0, total_nm] */
+   if (d_nm <= 0.0) {
+      *latR = lat1;
+      *lonR = lon1;
+      return;
+   }
+   if (d_nm >= total_nm) {
+      *latR = lat2;
+      *lonR = lon2;
+      return;
+   }
+
+   /* Fraction of the great-circle path */
+   double f = d_nm / total_nm;
+
+   /* Convert endpoints to radians */
+   double phi1 = lat1 * DEG_TO_RAD;
+   double lambda1 = lon1 * DEG_TO_RAD;
+   double phi2 = lat2 * DEG_TO_RAD;
+   double lambda2 = lon2 * DEG_TO_RAD;
+
+   /* Central angle delta between P1 and P2 (radians)
+    * orthoDist uses: dist_nm = delta * (180 / pi) * 60
+    * => delta = dist_nm / (60 * (180 / pi)) = dist_nm / (60 * RAD_TO_DEG)
+    */
+   double delta = total_nm / (60.0 * RAD_TO_DEG);
+   double sin_delta = sin(delta);
+
+   if (fabs(sin_delta) < 1e-15) {
+      /* Numerically unstable (almost no separation) */
+      *latR = lat1;
+      *lonR = lon1;
+      return;
+   }
+
+   /* Spherical linear interpolation on great-circle */
+   double A = sin((1.0 - f) * delta) / sin_delta;
+   double B = sin(f * delta) / sin_delta;
+
+   double cos_phi1 = cos(phi1);
+   double cos_phi2 = cos(phi2);
+
+   double x = A * cos_phi1 * cos(lambda1) + B * cos_phi2 * cos(lambda2);
+   double y = A * cos_phi1 * sin(lambda1) + B * cos_phi2 * sin(lambda2);
+   double z = A * sin(phi1)               + B * sin(phi2);
+
+   double phiR = atan2(z, sqrt(x * x + y * y));
+   double lambdaR = atan2(y, x);
+
+   *latR = phiR * RAD_TO_DEG;
+   *lonR = lonCanonize(lambdaR * RAD_TO_DEG);
+}
+
+
 
