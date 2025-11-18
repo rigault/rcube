@@ -7,7 +7,7 @@ ISSEA: geo/issea.txt
 LOG: routing.log
 FEEDBACK: feedback.log
 TIDES: geo/portprinc.csv
-WEB: rcube/www
+WEB: rcube/www                   # comment
 CLI_HELP: /home/rr/routing/helpdir/clihelp.txt
 MOST_RECENT_GRIB: 1
 VR_STAMINA: 100.00
@@ -27,5 +27,5 @@ J_FACTOR: 0
 K_FACTOR: 3
 N_SECTORS: 720
 MARKS: /home/rr/rcube/VR/transatCafeMarques.csv
-FORBID_ZONES: 
-   - [[43°30'00"S, 002°45'00"W], [46°00'00"S, 017°18'00"E], [48°00'00"S, 035°00'00"E], [51°00'00"S, 069°30'00"E], [49°00'00"S, 096°00'00"E], [45°00'00"S, 100°18'00"E], [46°00'00"S, 115°45'00"E], [49°00'00"S, 120°00'00"E], [50°00'00"S, 150°00'00"E], [56°00'00"S, 154°30'00"E], [80°00'00"S, 154°30'00"E], [80°00'00"S, 002°45'00"W]] # yamllint disable-line
+FORBID_ZONES:
+  - [[43°30'00"S, 002°45'00"W], [46°00'00"S, 017°18'00"E], [48°00'00"S, 035°00'00"E], [51°00'00"S, 069°30'00"E], [49°00'00"S, 096°00'00"E], [45°00'00"S, 100°18'00"E], [46°00'00"S, 115°45'00"E], [49°00'00"S, 120°00'00"E], [50°00'00"S, 150°00'00"E], [56°00'00"S, 154°30'00"E], [80°00'00"S, 154°30'00"E], [80°00'00"S, 002°45'00"W]] # yamllint disable-line
