@@ -1,0 +1,41 @@
+# Wind specification for mkgrib.c
+---
+stepHours: 3
+dataDate: 20251008
+dataTime: 1200
+areas:
+  # bug avec 51 pas avec 53
+  - name: 0
+    latFirst: 53
+    latLast: 10
+    lonFirst: -50
+    lonLast: 15
+    # tmin tmax twd tws  w
+    winds:
+      - [00, 0, 20, 0]
+      - [50, 0, 20, 0]
+      - [70, 270, 5, 0.5]
+      - [100, 270, 5, 0.5]
+      - [150, 45, 28, 1]
+      - [200, 45, 28, 1]
+      - [220, 90, 14, 2]
+  - name: 1
+    latFirst: 53
+    latLast: 20
+    lonFirst: -30
+    lonLast: 8
+    # tmin tmax twd tws  w
+    winds:
+      - [0, 180, 50, 7]
+      - [19, 180, 50, 7]
+      - [20, 180, 50, 7]
+      - [240, 335, 50, 7]
+  - name: 2
+    latFirst: 45
+    latLast: 40
+    lonFirst: -10
+    lonLast: -2
+    # tmin tmax twd tws  w
+    winds:
+      - [0, 90, 10, 2]
+      - [240, 90, 10, 2]

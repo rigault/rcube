@@ -67,21 +67,21 @@ enum {NOAA = 1, ECMWF = 2, ARPEGE = 3, AROME = 4, METEO_CONSULT_WIND = 5, METEO_
 const bool verbose = false;
 
 const char *METEO_CONSULT_WIND_URL [N_METEO_CONSULT_WIND_URL * 2] = {
-   "Atlantic North",   "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Nord_Atlantique.grb",
-   "Atlantic Center",  "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Centre_Atlantique.grb",
-   "Antilles",         "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Antilles.grb",
-   "Europe",           "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Europe.grb",
-   "Manche",           "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Manche.grb",
-   "Gascogne",         "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Gascogne.grb"
+   "AtlN",   "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Nord_Atlantique.grb",
+   "AtlC",  "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Centre_Atlantique.grb",
+   "Anti",   "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Antilles.grb",
+   "Euro",     "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Europe.grb",
+   "Manc",     "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Manche.grb",
+   "Gasc",    "%sMETEOCONSULT%02dZ_VENT_%02d%02d_Gascogne.grb"
 };
 
 const char *METEO_CONSULT_CURRENT_URL [N_METEO_CONSULT_CURRENT_URL * 2] = {
-   "Atlantic North",    "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Nord_Atlantique.grb",
-   "Atlantic Center",   "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Centre_Atlantique.grb",
-   "Antilles",          "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Antilles.grb",
-   "Europe",            "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Europe.grb",
-   "Manche",            "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Manche.grb",
-   "Gascogne",          "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Gascogne.grb"
+   "AtlN",    "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Nord_Atlantique.grb",
+   "AtlC",   "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Centre_Atlantique.grb",
+   "Anti",    "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Antilles.grb",
+   "Euro",      "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Europe.grb",
+   "Manc",      "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Manche.grb",
+   "Gasc",    "%sMETEOCONSULT%02dZ_COURANT_%02d%02d_Gascogne.grb"
 };
 
 char gribDir [MAX_SIZE_DIR];
@@ -515,7 +515,7 @@ static bool uncompress (const char *in, const char *out) {
 /*! Process METEOCONSULT Wind grib download */
 static void fetchMeteoConsult (int type, int region) {
    char yyyy [5], mm [3], dd [3], hh [3], url [1024] = "";
-   char finalFile [MAX_SIZE_LINE];
+   char fileName [MAX_SIZE_LINE];
    char uncompressedFile [MAX_SIZE_LINE];
 
    int nTry = 0;
@@ -532,13 +532,16 @@ static void fetchMeteoConsult (int type, int region) {
       else
          snprintf (url, sizeof (url), METEO_CONSULT_CURRENT_URL [region *2 + 1], METEO_CONSULT_ROOT_GRIB_URL, hhInt, mmInt, ddInt);
       printf ("url: %s\n", url);
-
+      
       char *baseName= g_path_get_basename (url);
-      snprintf (finalFile, sizeof(finalFile), "%s/%s", gribDir, baseName);
-      snprintf (uncompressedFile, sizeof(uncompressedFile), "%s/UC_%s", gribDir, baseName);
+      snprintf (fileName, sizeof(fileName), "%s/%s", gribDir, baseName);
+
+      snprintf (uncompressedFile, sizeof(uncompressedFile), "%s/UCMC_%s%s%s_%sZ_%s.grb", 
+         gribDir, yyyy, mm, dd, hh, METEO_CONSULT_WIND_URL [region *2]);
+
       free (baseName);
 
-      if (downloadFile (url, finalFile))
+      if (downloadFile (url, fileName))
          break; // success
       else {
          printf ("In fetchMeteoConsult Try Failed: %s\n", url); 
@@ -550,11 +553,11 @@ static void fetchMeteoConsult (int type, int region) {
    if (nTry >=  MAX_N_TRY)
       fprintf (stderr, "⚠️ Download failed after: %d try\n", nTry);
    else  {// creation of uncompressed file
-      if (!uncompress(finalFile, uncompressedFile)) {
-        fprintf(stderr, "⚠️ Uncompress failed for: %s\n", finalFile);
+      if (!uncompress(fileName, uncompressedFile)) {
+        fprintf(stderr, "⚠️ Uncompress failed for: %s\n", fileName);
       }
-      printf ("finalFile Uncompressed: %s\n", uncompressedFile);
-      remove (finalFile);
+      printf ("fileName Uncompressed: %s\n", uncompressedFile);
+      remove (fileName);
    }
 }
 
