@@ -10,7 +10,7 @@ areas:
     latLast: 10
     lonFirst: -50
     lonLast: 15
-    # tmin tmax twd tws  w
+    # t twd tws  w
     winds:
       - [00, 0, 20, 0]
       - [50, 0, 20, 0]
@@ -24,7 +24,7 @@ areas:
     latLast: 20
     lonFirst: -30
     lonLast: 8
-    # tmin tmax twd tws  w
+    # t twd tws  w
     winds:
       - [0, 180, 50, 7]
       - [19, 180, 50, 7]
@@ -35,7 +35,7 @@ areas:
     latLast: 40
     lonFirst: -10
     lonLast: -2
-    # tmin tmax twd tws  w
+    # t twd tws  w
     winds:
       - [0, 90, 10, 2]
       - [240, 90, 10, 2]
