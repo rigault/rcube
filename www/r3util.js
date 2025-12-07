@@ -1,11 +1,45 @@
 /**
- * display information about point (lat, lon) of competitor 0
+ * Re-init one server
  */
-function coordStatus () {
-   if (! competitors || ! competitors [0]) return;
-   const c = competitors [0];
-   const formData = `type=${REQ.COORD}&boat=${c.name},${c.lat},${c.lon};`;
+function initServer () {
+   const formData = `type=${REQ.INIT}`;
    console.log ("Request sent:", formData);
+   Swal.fire({
+      title: 'Reinit server',
+      html: 'It may take time...',
+      allowOutsideClick: false,
+      didOpen: () => {
+         Swal.showLoading();
+      }
+   });
+
+   fetch (apiUrl, {
+      method: "POST",
+      headers: {
+         "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: formData
+   })
+   .then(response => response.json())
+   .then (data => Swal.fire ("Reinit done", `Server: ${data.serverPort}`, "info"));
+}
+
+/**
+ * display information about point (lat, lon)
+ */
+function coordStatus (lat, lon) {
+   const name = "bidon";
+   const formData = `type=${REQ.COORD}&boat=${name},${lat},${lon}&grib=grib/${gribLimits.name}`;
+   console.log ("Request sent:", formData);
+   Swal.fire({
+      title: 'Info about coordinates…',
+      html: 'It may take time...',
+      allowOutsideClick: false,
+      didOpen: () => {
+         Swal.showLoading();
+      }
+   });
+
    fetch (apiUrl, {
       method: "POST",
       headers: {
@@ -16,25 +50,252 @@ function coordStatus () {
    .then(response => response.json())
    .then(data => {
       console.log ("JSON received:", data);
-      Swal.fire({
-         title: "Coord Info",
-         html: `
-            name: ${c.name}<br>
-            coord: ${latLonToStr(c.lat, c.lon)}<br>
-            isSea: ${data.isSea}<br>
-            isSeaTolerant: ${data.isSeaTolerant}<br>
-            inWind: ${data.inWind}<br>
-            inCurrent: ${data.inCurrent}
-         `,
-         icon: "info",
-         confirmButtonText: "OK",
-         confirmButtonColor: "orange",
-         customClass: { popup: "swal-wide" },
-      });
+      meteoGram (lat, lon, data);
    })
    .catch (error => {
       console.error("Error statusCoord:", error);
       Swal.fire("Erreur", "Impossible to access server", "error");
+   });
+}
+
+// true wind direction (deg), same logic as C version
+function fTwd(u, v) {
+   const val = 180 + RAD_TO_DEG * Math.atan2(u, v);
+   return (val > 180) ? (val - 360) : val;
+}
+
+// true wind speed (kt), Pythagoras, same as C version
+function fTws(u, v) {
+   return MS_TO_KN * Math.hypot(u, v);
+}
+
+// Map TWD (deg) to a small arrow character for display at top of chart
+function directionToArrow(dirDeg) {
+   if (!Number.isFinite(dirDeg)) return '•';
+
+   let d = dirDeg;
+   if (d < 0) d += 360;
+   d = d % 360;
+
+   // 45° sectors
+   if (d >= 337.5 || d < 22.5) return '↓';
+   if (d < 67.5) return '↙';
+   if (d < 112.5) return '←';
+   if (d < 157.5) return '↖';
+   if (d < 202.5) return '↑';
+   if (d < 247.5) return '↗';
+   if (d < 292.5) return '→';
+   return '↘';
+}
+
+// Simple formatter for booleans in footer
+function boolToYesNo(b) {
+   return b ? 'yes' : 'no';
+}
+
+/**
+ * Display a meteogram with wind, gust and waves using SweetAlert2 and Plotly.
+ *
+ * @param {number} lat - Latitude in degrees of the queried point.
+ * @param {number} lon - Longitude in degrees of the queried point.
+ * @param {Object} data - Meteo data object returned by the server.
+ * @param {boolean} data.isSea - True if point is sea.
+ * @param {boolean} data.isSeaTolerant - True if point is sea tolerant.
+ * @param {boolean} data.inWind - True if point is inside wind domain.
+ * @param {boolean} data.inCurrent - True if point is inside current domain.
+ * @param {number} data.epochGribStart - Epoch time (seconds) of first row.
+ * @param {Array<Array<number>>} data.meteoArray - Rows of [u, v, g, w].
+ */
+function meteoGram(lat, lon, data) {
+   if (!data || !Array.isArray(data.meteoArray) || data.meteoArray.length === 0) {
+      Swal.fire('No meteo data', 'meteoArray is empty or missing.', 'error');
+      return;
+   }
+   if (data.inWind == false) {
+      let text = `Sea: ${boolToYesNo(data.isSea)}<br>Sea tolerant: ${boolToYesNo(data.isSeaTolerant)}<br>`;
+      text += `Current: ${boolToYesNo(data.inCurrent)}`;
+      Swal.fire ('No wind', text, 'warning');
+      return;
+   }
+
+   const meteo = data.meteoArray;
+   const epochStart = data.epochGribStart;
+
+   const xDates = [];       // Date objects for x-axis
+   const twsArray = [];     // wind speed kt
+   const gustArray = [];    // gust kt
+   const waveArray = [];    // wave height m
+   const arrowText = [];    // wind direction arrows
+   const twdDirArray = [];  // wind direction 0-360, integer degrees
+
+   let maxValue = 0;
+
+   for (let i = 0; i < meteo.length; i++) {
+      const [u, v, g, w] = meteo [i];
+
+      // Time: epochStart + i * 3600 seconds
+      const date = new Date((epochStart + i * 3600) * 1000);
+      xDates.push(date);
+
+      // Wind direction and speed
+      const twd = fTwd(u, v);        // deg, may be negative
+      let twd360 = twd;
+      if (twd360 < 0) twd360 += 360;
+      twd360 = Math.round(twd360);   // integer degrees 0-360
+
+      const tws = fTws(u, v);        // kt
+      const gust = Math.max(tws, MS_TO_KN * g); // gust in kt
+
+      twsArray.push(tws);
+      gustArray.push(gust);
+      waveArray.push(w);
+      twdDirArray.push(twd360);
+
+      maxValue = Math.max(maxValue, tws, gust, w);
+
+      arrowText.push(directionToArrow(twd));
+   }
+
+   // y-position for direction arrows: a bit above max value
+   const arrowY = new Array(meteo.length).fill((maxValue || 1) * 1.1);
+
+   // "Now" vertical line and label (only if inside time range)
+   const now = new Date();
+   const shapes = [];
+   const annotations = [];
+
+   if (xDates.length > 0) {
+      const minDate = xDates[0];
+      const maxDate = xDates[xDates.length - 1];
+
+      if (now >= minDate && now <= maxDate) {
+         shapes.push({
+            type: 'line',
+            xref: 'x',
+            yref: 'y',
+            x0: now,
+            x1: now,
+            y0: 0,
+            y1: (maxValue || 1) * 1.2,
+            line: {
+               color: 'black',
+               width: 2,
+               dash: 'dot'
+            }
+         });
+
+         annotations.push({
+            x: now,
+            y: (maxValue || 1) * 1.2,
+            xref: 'x',
+            yref: 'y',
+            text: 'now',
+            showarrow: false,
+            font: {
+               size: 10,
+               color: 'black'
+            },
+            yanchor: 'bottom'
+         });
+      }
+   }
+
+   // Plotly traces with custom hover templates and wind direction info
+   const gustTrace = {
+      name: 'Gust kt',
+      x: xDates,
+      y: gustArray,
+      customdata: twdDirArray,
+      mode: 'lines+markers',
+      line: { width: 2, color: 'red' },
+      marker: { size: 4 },
+      hovertemplate:
+         'Gust: %{y:.2f} kt<br>' +
+         '<extra></extra>'
+   };
+
+   const windTrace = {
+      name: 'Wind speed kt',
+      x: xDates,
+      y: twsArray,
+      customdata: twdDirArray,
+      mode: 'lines+markers',
+      line: { width: 2, color: 'blue' },
+      marker: { size: 4 },
+      hovertemplate:
+         'Wind: %{customdata}° %{y:.2f} kt' +
+         '<extra></extra>'
+   };
+
+   const waveTrace = {
+      name: 'Wave height m',
+      x: xDates,
+      y: waveArray,
+      customdata: twdDirArray,
+      mode: 'lines+markers',
+      line: { width: 2, color: 'green' },
+      marker: { size: 4 },
+      yaxis: 'y',
+      hovertemplate:
+         'Wave: %{y:.2f} m' +
+         '<extra></extra>'
+   };
+
+   // Direction arrows at top of graph
+   const arrowTrace = {
+      name: 'Wind direction',
+      x: xDates,
+      y: arrowY,
+      mode: 'text',
+      text: arrowText,
+      textfont: { size: 14, color: 'gray' },
+      hoverinfo: 'skip',
+      showlegend: false
+   };
+
+   const layout = {
+      margin: { l: 60, r: 20, t: 40, b: 80 },
+      xaxis: {
+         title: 'Local date and time',
+         tickformat: '%Y-%m-%d %H:%M',
+         nticks: 20,      // limit number of ticks to avoid crowding
+         tickangle: -45
+      },
+      yaxis: {
+         title: 'Wind kt - Waves m',
+         rangemode: 'tozero'
+      },
+      legend: {
+         orientation: 'h',
+         x: 0,
+         y: 1.1
+      },
+      hovermode: 'x unified',
+      shapes: shapes,
+      annotations: annotations
+   };
+
+   const footerHtml = 
+      `${latLonToStr (lat, lon, DMSType)},&nbsp;&nbsp;` +
+      `${epochToStrDate (epochStart)} locale,&nbsp;&nbsp;` +
+      `Sea: ${boolToYesNo(data.isSea)},&nbsp;&nbsp;` +
+      `Sea tolerant: ${boolToYesNo(data.isSeaTolerant)},&nbsp;&nbsp;` +
+      `Wind: ${boolToYesNo(data.inWind)},&nbsp;&nbsp;` +
+      `Current: ${boolToYesNo(data.inCurrent)},&nbsp;&nbsp;` +
+      `grib: ${data.grib}`;
+
+   // SweetAlert2 dialog
+   Swal.fire({
+      title: 'Meteogram',
+      width: '90%',
+      html: '<div id="meteogram-plot" style="width: 100%; height: 60vh;"></div>',
+      footer: footerHtml,
+      didOpen: () => {
+         const div = document.getElementById('meteogram-plot');
+         Plotly.newPlot(div, [gustTrace, windTrace, waveTrace, arrowTrace], layout, {
+            responsive: true
+         });
+      }
    });
 }
 
@@ -64,9 +325,6 @@ function updateDMS() {
  */
 async function promptForCreds() {
    // simple HTML escape for values put into attributes
-   const esc = s => (s ?? "").replace(/[&<>"']/g, m => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-   }[m]));
    const html = `
       <form> 
       <input id="swal-user" class="swal2-input" placeholder="User ID" autocomplete="${userId}" value="${esc(userId)}">
@@ -90,11 +348,7 @@ async function promptForCreds() {
          const $popup = Swal.getPopup();
          const $user = $popup.querySelector("#swal-user");
          const $pass = $popup.querySelector("#swal-pass");
-         //const $show = $popup.querySelector("#swal-show");
          $user && $user.focus();
-         //$show && $show.addEventListener("change", () => {
-         //   $pass.type = $show.checked ? "text" : "password";
-         //});
       },
       preConfirm: () => {
          const $popup = Swal.getPopup();
@@ -107,7 +361,6 @@ async function promptForCreds() {
          return { user, pass };
       }
    });
-
    if (res.isConfirmed && res.value) {
       userId = res.value.user;
       password = res.value.pass;
@@ -222,7 +475,7 @@ function helpInfoHtml(data, full) {
     Client IP address: ${data["Client IP Address"]}<br>
     User Agent: ${data["User Agent"]}<br>
     Compilation-date: ${data["Compilation-date"]}<br>
-    Client side Windy model: ${store.get('product')}
+    Client side Windy model: ${window.map && store ? store.get('product') : "NA"}
   `;
 
   return full ? head + bodyFull : head; // court = seulement l'en-tête
@@ -250,13 +503,11 @@ async function helpInfo (full = false) {
          title: "Help Info",
          html:  helpInfoHtml(data, full),
          icon: "info",
-         confirmButtonText: "OK",
-         confirmButtonColor: "orange",
-         showDenyButton: true,
-         denyButtonText: full ? "Less" : "More",
+         showCancelButton: true,
+         confirmButtonText: full ? "Less" : "More",
          customClass: { popup: "swal-wide" },
       }).then((result) => {
-         if (result.isDenied) helpInfo(!full);
+         if (result.isConfirmed) helpInfo(!full);
       });
    })
    .catch (error => {

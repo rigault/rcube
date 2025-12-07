@@ -1,7 +1,9 @@
 /* jshint esversion: 6 */
 let animation = false;
-let windyPlay = true;
-let clipBoard = false; // to set request in clipBoard
+let windyPlay = true;   // true if windyb is used, false in OSM mode
+let barbDisp = true;    // diplay barbs in OSM mode
+let clipBoard = false;  // to set request in clipBoard
+let windCanvas = {};
 let gribLimits = {
    bottomLat: 0,
    rightLon: 0,
@@ -81,8 +83,13 @@ let myWayPoints = [];   // contains waypoint up to destination not origin
 let route = null;       // global variable storing route
 let isochroneLayerGroup;
 let bestTimeResult = [];
+let initialStartTime;
+let bestStartTime;
 let compResult = [];
+let lastPointLayer;
+
 //window.oldRoutes = [];
+
 
 // Define color mapping based on index
 const colorMap = ["red", "green", "blue", "orange", "black"];
@@ -90,7 +97,7 @@ const colorMap = ["red", "green", "blue", "orange", "black"];
 // equivalent server side: enum {REQ_TEST, REQ_ROUTING, ...}; // type of request
 const REQ = {TEST: 0, ROUTING: 1, COORD: 2, FORBID_ZONE: 3, POLAR: 4, 
              GRIB: 5, DIR: 6, PAR_RAW: 7, PAR_JSON: 8,
-             INIT: 9, FEEDBACK:10, DUMP_FILE:11, NEAREST_PORT:12, MARKS: 13}; 
+             INIT: 9, FEEDBACK:10, DUMP_FILE:11, NEAREST_PORT:12, MARKS: 13, GRIB_CHECK: 14, GPX_ROUTE: 15, GRIB_DUMP: 16}; 
 
 const MARKER = encodeURIComponent(`<?xml version="1.0" encoding="UTF-8" standalone="no"?>
         <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
@@ -105,6 +112,32 @@ const BoatIcon = L.icon ({
    iconAnchor: [12, 12],
    popupAnchor: [0, 0],
 });
+
+const MAX_N = 400; // number max of isochrone for requestTwo and adjustIsoStep
+const timeSteps = [900, 1800, 3600, 7200, 10800]; // for adjustIsoStep
+
+/** adjust isoStep value of routparam object
+  * return true if value has been changed, false otherwise
+  * new isoStep value is choosen in order that:
+    new >= routeParam.isoStep and new >= t = duration / MAX_N.
+  */
+function adjustIsoStep(routeParam, duration) {
+   const t = duration / MAX_N;
+   const oldTimeStep = routeParam.isoStep;
+   const minRequired = Math.max(oldTimeStep, t);
+
+   // By default, the biggest
+   let chosen = timeSteps[timeSteps.length - 1];
+
+   for (const step of timeSteps) {
+      if (step >= minRequired) {
+         chosen = step;   // premier qui satisfait
+         break;
+      }
+   }
+   routeParam.isoStep = chosen;
+   return routeParam.isoStep !== oldTimeStep;
+}
 
 /**
  *Give the date associated with index
@@ -455,18 +488,18 @@ function simplify (coords, tolerance) {
  * @param {Array<Array<number>>} coords - An array of coordinates where each element is a tuple [latitude, longitude].
  * @param {string} color - The color of the polyline.
  */
-function drawPolyline(coords, color) {
+function drawPolyline(coords, color, withPoints = false) {
    if (!coords || coords.length < 2) return;
-
-   // 1. Oriiginal polyline 
+   // 1. Original polyline 
    L.polyline(coords, {
-      color: 'red',
-      weight: 4,
-      opacity: 0.8,
-      dashArray: '4, 4'
-   });// .addTo(isochroneLayerGroup);
+      color: color,
+      weight: 1,
+      opacity: 0.8
+      //dashArray: '4, 4'
+   }).addTo(isochroneLayerGroup);
+   if (withPoints) drawPoints (coords, color);
 
-   // 2. Simplification
+   /* 2. Simplification
    const simplifiedCoords = simplify(coords, 0.010);
 
    // 3. Draw simplified
@@ -474,7 +507,32 @@ function drawPolyline(coords, color) {
       color: color,
       weight: 2,
       opacity: 0.8
-   }).addTo(isochroneLayerGroup);
+   }).addTo(isochroneLayerGroup);*/
+}
+
+function drawPoints(coords, color) {
+  if (!coords || coords.length === 0) return;
+
+  coords.forEach(([lat, lng], i) => {
+    L.circleMarker([lat, lng], {
+      radius: 2,          // taille du point
+      color: color,       // bord
+      weight: 1,
+      fillColor: color,   // remplissage
+      fillOpacity: 0.9
+    })
+    .addTo(isochroneLayerGroup);
+  });
+}
+
+function showTrace (map, trace) {
+   if (! trace && trace.length <= 0) return;
+   L.polyline(trace, {
+      color: "orange",
+      weight: 1,
+      opacity: 0.8
+   }).addTo(map);
+   Swal.fire ("Trace done", `Lenght: ${trace.length}`, "success"); 
 }
 
 /** 
@@ -529,26 +587,31 @@ function updateWindyMap (route) {
    if ("_isoc" in route) isocArray = route ["_isoc"];
    
    isochroneLayerGroup.clearLayers ();
+   const len = isocArray.length;
 
    if ((Array.isArray (isocArray)) && (moduloIsoc !== 0))
-      for (let i = 0; i < isocArray.length; i += 1) 
+      for (let i = 0; i < len; i += 1) 
          if ((i % moduloIsoc) === 0) {
             const coords = isocArray[i].map(entry => [entry[0], entry[1]]);
-            drawPolyline (coords, "blue");
+            drawPolyline (coords, "blue", i >= len - 1);
          }
 
    let isoDescArray = [];
    isoDescMarkers.forEach(marker => map.removeLayer(marker));
    isoDescMarkers = [];
+   const isoDescIcon = L.divIcon({
+      className: 'iso-desc-icon',
+      iconSize: [6, 6],     // taille réelle
+      iconAnchor: [3, 3]    // centre sur la coordonnée
+   });
    if (routeParam.isoDesc) {
       if ("_isodesc" in route) isoDescArray = route["_isodesc"];
-
       if (Array.isArray(isoDescArray)) {
          for (let i = 0; i < isoDescArray.length; i++) {
                const [nIsoc, wayPoint, size, first, closest, bestVmc, biggestOrthoVmc, focalLat, focalLon] = isoDescArray[i];
-               const marker = L.marker([focalLat, focalLon])
-                     .addTo(map)
-                     .bindPopup(`nIsoc: ${nIsoc}<br>size: ${size}<br>closest: ${closest}<br>bestVmc: ${bestVmc}`);
+               const marker = L.marker([focalLat, focalLon], {icon: isoDescIcon})
+                  .addTo(map)
+                  .bindPopup(`nIsoc: ${nIsoc}<br>size: ${size}<br>closest: ${closest}<br>bestVmc: ${bestVmc}`);
                isoDescMarkers.push(marker);
          }
       }
@@ -559,8 +622,6 @@ function updateWindyMap (route) {
       if (! name.startsWith("_"))
          showRoute (route, name.trim());
    }
-
-   gribLimits.name = route [boatName].grib;
 }
 
 /**
@@ -576,12 +637,12 @@ function buildBodyRequest (c, myWayPoints, routeParam) {
    const waypoints = myWayPoints
       .map(wp => `${wp[0]},${wp[1]}`)
       .join(";");
-   console.log("boat: " + `${c.name}, ${c.lat}, ${c.lon}`);
+   console.log("boat: " + `${c.name},${c.lat},${c.lon}`);
 
    // Define request parameters with safer defaults
    const reqParams = {
       type: REQ.ROUTING,
-      boat: `${c.name}, ${c.lat}, ${c.lon};`,
+      boat: `${c.name},${c.lat},${c.lon};`,
       waypoints: waypoints,
       timeStep: (routeParam.isoStep ?? 1800),
       epochStart: Math.floor(routeParam.startTime.getTime() / 1000),
@@ -630,13 +691,60 @@ function buildBodyRequest (c, myWayPoints, routeParam) {
    return requestBody;
 }
 
-/*
+/**
+ show information around last point on map
+ */
+function showLastPointInfo(lastPointInfo) {
+   lastPointLayer.clearLayers();
+   let str;
+
+   // Foot0
+   let markFoot0 = L.marker([lastPointInfo.latFoot0, lastPointInfo.lonFoot0]);
+   markFoot0.bindPopup(`Foot0, toDest: ${lastPointInfo.dFoot0}`).addTo(lastPointLayer);
+   
+   // Foot1
+   let markFoot1 = L.marker([lastPointInfo.latFoot1, lastPointInfo.lonFoot1]);
+   markFoot1.bindPopup(`Foot1, toDest: ${lastPointInfo.dFoot1}`).addTo(lastPointLayer);
+   
+   /* Dest
+   let markDest = L.marker([lastPointInfo.latDest, lastPointInfo.lonDest]);
+   markDest.bindPopup("Dest").addTo(lastPointLayer);*/
+   
+   // Curr
+   str = `Curr, toDest: ${lastPointInfo.dCurr}`;
+   let markCurr = L.marker([lastPointInfo.latCurr, lastPointInfo.lonCurr]);
+   if ((lastPointInfo.latCurr === lastPointInfo.latFoot0) && (lastPointInfo.lonCurr === lastPointInfo.lonFoot0))
+      str += " idem Foot0"  
+   if ((lastPointInfo.latCurr === lastPointInfo.latFoot1) && (lastPointInfo.lonCurr === lastPointInfo.lonFoot1))
+      str += " idem Foot1"  
+   markCurr.bindPopup(str).addTo(lastPointLayer);
+
+   // Prev
+   str = `Prev, toDest: ${lastPointInfo.dPrev}, toCurr: ${lastPointInfo.dSeg0}`
+   let markPrev = L.marker([lastPointInfo.latPrev, lastPointInfo.lonPrev]);
+   if ((lastPointInfo.latPrev === lastPointInfo.latFoot0) && (lastPointInfo.lonPrev === lastPointInfo.lonFoot0))
+      str += " idem Foot0"  
+   if ((lastPointInfo.latPrev === lastPointInfo.latFoot1) && (lastPointInfo.lonPrev === lastPointInfo.lonFoot1))
+      str += " idem Foot1"  
+   markPrev.bindPopup(str).addTo(lastPointLayer);
+
+   // Next
+   str = `Next, toDest: ${lastPointInfo.dNext}, toCurr: ${lastPointInfo.dSeg1}`;
+   let markNext = L.marker([lastPointInfo.latNext, lastPointInfo.lonNext]);
+   if ((lastPointInfo.latNext === lastPointInfo.latFoot0) && (lastPointInfo.lonNext === lastPointInfo.lonFoot0))
+      str += " idem Foot0"  
+   if ((lastPointInfo.latNext === lastPointInfo.latFoot1) && (lastPointInfo.lonNext === lastPointInfo.lonFoot1))
+      str += " idem Foot1"  
+   markNext.bindPopup(str).addTo(lastPointLayer);
+   
+}
+
+/**
  * Launch HTTP request using fetch, with the request body .
  *
  * @param {String} - requestBody - the request body.
- *
  */
-async function handleRequest (requestBody) {
+async function handleRequest (requestBody, showWarnings = true) {
    console.log ("handleRequest: " + requestBody);
    const headers = { "Content-Type": "application/x-www-form-urlencoded" };
    const token = btoa(`${userId}:${password}`);
@@ -656,16 +764,21 @@ async function handleRequest (requestBody) {
 
       const data = await response.json();
 
+      if ("_Error" in data) {
+         console.log("ERROR RECEIVED =", data["_Error"]);
+         await Swal.fire("Error from server", data["_Error"], "error");
+         return null;
+      }
       // console.log(JSON.stringify(data, null, 2));
       const firstKey = Object.keys(data)[0];
 
-      if ("_Error" in data) {
-         await Swal.fire("Error", data["_Error"], "error");
-         return null;
+      if (showWarnings) {
+         if ("_Warning_0" in data) await Swal.fire("Warning from server", data["_Warning_0"], "warning");
+         if ("_Warning_1" in data) await Swal.fire("Warning from server", data["_Warning_1"], "warning");
+         if ("_Warning_2" in data) await Swal.fire("Warning from server", data["_Warning_2"], "warning");
+         const lastPointInfo = data [firstKey].lastPointInfo;
+         if (lastPointInfo && routeParam.lastPointInfo) await showLastPointInfo (lastPointInfo);
       }
-      if ("_Warning_0" in data) await Swal.fire("Warning", data["_Warning_0"], "warning");
-      if ("_Warning_1" in data) await Swal.fire("Warning", data["_Warning_1"], "warning");
-      if ("_Warning_2" in data) await Swal.fire("Warning", data["_Warning_2"], "warning");
 
       return { boatName: firstKey, routeData: data };
 
@@ -682,16 +795,30 @@ async function handleRequest (requestBody) {
 }
 
 /**
+ Check consistency between Grib metadatas and datas
+ */
+function consistentDataGrib (gribLimits, dataGrib) {
+  if (!gribLimits || ! dataGrib || ! dataGrib.values) return false;
+  const { nTimeStamp, nLat, nLon } = gribLimits;
+  const len0 =  nTimeStamp * nLat * nLon * 4; // u v g w
+  const len1 = dataGrib.values.length;
+  return (len0 > 0) && (len0 === len1);
+}
+
+/**
  * Update display after getting server response.
  *
  * @param {String} - boatName - the name of boat or competitor.
  */
-function finalUpdate (boatName) {
+async function finalUpdate (boatName) {
    const iComp = competitors.findIndex (c => c.name === boatName); // index of current boat
-   //competitors [iComp].route = route; // save route in competitir object
-   //alert ("competitor: " + competitors [iComp].name);
    goBegin ();
    updateWindyMap (route);
+
+   if ((gribLimits.name === route [boatName].grib) && (consistentDataGrib (gribLimits, dataGrib))) {
+      updateStatusBar (route);
+      return;
+   }
 
    gribLimits.bottomLat = route [boatName]?.bottomLat || gribLimits.bottomLat;
    gribLimits.leftLon = route [boatName]?.leftLon || gribLimits.leftLon;
@@ -699,6 +826,18 @@ function finalUpdate (boatName) {
    gribLimits.rightLon = route [boatName]?.rightLon || gribLimits.rightLon;
    gribLimits.name = route [boatName]?.grib || gribLimits.name;
 
+   if (!windyPlay && barbDisp) {
+      try {
+         updateStatusBar (route, "Updating Grib");
+         await gribMetaAndLoad("grib", "", gribLimits.name, true); // load if not windy
+         // IMPORTANT : let browser breathe after Swal.close()
+         await new Promise(r => setTimeout(r, 0));
+         drawWind ();
+      } catch (err) {
+         console.error("Error in gribMetaAndLoad:", err);
+      }
+   }
+   
    drawGribLimits (gribLimits);
    updateStatusBar (route);
 }
@@ -772,7 +911,8 @@ function createProgressBar(maxValue) {
  * Request for only one boat, at different time defined by routeParam.
  */
 async function requestBestTime () {
-   let saveStartTime = routeParam.startTime;
+   initialStartTime = routeParam.startTime; // global
+   bestStartTime = routeParam.startTime;     // global
    let result = [];
    let bestDuration = Infinity;
    let progress = createProgressBar(routeParam.nTry);
@@ -781,7 +921,7 @@ async function requestBestTime () {
    await new Promise(resolve => setTimeout(resolve, 0));
    compResult.length = 0; // inhibate display of competitor dashboard
    for (let i = 0; i < routeParam.nTry; i++) {
-      routeParam.startTime = new Date(saveStartTime.getTime() + i * routeParam.timeInterval * 1000);
+      routeParam.startTime = new Date(initialStartTime.getTime() + i * routeParam.timeInterval * 1000);
       let requestBody = buildBodyRequest (competitors[routeParam.iBoat - 1], myWayPoints, routeParam);
 
       if (clipBoard && i === 0) {
@@ -797,24 +937,24 @@ async function requestBestTime () {
          let duration = routeData [boatName].duration;
          result.push (duration);
          if (duration < bestDuration) {
-            duration = bestDuration;
+            bestDuration = duration;
             route = routeData; // keep best solution in global variable
+            bestStartTime = routeParam.startTime;
          }
-        // alert('i = ' + i + ' epochStart = ' + routeParam.startTime + ' boatName: ' + boatName + ' duration = ' + routeData.duration);
+        // alert('i = ' + i + ' epochStart = ' + routeParam.startTime + ' boatName: ' + boatName + ' duration = ' + duration);
       } else {
          console.error('Request failed at i =', i);
       }
       progress.update (i + 1);
    }
-
+   
    console.log ("All durations:", result);
    progress.remove ();
-   routeParam.startTime = saveStartTime;
    bestTimeResult = result;
-   dispBestTimeHistogram (bestTimeResult, routeParam.startTime, routeParam.timeInterval);
-   if (result.length !== 0) {
-      finalUpdate (boatName);
-   }
+   dispBestTimeHistogram (bestTimeResult, initialStartTime, bestStartTime, routeParam.timeInterval);
+   routeParam.startTime = bestStartTime;
+   
+   if (result.length !== 0) finalUpdate (boatName);
 }
 
 /**
@@ -874,9 +1014,79 @@ async function requestAllCompetitors () {
 }
 
 /**
+ * Constructs and prepares the request body for two outing API call.
+ * First is an estimation with big time step
+ * Second is with timestep  as requested by user
+ *
+ * Request for only one boat, one time
+ */
+async function requestTwo () {
+   const BIG_TIME_STEP = 10800; // 3 hours
+   const spinnerOverlay = document.getElementById ("spinnerOverlay");
+   let duration;
+   let OK0 = false;
+   let OK1 = false;
+   spinnerOverlay.style.display = "flex"; // display spinner
+   compResult.length = 0; // inhibate display of competitor dashboard
+   const savedIsoStep = routeParam.isoStep;
+   routeParam.isoStep = BIG_TIME_STEP;
+
+   let requestBody = buildBodyRequest (competitors[routeParam.iBoat - 1], myWayPoints, routeParam);
+   if (clipBoard) navigator.clipboard.writeText (requestBody);
+   
+   let response = await handleRequest (requestBody, false);
+   if (response) {
+      const { boatName, routeData } = response;
+      console.log ("requestTwo 1/2:" + JSON.stringify(routeData, null, 2));
+      route = routeData; // global variable
+      // showRouteReport (routeData);  
+      // finalUpdate (boatName);
+      OK0 = routeData[boatName].destinationReached;
+      duration = routeData[boatName].duration;
+   } else {
+      console.error('Request failed');
+      spinnerOverlay.style.display = "none";
+      return;
+   }
+   
+   routeParam.isoStep = savedIsoStep; // idem with requested timestep
+   if (adjustIsoStep (routeParam, duration)) {
+      const mn = routeParam.isoStep / 60;
+      await Swal.fire ("Time Step Modified", 
+                 `The time step has been set to higher value: ${mn} mn`, 
+                 "Info"); 
+   }
+
+   requestBody = buildBodyRequest (competitors[routeParam.iBoat - 1], myWayPoints, routeParam);
+   if (clipBoard) navigator.clipboard.writeText (requestBody);
+   response = await handleRequest (requestBody);
+   if (response) {
+      ({ boatName, routeData } = response);
+      console.log ("requestTwo 2/2:" + JSON.stringify(routeData, null, 2));
+      route = routeData; // global variable
+      OK1 = routeData[boatName].destinationReached;
+   } else {
+      spinnerOverlay.style.display = "none";
+      console.error('Request failed');
+      OK1 = false;
+   }
+   spinnerOverlay.style.display = "none";
+   if (OK0 && !OK1) {
+      await Swal.fire({
+         icon: "error",
+         title: "Reachable but failed with proposed timeStep",
+         text: "Try lower timestep",
+         confirmButtonText: "OK"
+      });
+   }
+   showRouteReport (routeData);  
+   finalUpdate (boatName);
+}
+
+/**
  * Constructs and prepares the request body for a routing API call.
  *
- * Request for anly one boat, ine time
+ * Request for anly one boat, one time
  */
 async function requestOne () {
    const spinnerOverlay = document.getElementById ("spinnerOverlay");
@@ -923,7 +1133,7 @@ function request () {
       requestAllCompetitors ();
       return;
    }
-   requestOne ();
+   requestTwo ();
 }
 
 /**
@@ -987,7 +1197,7 @@ async function replay () {
 
       const toBool = v => String(v).toLowerCase() === "true"; // "true" -> true, all rest -> false
 
-      const routeParam = {
+      routeParam = {
          iBoat: Number(raw.type) || 1,                           // "type"
          isoStep: Number(raw.timeStep) || 900,                   // "timeStep"
          nTry: 0,
@@ -1098,6 +1308,20 @@ function getGreatCirclePath(lat0, lon0, lat1, lon1, n = 100) {
    }
 
    return path;
+}
+
+/**
+   calculate distance from boat to destination through waypoints
+*/
+function totalDistWayPoints (competitor, myWayPoints) {
+   if (!competitor || ! myWayPoints || myWayPoints.length === 0) return 0;
+   let lat0 = competitor.lat, lon0 = competitor.lon;
+   let dist = 0;
+   myWayPoints.forEach ((wp, index) => {
+      dist += orthoDist (lat0, lon0, wp[0], wp [1]);
+      lat0 =  wp[0], lon0 = wp [1];
+   });
+   return dist;
 }
 
 /**
@@ -1247,6 +1471,16 @@ function addWaypoint (lat, lon) {
    console.log ("Waypoints:", myWayPoints);
    closeContextMenu();
    saveAppState();
+   const dist = totalDistWayPoints (competitors [0], myWayPoints)
+   const name = competitors [0].name;
+   Swal.fire ({
+      toast: true,
+      title: `From: ${name}: ${dist.toFixed (2)} nm`,
+      timer: 1500,
+      //width: '200px',
+      showConfirmButton: false,
+      timerProgressBar: true
+   });
 }
 
 /**
@@ -1296,6 +1530,12 @@ function move (iComp, firstTrack, index) {
    updateStatusBar (route); 
 }
 
+function arrowEmojiFromAngle(deg) {
+   const index = Math.round(deg / 45) % 8;                 // 8 secteurs
+   const arrows = ["⬇️","↙️","⬅️","↖️", "⬆️","↗️","➡️","↘️"];
+   return arrows[index];
+}
+
 /**
  * Update bind popup
  */
@@ -1308,16 +1548,20 @@ function updateBindPopup (competitor) {
    const directDist = orthoDist(competitor.lat, competitor.lon, lat, lon);
    const avrHdg = (directDist > epsilon) ? orthoCap(competitor.lat, competitor.lon, lat, lon) : 0.0; 
 
-   
    // alert ("updateBindPopup name: " + competitor.name);
-   if (sog !== undefined)
-      competitor.marker.bindPopup (`${popup4Comp(competitor)}<br>
+   if (sog !== undefined) {
+      const twdArrow = arrowEmojiFromAngle(twd);
+      competitor.marker.bindPopup(`
+         ${popup4Comp(competitor)}<br>
          ${dateToStr(theDate)}<br>
-         ${latLonToStr (lat, lon, DMSType)}<br>
-         Twd: ${twd.toFixed(0)}° Tws: ${tws.toFixed(2)} kn<br>
-         Hdg: ${hdg.toFixed(0)}° Twa: ${twa.toFixed(0)}°<br>
+         ${latLonToStr(lat, lon, DMSType)}<br>
+         Twd: ${twd.toFixed(0)}°  ${twdArrow} Tws: ${tws.toFixed(2)} kn<br>
+         Hdg: ${hdg.toFixed(0)}° 
+         Twa: <span style="color:${(twa >= 0) ? 'green' : 'red'}; font-weight:bold;">${twa.toFixed(0)}°</span><br>
          Sog: ${sog.toFixed(2)} kn ${propulse}<br><br>
-         Average Hdg: ${avrHdg.toFixed(0)}° Direct Distance: ${directDist.toFixed(2)} NM<br>`);
+         Average Hdg: ${avrHdg.toFixed(0)}° Direct Distance: ${directDist.toFixed(2)} NM<br>
+      `);
+   }
 }
 
 /**
@@ -1341,8 +1585,8 @@ function updateHeading (competitor, firstTrack) {
  * This function calls move for all relevant competitors 
  */
 function updateAllBoats () {
-   if (!route) 
-      return;
+   if (!route) return;
+   if (!windyPlay && barbDisp) drawWind ();
    const boatNames = Object.keys(route);
    console.log ("boatNames:", boatNames);
    boatNames.forEach((name, i) => {
@@ -1460,7 +1704,7 @@ function formatLocalDate (date) {
  *
  * @param {Object|null} [route=null] - The route object containing navigation data, or `null` to update global info.
  */
-function updateStatusBar (route = null) {
+function updateStatusBar (route = null, warning = null) {
    updateToolsVisibility();
    setTimelineVisible(! route);
    let time = " "; // important to keep space
@@ -1488,6 +1732,7 @@ function updateStatusBar (route = null) {
    if (wavePolar.length > 0) document.getElementById("infoRoute").innerHTML += "    🌊 wavePolar: " + wavePolar;
    if (grib.length > 0) document.getElementById("infoRoute").innerHTML += "    💨 Grib: " + grib;
    if (currentGrib.length > 0) document.getElementById("infoRoute").innerHTML += "    🔄 currentGrib: " + currentGrib;
+   if (warning) document.getElementById("infoRoute").innerHTML +=` <span class="warning-blink"> ⚠️ ${warning}</span>`;
 }
 
 /**
@@ -1724,7 +1969,8 @@ function additionalInit () {
    competitors.forEach (addMarker); // show initial position of boats
    isochroneLayerGroup = L.layerGroup().addTo(map);
    orthoRouteGroup = L.layerGroup().addTo(map);
-   
+
+   map.doubleClickZoom.disable();
    map.on ("contextmenu", showContextMenu);	
 
    let isContextMenuOpen = false; // Avoid multiple display
@@ -1797,6 +2043,11 @@ function additionalInit () {
    const polygonsLayer = L.layerGroup().addTo(map);
    marks = getMarks (map);
 
+   map.on('dblclick', function (e) { // doule clic for info on  lat lon
+      const { lat, lng } = e.latlng;
+      coordStatus(lat, lng);
+   });
+
    drawPolygons(map, polygonsLayer)
       .catch(err => console.error(err));
    
@@ -1809,34 +2060,37 @@ function additionalInit () {
       setInterval (fetchAisPosition, aisTimer * 1000);
    }
 
-   meters (map);
+   lastPointLayer = L.layerGroup().addTo(map);
 
+   meters (map);
 }
 
 // Initializes a Leaflet map with OpenStreetMap base and OpenSeaMap seamarks overlay,
 function initMap(containerId) {
   // --- Map setup ---
-  map = L.map(containerId, { zoomControl: true /* preferCanvas: true */ });
+   map = L.map(containerId, { 
+      zoomControl: true /* preferCanvas: true */ 
+   });
 
   // Base layer: OpenStreetMap
-  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
+   const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+   }).addTo(map);
 
-  // OpenSeaMap seamarks overlay (on top of the base map)
-  const seamark = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
-    maxZoom: 18,
-    opacity: 1.0,
-    attribution: 'Seamarks &copy; OpenSeaMap contributors'
-  }).addTo(map);
+   // OpenSeaMap seamarks overlay (on top of the base map)
+   const seamark = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      opacity: 1.0,
+      attribution: 'Seamarks &copy; OpenSeaMap contributors'
+   }).addTo(map);
 
   // Layers control to toggle overlay/route
   L.control.layers(
-    { 'OpenStreetMap': osm },
-    { 'OpenSeaMap Seamarks': seamark},
-    { collapsed: false }
-  ).addTo(map);
+     { 'OpenStreetMap': osm },
+     { 'OpenSeaMap Seamarks': seamark},
+     { collapsed: false }
+   ).addTo(map);
 
    // Scale bar (optional)
    L.control.scale({
@@ -1844,10 +2098,19 @@ function initMap(containerId) {
       imperial: false     
    }).addTo(map);
 
+   const windPane = map.createPane('windPane');
+   windPane.style.zIndex = 350;
+   windPane.style.pointerEvents = 'none';
+
+   windCanvas = document.createElement('canvas');
+   windCanvas.id = 'wind-layer';
+   windCanvas.style.position = 'absolute';
+   windCanvas.style.pointerEvents = 'none';
+
+   windPane.appendChild(windCanvas);
+   map.on('move zoom resize', drawWind); // ou 'moveend', 'zoomend', 'resize'
+
    // Tip: If you prefer to fit to the route instead of the bbox, use:
    // map.fitBounds(routeLine.getBounds());
    // updateRouteDisplay (0);
 }
-
-
-

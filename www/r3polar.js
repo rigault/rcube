@@ -111,19 +111,31 @@ function showPolarTable (polType, polarName, data) {
       });
       legendHTML += "</div>";
    }
-
+   let moreButton = data.report && data.report.length > 0;
+   
    // Affichage avec SweetAlert
    Swal.fire({
       title: (polType === POL_TYPE.WIND_POLAR) ? `Speed in Knots Max: ${data.max}` : `Height in meters Max: ${data.max}`,
       html: tableHTML + legendHTML,
       width: "100%",
-      // showCancelButton: true,
+      showDenyButton: moreButton, // button appear only if report exist
+      denyButtonText: 'Report',
       confirmButtonText: 'Back',
+      reverseButtons: true,
       footer: `polarName: ${polarName}, nCol: ${data.nCol}, 
          nLine: ${data.nLine}, max: ${data.max}, nSail: ${data.nSail}, fromJson: ${data.fromJson}`,
    }).then((result) => {
       if (result.isConfirmed) {
          generatePolarPlotly (polType, polarName, data);
+      }
+      else if (moreButton && result.isDenied) {
+         let content = data.report.replaceAll (";", "<br>");
+         Swal.fire ({
+            title: "Report", 
+            html: `<div style="text-align:left; padding-left: 10px">${content}</div>`, 
+            icon: "warning",
+            width: "60%"
+         }).then (() => showPolarTable (polType, polarName, data));
       }
    })
 }
@@ -217,7 +229,7 @@ function moreInfoAboutPol(polType, polarName, data) {
    Swal.fire({
      title: `Additional information for: ${lab}`,
      width: '60%',
-     //showCancelButton: true,
+     showCloseButton: true,
      confirmButtonText: 'Back',
      footer: `polarName: ${polarName}, nCol: ${data.nCol}, 
          nLine: ${data.nLine}, max: ${data.max}, nSail: ${data.nSail}, fromJson: ${data.fromJson}`,
@@ -267,7 +279,7 @@ function generatePolarPlotly (polType, polarName, data) {
          <span id="windSpeedValue" style= "font-size: 18px;">${initialTWS.toFixed(2)}</span>
       </div>
       <div id="polarPlotly" style="width: 100%; height: 400px;"></div>
-      <p><strong>Max:</strong> <span id="maxSpeed">-</span> kn at <span id="maxSpeedAngle">-</span>°</p>
+      <p><strong>Max:</strong> <span id="maxSpeed">-</span> ${polType == POL_TYPE.WIND_POLAR ? "kn": "m"} at <span id="maxSpeedAngle">-</span>°</p>
    `;
     if (polType === POL_TYPE.WIND_POLAR) {
        chartContainer.innerHTML += `
@@ -286,9 +298,7 @@ function generatePolarPlotly (polType, polarName, data) {
       showCancelButton: true,
       confirmButtonText: 'Dump Table',
       denyButtonText: 'More',
-      cancelButtonText: 'Back',     
-      cancelButtonColor: 'orange',
-      denyButtonColor: '#6b7280',
+      // denyButtonColor: '#6b7280',
    }).then((result) => {
       if (result.isConfirmed) {
          showPolarTable(polType, polarName, data);
@@ -338,7 +348,7 @@ function generatePolarPlotly (polType, polarName, data) {
    }
 
    function updatePlot (polType, tws) {
-      document.getElementById ("windSpeedValue").innerText = `${tws.toFixed(2)} kn`;
+      document.getElementById ("windSpeedValue").innerText = `${tws.toFixed(2)} ${polType == POL_TYPE.WIND_POLAR ? "kn": "m"}`;
 
       let speeds = interpolateSpeeds(tws, windSpeeds, data);
       let { fullTwa, fullSpeeds } = symmetrizeData(twaValues, speeds);

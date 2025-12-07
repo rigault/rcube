@@ -53,6 +53,10 @@ function changeParam(routeParam) {
                   <label for="isoDesc">IsoDesc Focal:</label>
                   <input type="checkbox" style="margin-left: 0" id="isoDesc" ${routeParam.isoDesc ? 'checked' : ''}>
                </div>
+               <div class="form-group">
+                  <label for="lastPointInfo">Last Point Info:</label>
+                  <input type="checkbox" style="margin-left: 0" id="lastPointInfo" ${routeParam.lastPointInfo ? 'checked' : ''}>
+               </div>
             </div>
             <div id="constFlows" class="tab-content">
                <div class="form-group"><label>Const Wind TWS:</label><input type="number" id="constWindTws" min="0" max="100" value="${routeParam.constWindTws || ''}"></div>
@@ -85,6 +89,7 @@ function changeParam(routeParam) {
             kFactor: parseInt(document.getElementById('kFactor').value),
             nSectors: parseInt(document.getElementById('nSectors').value),
             isoDesc: document.getElementById("isoDesc").checked,
+            lastPointInfo: document.getElementById("lastPointInfo").checked,
             constWindTws: parseFloat(document.getElementById('constWindTws').value),
             constWindTwd: parseInt(document.getElementById('constWindTwd').value),
             constWave: parseFloat(document.getElementById('constWave').value),
@@ -145,7 +150,7 @@ function displayJsonParams () {
  *
  */
 function parDump() {
-   const formData = `type=${REQ.PAR_RAW} `;
+   const formData = `type=${REQ.PAR_RAW}&model=yaml`;
    console.log("Request sent:", formData);
    const headers = { "Content-Type": "application/x-www-form-urlencoded" };
    fetch (apiUrl, {
@@ -164,7 +169,20 @@ function parDump() {
    .then(data => {
       console.log("Server Response:", data);
 
-      let content = `<pre style="text-align: left; font-family: 'Courier New', Courier, monospace; font-size: 14px; background: #f4f4f4; padding: 10px; border-radius: 5px;">${data}</pre>`;
+      let content = `<div style="max-height: 60vh; overflow: auto;">
+      <pre style="
+      text-align: left;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 14px;
+      background: #f4f4f4;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 0;
+      white-space: pre-wrap;   /* autorise les retours à la ligne */
+      word-wrap: break-word;   /* casse les très longs "mots" */
+      ">${data}
+      </pre>
+      </div>`;
 
       Swal.fire({
          title: "Parameter Info",
@@ -172,7 +190,7 @@ function parDump() {
          denyButtonText: "More",
          showDenyButton: true,
          width: "60%",
-         confirmButtonColor: "#FFA500"
+         showCloseButton: true,
       }).then ((r) => {if (r.isDenied) displayJsonParams ();})
    })
    .catch(error => {

@@ -35,6 +35,8 @@
    <script src="polygons.js"></script>
    <script src="marks.js"></script>
    <script src="meters.js"></script>
+   <script src="trace.js"></script>
+   <script src="wind.js"></script>
    <script src="r3.js?v=0.2"></script>
 </head>
 <body>
@@ -48,6 +50,8 @@
             <button class="menu-link" onclick="selectModel ();">Grib Model  </button>
             <button class="menu-link" onclick="chooseGrib ('grib', gribLimits.name);">Grib  </button>
             <button class="menu-link" onclick="chooseGrib ('currentgrib', '');">Current</button>
+            <button class="menu-link" onclick="gribCheck ();">Check</button>
+
          </div>
       </div>
       <div class="dropdown">
@@ -63,7 +67,7 @@
             <button class="menu-link" onclick="launchRouting ();">Launch</button>
             <button class="menu-link" onclick="showRouteReport (route);">Route Report</button>
             <button class="menu-link" onclick="dumpRoute (route);">Route Dump</button>
-            <button class="menu-link" onclick="dispBestTimeHistogram (bestTimeResult,routeParam.startTime,routeParam.timeInterval);">Best Time Report </button>
+            <button class="menu-link" onclick="dispBestTimeHistogram (bestTimeResult,initialStartTime,bestStartTime,routeParam.timeInterval);">Best Time Report </button>
             <button class="menu-link" onclick="dispAllCompetitors (compResult);">Benchmark Report</button>
          </div>
       </div>
@@ -110,8 +114,11 @@
             <button class="menu-link" onclick="dumpIsoDesc (route);">Dump IsoDesc</button>
             <button class="menu-link" onclick="parDump();">Par Dump</button>
             <button class="menu-link" onclick="chooseDumpFile ();">File Dump</button>
+            <button class="menu-link" onclick="showGpxRoute();">GPX Route</button>
             <button class="menu-link" onclick="aisDump(aisData);">AIS Dump</button>
             <button class="menu-link" onclick="replay ();">Replay</button>
+            <button class="menu-link" onclick="showTrace(map, myTrace);">Trace</button>
+            <button class="menu-link" onclick="initServer();">ReInit</button>
             <a href="doc/clihelp.md" target="_blank">CLI Help</a>
             <a href="doc/README.md" target="_blank">README</a>
             <a href="doc/r3ServerTechDoc.html" target="_blank">Server side Tech Doc</a>
@@ -206,14 +213,6 @@
          // alert (`windyplay: ${windyPlay}`);
          saveAppState ();
          location.reload ();
-      }
-   });
-
-   /* listen CTRL B to get coord info */
-   document.addEventListener("keydown", (e) => {
-      if (e.ctrlKey && e.key === "b") {
-         e.preventDefault(); // éviter le marque-page sur certains navigateurs
-         coordStatus ();
       }
    });
 

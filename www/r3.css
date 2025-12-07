@@ -26,6 +26,20 @@ header a, .menu {
    text-align: left;
 }
 
+/* popups over all other Leaflet */
+.leaflet-popup-pane {
+    z-index: 10000 !important;
+}
+#wind-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 300; /* lower than .leaflet-popup-pane (700) */
+}
+
+
+
 #cadenas {
    color: lightgray;
 }
@@ -89,20 +103,6 @@ header a:hover, .menu:hover {
    height: 100vh;
 }
 
-/* see displayComp import */
-.btn-import {
-   border: none;
-   padding: 5px 5px;
-   margin: 5px;
-   margin-bottom: 30px; 
-   font-size: 12px;
-   cursor: pointer;
-   border-radius: 10%;
-   background-color: red;
-   color: white;
-   transition: 0.3s;
-}
-
 .btn {
    border: none;
    padding: 5px 5px;
@@ -117,10 +117,10 @@ header a:hover, .menu:hover {
    color: white;
    transition: 0.3s;
 }
-.btn:hover, .btn-import:hover {
+.btn:hover {
    background-color: black;
 }
-.btn:, .btn-import:active {
+.btn:active {
    transform: scale(0.95);
 }
 .btn i {
@@ -462,6 +462,27 @@ select:focus option:checked {
    box-shadow: none !important;
 }
 
+/* for isodesc representation */
+.iso-desc-icon {
+   width: 6px;
+   height: 6px;
+   border-radius: 50%;
+   background: #777;
+   opacity: 0.6;       /* discret */
+}
 
+.warning-blink {
+   background: rgba(255, 152, 0, 0.15);
+   color: #ff9800;
+   padding: 3px 8px;
+   border-radius: 6px;
+   font-weight: bold;
+   animation: blinkWarning 1.2s infinite;
+}
+
+@keyframes blinkWarning {
+   0%, 100% { opacity: 1; }
+   50%      { opacity: 0.4; }
+}
 
 

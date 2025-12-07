@@ -7,7 +7,7 @@
  * @param {Date} - start - Date of start
  * @param {number} -tInterval - Time in seconds between each tentatives
  */
-function dispBestTimeHistogram (result, start, tInterval) {
+function dispBestTimeHistogram (result, start, bestStart, tInterval) {
    if (! result || result.length === 0) {
       Swal.fire({
          icon: 'warning',
@@ -56,13 +56,15 @@ function dispBestTimeHistogram (result, start, tInterval) {
    let maxDuration = formatDuration (worstTime);
    let windowTimeBegin = dateToStr (new Date(startEpoch * 1000));
    let windowTimeEnd = dateToStr (new Date(startEpoch * 1000 + (result.length - 1) * tInterval * 1000));
+   let bestStartTimeStr = dateToStr (bestStart);
 
    Swal.fire({
       title: 'Best time analyze',
-      html: `<p><strong>Number of simulation :</strong> ${result.length}</p>
-             <p><strong>Window time :</strong> ${windowTimeBegin} - ${windowTimeEnd}</p>
-             <p><strong>Min. Duration :</strong> ${minDuration}</p>
-             <p><strong>Max. Duration :</strong> ${maxDuration}</p>
+      html: `<p><strong>Number of simulation:</strong> ${result.length}</p>
+             <p><strong>Window time:</strong> ${windowTimeBegin} - ${windowTimeEnd}</p>
+             <p><strong>Min. Duration:</strong> ${minDuration}</p>
+             <p><strong>Max. Duration:</strong> ${maxDuration}</p>
+             <p><strong>Best Start Time: </strong> ${bestStartTimeStr}</p>
              <div id="plotContainer" style="width:100%;height:400px;"></div>`,
       didOpen: () => Plotly.newPlot('plotContainer', [trace], layout),
       width: '80%',

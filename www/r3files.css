@@ -1,3 +1,9 @@
+/* Style du bouton de validation */
+.swal2-confirm {
+   background-color: orange !important;
+   border-color: black !important;
+}
+
 /* Évite le zoom auto iOS sur champs/boutons <16px */
 html { 
    -webkit-text-size-adjust: 100%; 

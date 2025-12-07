@@ -193,7 +193,7 @@ function buildMeta (boat) {
    const content = 
    `<div style="border: 1px; width: 800px; margin: 0 auto; text-align: center;"> 
       <div style="margin-bottom:20px; display:flex; justify-content:center; font-size:15px; ">
-         Total Distance: ${total.toFixed(2)} nm, Average Speed: ${(3600 * boat.totDist/boat.duration).toFixed(2)} kn Sail, Sail Changes: ${nSailChange}, Amure Changes: ${nAmureChange}
+         Total Distance: ${total.toFixed(2)} nm, Average Speed: ${(3600 * boat.totDist/boat.duration).toFixed(2)} kn, Sail Changes: ${nSailChange}, Amure Changes: ${nAmureChange}
       </div>
       <div style="font-size:0.9rem; display:flex; justify-content:center; gap: 10px; ">
          <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#999;margin-right:4px;"></span>Motor ${pMoteur}%&nbsp; </div>
@@ -552,38 +552,14 @@ function dumpRoute (routeData) {
  */
 function dumpIsoDesc(route) {
    if (!route || !route._isodesc) {
-      Swal.fire({
-         icon: "warning",
-         title: "Isodesc not available",
-         text: "No isochrone descriptor (_isodesc) found in the provided route data."
-      });
+      Swal.fire("Isodesc not available", "No isochrone descriptor (_isodesc) found in the provided route data.", "warning");
       return;
    }
 
-   const headers = [
-      "nIsoc",
-      "WayPoint",
-      "size",
-      "first",
-      "closest",
-      "bestVmc",
-      "biggestOrthoVmc",
-      "focal"
-   ];
+   const headers = ["nIsoc", "WayPoint", "size", "first", "closest", "bestVmc", "biggestOrthoVmc", "focal"];
 
    const rows = route._isodesc.map(row => {
-      const [
-         nIsoc,
-         wayPoint,
-         size,
-         first,
-         closest,
-         bestVmc,
-         biggestOrthoVmc,
-         focalLat,
-         focalLon
-      ] = row;
-
+      const [nIsoc, wayPoint, size, first, closest, bestVmc, biggestOrthoVmc, focalLat, focalLon ] = row;
       const latLonStr = latLonToStr (focalLat, focalLon, DMSType).replaceAll ("'", "&apos;");
 
       return [
@@ -621,7 +597,8 @@ function dumpIsoDesc(route) {
    Swal.fire({
       title: "Isochrone Descriptors",
       html: html,
-      width: "80%"
+      width: "80%",
+      showCloseButton: true
    });
 }
 
@@ -636,11 +613,7 @@ function dumpIsoDesc(route) {
  */
 function dumpIsoc (route) {
    if (!route || !route._isoc) {
-      Swal.fire({
-         icon: "warning",
-         title: "Isochrone not available",
-         text: "No isochrone (_isoc) found in the provided route data."
-      });
+      Swal.fire("Isochrone not available", "No isochrone (_isoc) found in the provided route data.", "warning");
       return;
    }
 
@@ -688,6 +661,42 @@ function dumpIsoc (route) {
       title: "Isochrone Dump",
       html: html,
       width: "80%",
+      showCloseButton: true
+   });
+}
+
+/** getch GPX server route 
+ */
+function showGpxRoute () {
+   const formData = `type=${REQ.GPX_ROUTE} `;
+   console.log("Request sent:", formData);
+   const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+   fetch (apiUrl, {
+      method: "POST",
+      headers,
+      body: formData,
+      cache: "no-store"
+   })
+   .then(response => {
+      console.log ("Raw response:", response);
+      if (!response.ok) {
+         throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      return response.text();
+   })
+   .then(data => {
+      const content = `<pre style="text-align: left; font-family: 'Courier New', Courier, monospace; font-size: 14px;">${esc(data)}</pre>`;
+
+      Swal.fire({
+         title: "GPX Route",
+         html: content,
+         width: "60%",
+         showCloseButton: true
+      });
+   })
+   .catch(error => {
+      console.error("Catched error:", error);
+      Swal.fire("Error", error.message, "error");
    });
 }
 

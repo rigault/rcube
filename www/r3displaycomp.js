@@ -47,8 +47,7 @@ async function manageCompetitors(competitors) {
    });
    html += `</table>`;
    html += `<input type="file" id="csvInput" accept=".csv" style="display:none">
-            <button class='btn-import' onclick="document.getElementById('csvInput').click()">Import</button>`;
-
+            <button class="swal2-deny swal2-styled" onclick="document.getElementById('csvInput').click()">Import</button>`;
    html += palette;
 
    await Swal.fire({
@@ -96,8 +95,6 @@ async function manageCompetitors(competitors) {
          saveAppState ();
          updateBoatSelect();
          orthoRouteGroup.clearLayers();
-         //iComp = 0;
-         //let competitor = competitors [iComp];
          for (let competitor of competitors) { 
             competitor.marker.setLatLng ([competitor.lat, competitor.lon]); // Move the mark
             drawOrtho (competitor, myWayPoints);
@@ -108,10 +105,9 @@ async function manageCompetitors(competitors) {
             }
             competitor.marker.bindPopup (popup4Comp (competitor));
          }
-         // boatName = competitors [0].name;
-         if (myWayPoints.length > 0)
+         if (myWayPoints.length > 0) {
             showDestination (myWayPoints [myWayPoints.length - 1][0], myWayPoints [myWayPoints.length - 1][1]); // last element
-         
+         }
        },
    });
    //const input = document.getElementById ("csvInput");
@@ -230,17 +226,12 @@ function importCSV (file, competitors) {
  */
 function dispAllCompetitors (result) {
    if (!result || result.length === 0) {
-      Swal.fire({
-         icon: 'warning',
-         title: 'No competitor',
-         text: 'No data available to compare',
-      });
+      Swal.fire('No competitor', 'No data available to compare', 'warning');
       return;
    }
    let bestTime = Math.min (...result); // Find best duration 
    let minDuration = formatDuration (bestTime);
-   let ETA;
-   let duration;
+   let ETA, duration;
 
    // Meta data build
    let metaData = `
@@ -249,7 +240,6 @@ function dispAllCompetitors (result) {
       <p><strong>Isochrone Time Step:</strong> ${routeParam.isoStep} sec</p>
       <p><strong>Polar:</strong> ${routeParam.polar}</p>
       <p><strong>Best Duration:</strong> ${minDuration}</p>
-      
    `;
 
    // Competitors comparison table
@@ -264,7 +254,6 @@ function dispAllCompetitors (result) {
       </thead>
       <tbody>
    `;
-
    competitors.forEach((comp, index) => {
       if (result[index] === -1) duration = ETA = "NA";
       else {
@@ -281,10 +270,8 @@ function dispAllCompetitors (result) {
          </tr>
       `;
    });
-
    table += `</tbody></table>`;
 
-   // Affichage avec SweetAlert2
    Swal.fire({
       title: 'Competitors benchmark',
       html: metaData + table,

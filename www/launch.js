@@ -65,7 +65,8 @@ function launchRouting() {
          <option value="GFS">GFS</option>
          <option value="ECMWF">ECMWF</option>
          <option value="ARPEGE">ARPEGE</option>
-         <option value="METEOCONSULT">METEOCONSULT</option>
+         <option value="UCMC">METEOCONSULT</option>
+         <option value="SYN">SYN</option>
       </select>
       <label for="swal-forbidZones">Forbid Zones:</label>
       <div><input type="checkbox" id="swal-forbidZones" ${current.forbid ? "checked" : ""}></div>
@@ -99,9 +100,9 @@ function launchRouting() {
    </div>
 
    <div class="swal-footer">
-      <button type="button" id="resetBtn" class="swal2-cancel swal2-styled">Reset</button>
-      <button type="button" class="swal2-cancel swal2-styled" data-swal2-cancel>Cancel</button>
+      <button type="button" id="resetBtn" class="swal2-deny swal2-styled">Reset</button>
       <button type="button" class="swal2-confirm swal2-styled" data-swal2-confirm>Launch Route</button>
+      <button type="button" class="swal2-cancel swal2-styled" data-swal2-cancel>Cancel</button>
    </div>`;
 
    Swal.fire({

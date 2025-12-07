@@ -35,7 +35,7 @@ function feedback (apiUrl) {
          }
 
          // Format the data as plain text
-         const textData = `type=REQ.FEEDBACK&feedback=Email: ${email}\n${message}`;
+         const textData = `type=${REQ.FEEDBACK}&feedback=Email: ${email}\n${message}`;
 
          // Send data as plain text
          return fetch(apiUrl, {

@@ -1,20 +1,6 @@
 /* jshint esversion: 6 */
 
 /**
- * Escape HTML special characters to safely display text inside HTML
- * @param {string} unsafe
- * @returns {string}
- */
-function escapeHtml(unsafe) {
-   return unsafe
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-}
-
-/**
  * Display raw text file and allow download
  * @param {string} dir
  * @param {string} fileName
@@ -40,7 +26,7 @@ function dumpFile(dir, fileName) {
          title: `File: ${fileName}`,
          html: `
             <div style="max-height:400px; overflow:auto; text-align:left;">
-               <pre style="white-space:pre;">${escapeHtml(text)}</pre>
+               <pre style="white-space:pre;">${esc(text)}</pre>
             </div>
          `,
          width: "80%",
@@ -84,7 +70,18 @@ function downloadTextFile(filename, content) {
  * Choose a file then launch dumpFile
  * @param {string} dir
  */
-async function chooseDumpFile (dir="") {
+async function chooseDumpFile (dir = "") {
+   /*let options = {};
+   options [""] = ".";
+   options ["par"] = "par";
+   let { value: dir } = await Swal.fire({
+      title: 'Model selection',
+      input: 'select',
+      inputOptions: options,
+      inputPlaceholder: 'Choose Dir',
+      showCancelButton: true
+   });
+   if (!dir) dir = "";*/
    const fileName = await chooseFile(dir, "", false, 'Select File'); // wait selection
    if (!fileName) { console.log("No file"); return; }
    dumpFile (dir, fileName);

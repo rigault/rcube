@@ -51,18 +51,30 @@ Rcube René Rigault, 2025
 const REQ = {TEST:0, POLAR:4, GRIB:5, DIR: 6, FEEDBACK:10}; 
 const apiUrl = `https://rcube.ddns.net/post-api/?_=${Date.now()}`;
 const sailLegend = {
-  NA:     { bg: "black",  luminance: 0 },
-  C0:     { bg: "green",  luminance: 85 },
-  HG:     { bg: "purple", luminance: 48 },
-  Jib:    { bg: "gray",   luminance: 128 },
-  LG:     { bg: "blue",   luminance: 29 },
-  LJ:     { bg: "yellow", luminance: 210 },
-  Spi:    { bg: "orange", luminance: 170 },
-  SS:     { bg: "red",    luminance: 76 }
+  NA:        { bg: "black",  luminance: 0 },
+  JIB:       { bg: "gray",   luminance: 128 },
+  SPI:       { bg: "orange", luminance: 170 },
+  SS:        { bg: "red",    luminance: 76 },
+  STAYSAIL:  { bg: "red",    luminance: 76 },
+  LJ:        { bg: "yellow", luminance: 210 },
+  LIGHTJIB:  { bg: "yellow", luminance: 210 },
+  LIGHT_JIB: { bg: "yellow", luminance: 210 },
+  C0:        { bg: "green",  luminance: 85 },
+  CODE0:     { bg: "green",  luminance: 85 },
+  CODE_0:    { bg: "green",  luminance: 85 },
+  HG:        { bg: "purple", luminance: 48 },
+  HEAVYGNK:  { bg: "purple", luminance: 48 },
+  HEAVY_GNK: { bg: "purple", luminance: 48 },
+  LG:        { bg: "blue",   luminance: 29 },
+  LIGHTGNK:  { bg: "blue",   luminance: 29 },
+  LIGHT_GNK: { bg: "blue",   luminance: 29 },
 };
+
 const getTextColorFromLuminance = (luminance) => luminance < 128 ? 'white' : 'black';
 const userId = "admin";    // should be "" to enable authent
 const password = "admin";  // idem
+const updateStatusBar = () => "";
+let gribLimits = {};
 
 /**
  * choose a grib file then launch gribInfo 

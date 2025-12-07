@@ -54,39 +54,30 @@ async function getMarks (map) {
  * @returns {string}
  */
 function renderMarksTable(marksArray, decimals) {
-   const fmt = (v) => (v === null || v === undefined || Number.isNaN(v)) ? '' : Number(v).toFixed(decimals);
-   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-
    if (!Array.isArray(marksArray) || marksArray.length === 0) {
       return `<div style="padding:.5rem">No data.</div>`;
    }
-
    const rows = marksArray.map(m => `
       <tr>
          <td>${esc(m.what)}</td>
          <td>${esc(m.name)}</td>
          <td>${esc(m.id)}</td>
-         <td style="text-align:right">${fmt(m.lat0)}</td>
-         <td style="text-align:right">${fmt(m.lon0)}</td>
-         <td style="text-align:right">${fmt(m.lat1)}</td>
-         <td style="text-align:right">${fmt(m.lon1)}</td>
+         <td style="text-align:right">${latLonToStr(m.lat0, m.lon0, DMSType)}</td>
+         <td style="text-align:right">${latLonToStr(m.lat1, m.lon1, DMSType)}</td>
          <td>${esc(m.status)}</td>
       </tr>
    `).join('');
-
    return `
       <div style="max-height:60vh; overflow:auto; margin-top:0.5rem">
          <table style="width:100%; border-collapse:collapse">
             <thead>
                <tr>
-                  <th style="text-align:left; border-bottom:1px solid #ddd; padding:4px">what</th>
-                  <th style="text-align:left; border-bottom:1px solid #ddd; padding:4px">name</th>
-                  <th style="text-align:left; border-bottom:1px solid #ddd; padding:4px">id</th>
-                  <th style="text-align:right; border-bottom:1px solid #ddd; padding:4px">lat0</th>
-                  <th style="text-align:right; border-bottom:1px solid #ddd; padding:4px">lon0</th>
-                  <th style="text-align:right; border-bottom:1px solid #ddd; padding:4px">lat1</th>
-                  <th style="text-align:right; border-bottom:1px solid #ddd; padding:4px">lon1</th>
-                  <th style="text-align:left; border-bottom:1px solid #ddd; padding:4px">status</th>
+                  <th style="text-align:center; border-bottom:1px solid #ddd; padding:4px">what</th>
+                  <th style="text-align:center; border-bottom:1px solid #ddd; padding:4px">name</th>
+                  <th style="text-align:center; border-bottom:1px solid #ddd; padding:4px">id</th>
+                  <th style="text-align:center; border-bottom:1px solid #ddd; padding:4px">lat0 - lon0</th>
+                  <th style="text-align:center; border-bottom:1px solid #ddd; padding:4px">lat1 - lon1</th>
+                  <th style="text-align:center; border-bottom:1px solid #ddd; padding:4px">status</th>
                </tr>
             </thead>
             <tbody>
@@ -143,17 +134,6 @@ function hasName(name) {
 }
 
 /**
- * Basic HTML escape for popup content.
- * @param {string} s
- * @returns {string}
- */
-function escHtml(s) {
-   return String(s ?? '').replace(/[&<>"']/g, m => (
-      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]
-   ));
-}
-
-/**
  * Add emoji markers for marksVR onto a Leaflet map.
  * - Places at (lat0, lon0)
  * - Shows ONLY the symbol on map (no tooltip)
@@ -184,7 +164,6 @@ function displayMarks(map, marks) {
       if (lat === null || lon === null || Number.isNaN(lat) || Number.isNaN(lon)) {
          continue;
       }
-
       const sym = symbolFromWhat(m.what);
       const icon = L.divIcon({
          className: 'mark-emoji',
@@ -192,12 +171,11 @@ function displayMarks(map, marks) {
          iconSize: [22, 22],
          iconAnchor: [11, 11]
       });
-
       const marker = L.marker([lat, lon], { icon });
       marker.addTo(group);
 
       if (hasName(m.name)) {
-         marker.bindPopup(`<strong>${escHtml(m.name.trim())}</strong>`, {
+         marker.bindPopup(`<strong>${esc (m.name.trim())}</strong>`, {
             closeButton: true,
             autoClose: true
          });

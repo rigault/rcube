@@ -22,6 +22,12 @@ const sailLegend = {
   LIGHT_GNK: { bg: "blue",   luminance: 29 },
 };
 
+/** Escape to HTML 
+ */
+function esc (s) {
+   return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
 /**
  * Returns a suitable text color ("black" or "white") for a given background luminance.
  * This ensures good readability based on the brightness of the background color.

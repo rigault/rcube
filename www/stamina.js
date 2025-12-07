@@ -57,11 +57,11 @@ function fPenalty (shipIndex, type, tws, energy, staminaK, fullPack) {
  * @returns {number} Point loss.
  */
 function fPointLoss (shipIndex, type, tws, fullPack) {
-   const fPCoeff = (type === 2 && fullPack) ? 0.8 : 1;
+   const fPCoeff = fullPack ? 0.8 : 1.0;
    const loss = (type === 2) ? 0.2 : 0.1;
    const cShip = shipParam[shipIndex].cShip;
 
-   const fTws = (tws < 10.0) ? 0.02 * tws + 1 :
+   const fTws = (tws < 10.0) ? 0.02 * tws + 1.0 :
                 (tws <= 20.0) ? 0.03 * tws + 0.9 :
                 (tws <= 30.0) ? 0.05 * tws + 0.5 :
                 2.0;
@@ -76,11 +76,11 @@ function fPointLoss (shipIndex, type, tws, fullPack) {
  * @returns {number} Time in seconds to recover one energy point.
  */
 function fTimeToRecupOnePoint (tws) {
-   const timeToRecupLow = 5;   // minutes
-   const timeToRecupHigh = 15; // minutes
+   const timeToRecupLow = 5.0 * 60.0;   // 5 minutes in seconds
+   const timeToRecupHigh = 15.0 * 60.0; // 15 minutes in seconds
    const fTws = 1.0 - Math.cos(Math.PI * (Math.min(tws, 30.0) / 30.0));
 
-   return 60 * (timeToRecupLow + fTws * (timeToRecupHigh - timeToRecupLow) / 2.0);
+   return timeToRecupLow + fTws * (timeToRecupHigh - timeToRecupLow) / 2.0;
 }
 
 /**
@@ -190,7 +190,7 @@ function stamina() {
             const staminaOut = 2 - Math.min (energy, 100.0) * kPenalty;
 
             twsValue.textContent = tws.toFixed(0);
-            energyValue.textContent = `${energy.toFixed(0).padStart (3, "0")}% (${staminaOut.toFixed(2)})`;
+            energyValue.textContent = `${energy.toFixed(2).padStart (3, "0")}% (${staminaOut.toFixed(2)})`;
 
             const recup = fTimeToRecupOnePoint(tws);
             recoverTime.textContent =  formatTimeSecToMnS (recup);
@@ -199,7 +199,7 @@ function stamina() {
                const time = fPenalty (shipIndex, i, tws, energy, staminaOut, fullPack);
                const loss = fPointLoss (shipIndex, i, tws, fullPack);
                timeCells[i].textContent =  formatTimeSecToMnS(time);
-               lossCells[i].textContent = (100 * loss).toFixed(0) + " %";
+               lossCells[i].textContent = (100 * loss).toFixed(2) + " %";
             }
          }
 
