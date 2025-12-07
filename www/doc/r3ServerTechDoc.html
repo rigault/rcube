@@ -27,9 +27,10 @@
    <a href="#chap6">6. Fichier de configuration du serveur</a>
    <a href="#chap7">7. Code source</a>
    <a href="#chap8">8. Chargement des Grib</a>
-   <a href="#chap9">9. Hébergement</a>
-   <a href="#chap10">10. Authentification</a>
-   <a href="#chap11">11. Comportements bizarres</a>
+   <a href="#chap9">9. Génération de Grib</a>
+   <a href="#chap10">10. Hébergement</a>
+   <a href="#chap11">11. Authentification</a>
+   <a href="#chap12">12. Comportements bizarres</a>
    <a href="#Annexe1"> Annexe 1, Serveur AIS GPS</a>
    <a href="#Annexe2"> Annexe 2, Composition de polaires</a>
    <a href="#Annexe3"> Annexe 3, Transformations de Grib</a>
@@ -304,7 +305,7 @@ ou
 
 <h2> Détail de la requête </h2>
 <p> L'ordre dans le quel les paramètres sont indiqués n'a pas d'importance.</p>
-<p> Il sont séparés par l'esperluette &amp;.</p>
+<p> Il sont séparés par l'esperluète &amp;.</p>
 
 <p> Exemple&nbsp;: </p>
 <pre>type=1&amp;boat=hoho, 47.0, -3.0&amp;waypoints=47.5,-3.0;47.0,-5.0&amp;timeStep=3600&amp;isoc=false</pre>
@@ -325,10 +326,10 @@ ou
             <td>1</td><td>Demande de routage pour un seul bateau</td><td>La principale requête.</td>
          </tr>
          <tr>
-            <td>2</td><td>Demande de routage pour plusieurs bateaux.</td><td>Supprimée. Préférer la génération de multiples requêtes de type 1 à partie du client.</td>
+            <td>2</td><td>Demande d'informations géographiques et météorologiques sur un point.</td><td>Coordonnées lat, lon du point et optionnellement nom du grib.</td>
          </tr>
          <tr>
-            <td>3</td><td>Recherche de la meilleure date de départ.</td><td>Supprimée. Préférer la génération de multiples requêtes de type 1 à partie du client.</td>
+            <td>3</td><td>Demande les polygones d'interdiction</td><td>Sans paramètres.</td>
          </tr>
          <tr>
             <td>4</td><td>Demande de polaire.</td><td>Le nom de la polaire doit être donné.</td>
@@ -357,12 +358,21 @@ ou
          <tr>
             <td>12</td><td>Demande le port le plus proche</td><td>A éviter. Préférer la gestion à partir du client. La latitude et la longitude du point doivent être donnés.</td>
          </tr>
+         <tr>
+            <td>13</td><td>Marques</td><td>Pas de paramètre.</td>
+         </tr>
+         <tr>
+            <td>14</td><td>Vérification de grib</td><td>Le nom du grib vent et du grib courant doivent être donnés.</td>
+         </tr>
+         <tr>
+            <td>15</td><td>Route au format GPX</td><td>Pas de paramètre.</td>
+         </tr>
       </tbody>
    </table>
 
 <h3>Paramètres de la requêtes</h3>
 
-<p>La latitude (lat) est un nombre décimal sur l'intervalle [-90..90]. </p>
+<p>La latitude (lat) est un nombre décimal sur l'intervalle [-90..90]. </p>:%s
 <p>La longitude (lon) est un nombre décimal sur l'intervalle [-180..180] ou sur l'intervalle [0..360].
 <p>Le tableau suivant indique pour chaque paramètre les dépendance par rapport au type.</p>
 
@@ -378,37 +388,31 @@ ou
             <td>type</td><td>Entier (0..10)</td><td>Type de la requête.<td>NA</td><td>Pas de défaut. Champ obligatoire.</td>
          </tr>
          <tr>
-            <td>boat</td><td>Liste de triplets name, lat, lon;</td><td>Liste les bateaux.</td><td>Pour requêtes 1, 2, 3</td><td>Pas de défaut. Champ obligatoire.</td>
+            <td>boat</td><td>Liste de triplets name, lat, lon;</td><td>Liste les bateaux.</td><td>Pour requête 1</td><td>Pas de défaut. Champ obligatoire.</td>
          </tr>
          <tr>
-            <td>waypoints</td><td>Liste de couples lat, lon;</td><td>Liste les Waypoints.</td><td>Pour requêtes 1, 2, 3</td><td>Pas de défaut. Champ obligatoire.</td>
+            <td>waypoints</td><td>Liste de couples lat, lon;</td><td>Liste les Waypoints.</td><td>Pour requête 1</td><td>Pas de défaut. Champ obligatoire.</td>
          </tr>
          <tr>
-            <td>timeStep</td><td>Entier (secondes)</td><td>Valeur du temps entre chaque isochrone.</td><td>Pour requêtes 1, 2, 3</td><td>3600</td> 
+            <td>timeStep</td><td>Entier (secondes)</td><td>Valeur du temps entre chaque isochrone.</td><td>Pour requête 1</td><td>3600</td> 
          </tr>
          <tr>
-            <td>epochStart</td><td>Entier (secondes)</td><td>Date de départ en temps Epoch Unix.</td><td>Pour requêtes 1, 2, 3</td><td>Valeur actuelle (now) du temps Epoch (Unix).</td>
+            <td>epochStart</td><td>Entier (secondes)</td><td>Date de départ en temps Epoch Unix.</td><td>Pour requête 1</td><td>Valeur actuelle (now) du temps Epoch (Unix).</td>
          </tr>
          <tr>
-            <td>timeWindow</td><td>Entier (secondes)</td><td>Fenêtre de temps en seconde pour la recherche de la meilleure date de départ.</td><td>Pour requête 3</td><td>Infini</td>
+            <td>polar</td><td>Chaîne de caractères</td><td>Nom de la polaire.</td><td>Pour requête 1, 4.</td><td>Par défaut fourni par le serveur.</td>
          </tr>
          <tr>
-            <td>timeInterval</td><td>Entier (secondes)</td><td>Intervalle de temps entre chaque essai pour la recherche de le meilleure date de départ.</td><td>Pour requête 3</td><td>3600</td>
+            <td>wavePolar</td><td>Chaîne de caractères</td><td>Nom de la polaire de vaques.</td><td>Pour requête 1, 4.</td><td>Par défaut fourni par le serveur.</td>
          </tr>
          <tr>
-            <td>polar</td><td>Chaîne de caractères</td><td>Nom de la polaire.</td><td>Pour requête 1, 2, 3, 4.</td><td>Par défaut fourni par le serveur.</td>
+            <td>model</td><td>Chaîne de caractères</td><td>Model du grib</td><td>Pour requête 1, 5</td><td>GFS, ECMWF, ARPEGE, METEOCONSULT</td>
          </tr>
          <tr>
-            <td>wavePolar</td><td>Chaîne de caractères</td><td>Nom de la polaire de vaques.</td><td>Pour requête 1, 2, 3, 4.</td><td>Par défaut fourni par le serveur.</td>
+            <td>grib</td><td>Chaîne de caractères</td><td>Nom du fichier grib.</td><td>Pour requête 1, 2, 5.</td><td>Par défaut fourni par le serveur.</td>
          </tr>
          <tr>
-            <td>model</td><td>Chaîne de caractères</td><td>Model du grib</td><td>Pour requête 1, 2, 3, 5</td><td>GFS, ECMWF, ARPEGE, METEOCONSULT</td>
-         </tr>
-         <tr>
-            <td>grib</td><td>Chaîne de caractères</td><td>Nom du fichier grib.</td><td>Pour requête 1, 2, 3, 5.</td><td>Par défaut fourni par le serveur.</td>
-         </tr>
-         <tr>
-            <td>currentGrib</td><td>Chaîne de caractères</td><td>Nom du fichier grib courant.</td><td>Pour requête 1, 2, 3, 5.</td><td>Par défaut fourni par le serveur.</td>
+            <td>currentGrib</td><td>Chaîne de caractères</td><td>Nom du fichier grib courant.</td><td>Pour requête 1, 5.</td><td>Par défaut fourni par le serveur.</td>
          </tr>
          <tr>
             <td>file</td><td>Chaîne de caractères</td><td>Nom de fichier</td><td>Pour requête 11.</td><td>vide</td>
@@ -417,82 +421,85 @@ ou
             <td>dir</td><td>Chaîne de caractères</td><td>Nom de répertoire. (soit "grib" soit "pol" soit vide).</td><td>Pour requête 6.</td><td>vide</td>
          </tr>
          <tr>
-            <td>forbid</td><td>Booléen: true | false</td><td>Prend en compte terre et zones interdites.</td><td>Pour requêtes 1, 2, 3</td><td>false</td>
+            <td>forbid</td><td>Booléen: true | false</td><td>Prend en compte terre et zones interdites.</td><td>Pour requête 1</td><td>false</td>
          </tr>
          <tr>
-            <td>isoc</td><td>Booléen: true | false</td><td>Demande les isochrones.</td><td>Pour requêtes 1, 2, 3</td><td>false</td>
+            <td>isoc</td><td>Booléen: true | false</td><td>Demande les isochrones.</td><td>Pour requête 1</td><td>false</td>
          </tr>
          <tr>
-            <td>isodesc</td><td>Booléen: true | false</td><td>Demande les descripteurs d'isochrones.</td><td>Pour requêtes 1, 2, 3</td><td>false</td>
+            <td>isodesc</td><td>Booléen: true | false</td><td>Demande les descripteurs d'isochrones.</td><td>Pour requête 1</td><td>false</td>
          </tr>
          <tr>
-            <td>withWaves</td><td>Booléen: true | false</td><td>Vagues prises en compte.</td><td>Pour requêtes 1, 2, 3</td><td>false</td>
+            <td>withWaves</td><td>Booléen: true | false</td><td>Vagues prises en compte.</td><td>Pour requête 1</td><td>false</td>
          </tr>
          <tr>
-            <td>withCurrent</td><td>Booléen: true | false</td><td>Courant pris en compte .</td><td>Pour requêtes 1, 2, 3</td><td>false</td>
+            <td>withCurrent</td><td>Booléen: true | false</td><td>Courant pris en compte .</td><td>Pour requête 1</td><td>false</td>
          </tr>
          <tr>
             <td>sortByName</td><td>Booléen: true | false</td><td>Tri des fichiers par noms si vrai, par date si faux.</td><td>Pour requête 6.</td><td>false</td>
          </tr>
          <tr>
-            <td>cogstep</td><td>Entier</td><td>Pas de cap en degrés pour calcul isochrones</td><td>Pour requêtes 1, 2, 3</td><td>5</td>
+            <td>cogstep</td><td>Entier</td><td>Pas de cap en degrés pour calcul isochrones</td><td>Pour requête 1</td><td>5</td>
          </tr>
          <tr>
-            <td>cogRange</td><td>Entier</td><td>Range en degrés pour calcul isochrone</td><td>Pour requêtes 1, 2, 3</td><td>90</td>
+            <td>cogRange</td><td>Entier</td><td>Range en degrés pour calcul isochrone</td><td>Pour requête 1</td><td>90</td>
          </tr>
          <tr>
-            <td>jFactor</td><td>Entier</td><td>0 ou valeur positive quelconque.</td><td>Pour requêtes 1, 2, 3</td><td>0</td>
+            <td>jFactor</td><td>Entier</td><td>0 ou valeur positive quelconque.</td><td>Pour requête 1</td><td>0</td>
          </tr>
          <tr>
-            <td>kFactor</td><td>Entier</td><td>0, 1, 2, 3</td><td>Pour requêtes 1, 2, 3</td><td>1</td>
+            <td>kFactor</td><td>Entier</td><td>0, 1, 2, 3</td><td>Pour requête 1</td><td>1</td>
          </tr>
          <tr>
-            <td>nSectors</td><td>Entier</td><td>Nombre de secteurs</td><td>Pour requêtes 1, 2, 3</td><td>720</td>
+            <td>nSectors</td><td>Entier</td><td>Nombre de secteurs</td><td>Pour requête 1</td><td>720</td>
          </tr>
          <tr>
-            <td>penalty0</td><td>Entier (secondes)</td><td>Temps pour un virement de bord (tack)</td><td>Pour requêtes 1, 2, 3</td><td>0</td>
+            <td>penalty0</td><td>Entier (secondes)</td><td>Temps pour un virement de bord (tack)</td><td>Pour requête 1</td><td>0</td>
          </tr>
          <tr>
-            <td>penalty1</td><td>Entier (secondes)</td><td>Temps pour un empannage (gybe)</td><td>Pour requêtes 1, 2, 3</td><td>0</td>
+            <td>penalty1</td><td>Entier (secondes)</td><td>Temps pour un empannage (gybe)</td><td>Pour requête 1</td><td>0</td>
          </tr>
          <tr>
-            <td>penalty0</td><td>Entier (secondes)</td><td>Temps pour changement de voile (sail)</td><td>Pour requêtes 1, 2, 3</td><td>0</td>
+            <td>penalty2</td><td>Entier (secondes)</td><td>Temps pour changement de voile (sail)</td><td>Pour requête 1</td><td>0</td>
          </tr>
          <tr>
-            <td>staminaVR</td><td>Décimal 0 à 100</td><td>Stamina (énergie) pour Virtual Regatta</td><td>Pour requêtes 1, 2, 3</td><td>100</td>
+            <td>staminaVR</td><td>Décimal 0 à 110</td><td>Stamina (énergie) pour Virtual Regatta</td><td>Pour requête 1</td><td>100</td>
          </tr>
          <tr>
-            <td>motorSpeed</td><td>Décimal</td><td>Vitesse en noeuds au moteur</td><td>Pour requêtes 1, 2, 3</td><td>6</td>
+            <td>initialAmure</td><td>Entier 0 ou 1</td><td>Amure initiale. 0 Tribord, 1 Babord. Pour Virtual Regatta</td><td>Pour requête 1</td><td>100</td>
          </tr>
          <tr>
-            <td>threshold</td><td>Décimal</td><td>Déclenchement du moteur si vitesse voile inférieure</td><td>Pour requêtes 1, 2, 3</td><td>0</td>
+            <td>motorSpeed</td><td>Décimal</td><td>Vitesse en noeuds au moteur</td><td>Pour requête 1</td><td>6</td>
          </tr>
          <tr>
-            <td>nightEfficiency</td><td>Décimal 0 à 1</td><td>Facteur d'efficacité la nuit</td><td>Pour requêtes 1, 2, 3</td><td>1</td>
+            <td>threshold</td><td>Décimal</td><td>Déclenchement du moteur si vitesse voile inférieure</td><td>Pour requête 1</td><td>0</td>
          </tr>
          <tr>
-            <td>dayEfficiency</td><td>Décimal 0 à 1</td><td>Facteur d'efficacité le jour</td><td>Pour requêtes 1, 2, 3</td><td>1</td>
+            <td>nightEfficiency</td><td>Décimal 0 à 1</td><td>Facteur d'efficacité la nuit</td><td>Pour requête 1</td><td>1</td>
          </tr>
          <tr>
-            <td>xWind</td><td>Décimal</td><td>Coeff. Multiplicateur de la vitesse du vent</td><td>Pour requêtes 1, 2, 3</td><td>1</td>
+            <td>dayEfficiency</td><td>Décimal 0 à 1</td><td>Facteur d'efficacité le jour</td><td>Pour requête 1</td><td>1</td>
          </tr>
          <tr>
-            <td>maxWind</td><td>Décimal</td><td>Vitesse maximale du vent</td><td>Pour requêtes 1, 2, 3</td><td>100</td>
+            <td>xWind</td><td>Décimal</td><td>Coeff. Multiplicateur de la vitesse du vent</td><td>Pour requête 1</td><td>1</td>
          </tr>
          <tr>
-            <td>constWindTws</td><td>Décimal</td><td>Vitesse constante du vents en noeuds</td><td>Pour requêtes 1, 2, 3</td><td>0</td>
+            <td>maxWind</td><td>Décimal</td><td>Vitesse maximale du vent</td><td>Pour requête 1</td><td>100</td>
          </tr>
          <tr>
-            <td>constWindTwd</td><td>Décimal</td><td>Direction constante du vents en degrés</td><td>Pour requêtes 1, 2, 3</td><td>0</td>
+            <td>constWindTws</td><td>Décimal</td><td>Vitesse constante du vents en noeuds</td><td>Pour requête 1</td><td>0</td>
          </tr>
          <tr>
-            <td>constWave</td><td>Décimal</td><td>Hauteur constante des vagues en mètres</td><td>Pour requêtes 1, 2, 3</td><td>0</td>
+            <td>constWindTwd</td><td>Décimal</td><td>Direction constante du vents en degrés</td><td>Pour requête 1</td><td>0</td>
          </tr>
          <tr>
-            <td>constCurrentS</td><td>Décimal</td><td>Vitesse constante du courant en noeuds</td><td>Pour requêtes 1, 2, 3</td><td>0</td>
+            <td>constWave</td><td>Décimal</td><td>Hauteur constante des vagues en mètres</td><td>Pour requête 1</td><td>0</td>
          </tr>
          <tr>
-            <td>constCurrentD</td><td>Décimal</td><td>Direction constante du courant en degrés</td><td>Pour requêtes 1, 2, 3</td><td>0</td>
+            <td>constCurrentS</td><td>Décimal</td><td>Vitesse constante du courant en noeuds</td><td>Pour requête 1</td><td>0</td>
+         </tr>
+         <tr>
+            <td>constCurrentD</td><td>Décimal</td><td>Direction constante du courant en degrés</td><td>Pour requête 1</td><td>0</td>
          </tr>
          <tr>
             <td>feedback</td><td>Chaîne de caractères</td><td>Texte rédigé par l'utilisateur.</td><td>Pour requête 10</td><td></td>
@@ -576,7 +583,7 @@ curl https://rcube.ddns.net/post-api/ -u admin:admin -d "type=1&amp;boat=banane,
 <p></p>
 
    <table>
-      <caption>Eléménts d'une route</caption>
+      <caption>Eléments d'une route</caption>
       <thead>
       <tr>
          <th>Elément</th><th>Type/unités</th><th>Valeur</th>
@@ -638,37 +645,86 @@ curl https://rcube.ddns.net/post-api/ -u admin:admin -d "type=1&amp;boat=banane,
    </table>
 
 <p></p>
-<h4>Requête de recherche de la meilleure date de départ type=2</h4>
+<h4>Element sur un point type=2</h4>
 
-<p>Supprimée. Remplacée par l'enchainement de requêtes de type 1 à partir du client.</p>
+<p>Requête donnant des informations sur un point. La requête a un paramètre qui est un triplet
+(nom du point, latitude, longitude) avec éventuellement le grib pour les information météo utiles pour un météogramme.
+Le nom du point n'est pas interprété, mais doit être présent.</p>
+<p>Les informations renvoyées indiquent si le point est en mer en zone non interdite, et si il est a l'intérieur des zones Grib vent
+et courant, le nom du grib courant et le tableau des info météo.</p>
+<p>Chaque ligne du tableau correspond à une heure. La première ligne correspond au temps de départ du grib.</p>
+<p>Chaque élément du tableau est un tableau de 4 valeurs u, v, g, w.</p>
+<p>u, v sont les composantes Nord Sud et Est Ouest du vent en surface en m/s.<p>
+<p>g est la vitesses des rafales en m/s.</p>
+<p>w est la hauteur des vagues en mètres.</p>
 
-<h4>Requête de routage pour plusieurs bateaux type=3</h4>
+<pre>
+curl https://rcube.ddns.net/post-api/ -u admin:admin -d "type=2&amp;boat=bidon, 41.24, -16.0"
+{
+  "isSea": true,
+  "isSeaTolerant": true,
+  "inWind": true,
+  "inCurrent": false,
+  "epochGribStart": 1743141600,
+  "grib": "METEOCONSULT06Z_VENT_0328_Nord_Atlantique.grb",
+  "meteoArray":
+  [
+    [0.0000, 0.0000, 0.0000, 0.0000],
+    [0.0000, 0.0000, 0.0000, 0.0000],
+    ...
+   ]
+}
 
-<p>Supprimée. Remplacée par l'enchainement de requêtes de type 1 à partir du client.</p>
+
+</pre>
+
+<h4>Liste les polygones d'interdiction type=3</h4>
+
+<p> Requête sans paramètre, renvoie un tableau de polygones.</p>
+<p> Chaque polygones est un tableau de coordonnées. </p>
+<p> Une coordonnée est un tableau avec deux éléments&nbsp;: [lat, lon]</p>
+<p> Exemple avec deux polygones&nbsp;:
+<pre>
+curl https://rcube.ddns.net/post-api/ -d "type=3"
+
+[
+  [[-43.5000, -2.7500], [-46.0000, 17.3000], [-48.0000, 35.0000], [-51.0000, 69.5000], [-49.0000, 96.0000]],
+  [[-46.0000, 17.3000], [-48.0000, 35.0000], [-51.0000, 69.5000]]
+]
+</pre>
 
 <h4>Chargement de la polaire type=4</h4>
-<p>Exemple de Requête&nbsp;:</p>
+
+<p>Exemples de Requête&nbsp;:</p>
 <pre>
 curl https://rcube.ddns.net/post-api/ -d "type=4"
+curl http://localhost:8080 -d "type=4&amp;polar=dufour.csv"
 </pre>
 <p>Réponse du serveur&nbsp;:</p>
-<p>Le serveur envoie en Json la polaire en Json sous forme d'un tableau à deux dimensions.</p>
+<p>Le serveur envoie en Json la polaire en Json sous forme de méta-données et d'un tableau <code>array</code>
+à deux dimensions.</p>
+<p>Si la polaire est une composition de polaire, trois tableaux sont générés</p>
+<ul>
+<li><code>array</code>&nbsp;: le contenu de la polaire,</li>
+<li><code>arraySail</code>&nbsp;: le numéro de la voile utilisée,</li>
+<li><code>array</code>&nbsp;: la légende des voiles. Indice 0: "NA", indice 1: nom de la première voile, etc.</li>
+</ul>
 
 <h4>Méta information sur un fichier Grib type=5</h4>
 La requête contient soit&nbsp;:
 <ul>
 <li>Le nom du modèle. C'est alors le fichier le plus récent correspondant à ce modèle qui est sélectionné,
-model: GFS | ECMWF | ARPEGE | METEOCONSULT, </li>
+model: GFS | ECMWF | ARPEGE | METEOCONSULT | SYN, </li>
 <li>Le nom du fichier grib. Il faut l'avoir préalablement identifié à partir d'une requête de type 6 par exemple.</li>
 </ul>
 <p>Exemple de Requête&nbsp;:</p>
 <pre>
-curl https://rcube.ddns.net/post-api/ -d "type=5&iamp;model=GFS"
+curl https://rcube.ddns.net/post-api/ -d "type=5&amp;model=GFS"
 ou
-curl https://rcube.ddns.net/post-api/ -d "type=5&iamp;model=GFS"
+curl https://rcube.ddns.net/post-api/ -d "type=5&amp;model=GFS"
 </pre>
 <p>Réponse du serveur&nbsp;:</p>
-<p>Les méta information sur le grib et non le fichier Grib lui même.<p>
+<p>Les méta informations sur le grib et non pas le fichier Grib lui même.<p>
 
 <h4>Répertoire type=6</h4>
 <p>Liste le répertoire donné en paramètre <code>dir=</code>. Ce peut être&nbsp;:</p>
@@ -748,7 +804,7 @@ done
 </pre>
 
 <h4>Feedback  type=10</h4>
-<p>Utilisé pour permettre à l'utlisateur de donner un feedback.</p>
+<p>Utilisé pour permettre à l'utilisateur de donner un feedback.</p>
 <pre>
 curl https://rcube.ddns.net/post-api/ -d "type=10&amp;feedback=bug report..."
 </pre>
@@ -767,25 +823,65 @@ curl https://rcube.ddns.net/post-api/ -d "type=12&amp;waypoints=47.2,-2.5"
 {"nearestPort": "LE_POULIGUEN", "idPort": 115}
 </pre>
 
+<h4>Marques type=13</h4>
+<p>Pas de paramètre.</p>
+<p>Donne au format Json les marques. Utilisation avec Vitual Regatta.<p>
+
+<h4>Vérification de Grib type=14</h4>
+<p>Paramètres obligatoires : nom du grib vent et du grib pour courant</p>
+<p>Renvoie au format text des informations sur la cohérence des grib.</p>
+
+<h4>Route au format GPX type 15</h4>
+<p>Pas de paramètre.</p>
+<p>Renvoie la route stockée dans le serveur au format GPX.</p>
+<p>Attention en cas d'utilisateurs multiples, c'est la dernière route calculée qui est envoyée, pas nécessairement celle de l'utilisateur qui fait la demande...</p>
+
+<h4>Téléchargement du grib type  16</h4>
+<pre>
+curl -v http://localhost:8080 -o data.bin "type=16&amp;model=GFS"
+</pre>
+
+<p>Le fichier généré n'est pas au format grib, mais dans un format ad-hoc pour communiquer entre le serveur et le client (Javascript). </p>
+<p>C'est un fichier binaire contenant une succession de flottants (codés sur 32 bits).<p>
+<p>Chaque point est décrit par un vecteur de shortnames (u, v, g, w)</p>
+<p>u et v sont obligatoires<p>
+<p>L'entête HTTP contient <code>X-Shortnames:</code>, la liste des shortnames.<p>
+<p>g (gust ou rafale) et w (swh ou hauteur des vagues) sont optionnels.<p>
+<p>Les possibilités sont donc&nbsp;: uv, uvg, uvw, uvgw.
+
+<p>Le nombre de valeur est déterminé par&nbsp;:
+<ul>
+   <li>Le nombre de time stamp (nTimeStamp),</li>
+   <li>le nombre de latitudes (nLat),</li>
+   <li>le nombre de longitudes (nLat)</li>
+   <li>le nombre de shortnames (nShortName).</li>
+</ul>
+<p> La nombre de float émis est N&nbsp;: nTimeStamp * nLat * nLon * nShortname.</p>
+<p> La taille du fichier en octets est&nbsp;: 4 * N.<p>
+ 
 <h1 id="chap6">6. Fichier de configuration du serveur</h1>
 
-   <p>Les fichiers suffixés par ".par" sont situés dans le répertoire "par".</p>
+   <p>Les fichiers suffixés par ".par" ou par ".yaml" sont situés dans le répertoire "par".</p>
 
    <p>Le fichier par défaut est "routing.par" et est essentiel pour le bon fonctionnement de RCube.</p>
 
    <p>Un autre nom de fichier peut être spécifié dans la ligne de commande au lancement du serveur. </p>
 
-   <p>Un fichier ".par" est un fichier texte comportant des lignes de la forme&nbsp;:</p>
+   <p>Un fichier ".par" ou ".yaml" est un fichier texte comportant des lignes de la forme&nbsp;:</p>
 
    <p><samp>NOM: valeur</samp></p>
 
    <p>Des commentaires peuvent être ajoutés après le signe "#".</p>
 
+   <p> Le format est compatible avec YAML. </p>
+
    <p>Exemple&nbsp;:</p>
 <pre><samp>
-WD:                           # Working directory
+WD: /home/rr/....             # Working directory
 SERVER_PORT: 80               # TCP PORT
-WEB:/home/rr/routing/client   # static files directory: html, css js etc
+FORBID_ZONES:
+   - [[lat0, lon0], [lat1, lon], [latN, lonN]]
+   - ...
 
 ...
 </samp></pre>
@@ -817,10 +913,10 @@ WEB:/home/rr/routing/client   # static files directory: html, css js etc
             <td>inline.h</td><td>Définition de petites fonctions inline incluses dans les fichiers .c</td>
          </tr>
          <tr>
-            <td>glibwrapper.h</td><td>Définition de petites fonctions inline simulant les fontions eponymes de la GLIB.</td>
+            <td>glibwrapper.h</td><td>Définition de petites fonctions inline simulant les fonctions éponymes de la GLIB.</td>
          </tr>
          <tr>
-            <td>engine.c</td><td>Cœur du programme avec calcul des isochrones.</td>
+            <td>engine.c ou enginesimple.c</td><td>Cœur du programme avec calcul des isochrones.</td>
          </tr>
          <tr>
             <td>engine.h</td><td>Interface de engine (prototypes des fonctions externes).</td>
@@ -830,6 +926,9 @@ WEB:/home/rr/routing/client   # static files directory: html, css js etc
          </tr>
          <tr>
             <td>grib.h</td><td>Interface de grib (prototypes des fonctions externes).</td>
+         </tr>
+         <tr>
+            <td>option.c</td><td>Gère les différentes commandes du mode CLI (voir routing.c</td>
          </tr>
          <tr>
             <td>r3util.c</td><td>Fonctions utiles.</td>
@@ -855,6 +954,9 @@ WEB:/home/rr/routing/client   # static files directory: html, css js etc
          <tr>
             <td>r3server.c</td><td>Le serveur.</td>
          </tr>
+         <tr>
+            <td>routing.c</td><td>Programme en mode CLI uniquement.</td>
+         </tr>
       </tbody>
    </table>
 
@@ -876,7 +978,7 @@ WEB:/home/rr/routing/client   # static files directory: html, css js etc
 <code>#define MAX_N_ISOC 512</code>
 </pre>
 
-		<p>Les noms des variables et fonction sont en minuscules, en utilidant la notation camel.</p>
+		<p>Les noms des variables et fonction sont en minuscules, en utilisant la notation camel.</p>
       
       <p>Exemple : ceciEstConformeNotationCamel</p>
 
@@ -899,7 +1001,7 @@ const int xTop = 1;
 </code>
 </pre>
 
-<h2>Vérification du code</h2>
+   <h2>Vérification du code</h2>
 
 		<p>Des directives de compilation strictes sont utilisées pour vérifier le code
 		voir ccs, ccs0.
@@ -910,8 +1012,17 @@ const int xTop = 1;
 
 		<p> Voir le fichier ccheck.</p>
 
+   <h2>Mesures de performances</h2>
+
+   <p> Les option de compilation <code>-g</code> et <code>-pg</code> sont à ajouter 
+   (compilation et édition de liens).</p> 
+
+   <p> Un fichier <code>gmon.out</code> est généré.
+   <p> Exploiter ce fichier par la commande&nbsp;: 
+      <code>gprof ./r3server gmon.out &gt; profil.txt</code></p>
+
    <h2>Gestion du temps</h2>
-   <p>La gestion du temps est assez complexe et mérite quelques éclaicissements.<p>
+   <p>La gestion du temps est assez complexe et mérite quelques éclaircissements.<p>
    
    <h3>Fichiers Grib </h3>
    Les fichiers Grib contiennent des informations sur le temps, en heures UTC.
@@ -1012,8 +1123,55 @@ sudo apt install libgfortran5 libgomp1 libgcc-s1
 wgrib2 -version
 </code></pre>
 
+<h1 id="chap9">9. Génération de grib</h1>
 
-<h1 id="chap9">9. Hébergement</h1>
+<p>Un utilitaire <code>mkgrib.c</code> permet de générer un grib.
+<p>Lancement :
+<pre>
+./mkgrib spec.yaml
+</pre>
+<code>spec.yaml</code> contient les spécifications du fichier en YAML.
+Il est possible de définir plusieurs "area".
+Chaque Area défini la zone géographique couverte (latFirst, latLast, lonFirst, lonLast) 
+et l'évolution temporelle du vent (twd en degré, tws en noeuds) et de la hauteur des vaques (w en mètres).)
+<pre>
+# Wind specification for mkgrib.c
+---
+stepHours: 3
+# dataDate: 20251008
+# dataTime: 1200
+areas:
+  # bug avec 51 pas avec 53
+  - name: 0
+    latFirst: 60
+    latLast: 0
+    lonFirst: -50
+    lonLast: 15
+    # tmin tmax twd tws  w
+    winds:
+      - [0, 0, 20, 0]
+      - [50, 0, 20, 0]
+      - [70, -90, 5, 0.5]
+      - [100, -90, 5, 0.5]
+      - [150, 45, 28, 1]
+      - [200, 45, 28, 1]
+      - [240, 90, 14, 2]
+  - name: 1
+    latFirst: 30
+    latLast: 10
+    lonFirst: -40
+    lonLast: -15
+    # tmin tmax twd tws  w
+    winds:
+      - [0, 180, 0, 0]
+      - [240, 180, 0, 0]
+
+</pre>
+
+<p>Sur la durée d'un plateau, les valeurs twd, tws w sont constantes.</p>
+<p>Entre plateaux, interpolation linéaire.</p>
+
+<h1 id="chap10">10. Hébergement</h1>
 
 <h2> Prérequis </h2>
 <ul>
@@ -1038,7 +1196,7 @@ sudo certbot --nginx -d rcube.ddns.net
 <h3> Architecture NGINX et r3server</h3>
 
 <p> NGINX écoute sur le port 443 (HTTPS), sert les pages statiques situées dans le répertoire www et joue le rôle de proxy pour le serveur API qui fonctionne en HTTP sur
-les ports 8080, 8081, chere l'authentification "basic" HTTP.</p>
+les ports 8080, 8081, gère l'authentification "basic" HTTP.</p>
 
 <p> L'application r3server écoute sur les ports 808x. (en fait, une instance pour chaque port).</p>
 
@@ -1237,7 +1395,7 @@ crontab -l
 <li>port translation 443</li>
 </ul>
 
-<h1 id="chap10">10. Authentification</h1>
+<h1 id="chap11">11. Authentification</h1>
 
   <h2>But</h2>
   <p>
@@ -1276,7 +1434,7 @@ crontab -l
   </ul>
 
 
-<h1 id="chap11">11. Comportements bizarres</h1>
+<h1 id="chap12">11. Comportements bizarres</h1>
 
 Pour fonctionner sans NGINX (en local) et éviter les erreurs CORS&nbsp;:
 <ul>
@@ -1310,15 +1468,15 @@ Pour cela dans <code>r3param.js</code> mettre userID = &ldquo; &rdquo; et passwo
 
    <p class="warning"> Attention&nbsp;:
    Le bon fonctionnement peut nécessiter la déconnexion
-   physique de l’interface USB, sa reconnection, le passage de la
-	commande changeant les droits d’accès et le re-lancement de
+   physique de l’interface USB, sa reconnexion, le passage de la
+	commande changeant les droits d’accès et le relancement de
 	l’application.</p>
 
 <h2>Lancement du serveur </h2>
    <code>./aisgpsserver &lt;port&gt; [fichierParametres]</code>
    <p>Utiliser un port non déjà occupé. <p>
    <code>./aisgpsserver 8090</code>
-   <p><code>param.par</code> est le nom du fichier parametres par défaut.</p>
+   <p><code>param.par</code> est le nom du fichier paramètres par défaut.</p>
 
    <p>Le fichier <code>midcodes.csv</code> permet de traduire les premiers chiffres du MMSI en nom de pays, code ISO et emoticon du drapeau.</p>
 	<p>Les ports utilisés doivent être spécifiés dans le fichier paramètres<p>
@@ -1474,7 +1632,7 @@ référencé dans le fichier paramètres.</p>
       <td>4</td><td>LG</td><td>Light Gennaker</td><td>blue</td>
    </tr>
    <tr>
-      <td>5</td><td>LG</td><td>Light Jib</td><td>yellow</td>
+      <td>5</td><td>LJ</td><td>Light Jib</td><td>yellow</td>
    </tr>
    <tr>
       <td>6</td><td>Spi</td><td>Spi</td><td>orange</td>
@@ -1606,6 +1764,11 @@ rr@rcube:~/rcube$ ./launch
 
 <p> <a href= "dox/html/index.html">Doxygen Doc</a></p>
 <p><a href= "docpar.txt">Documentation sur les paramètres</a></p>
+<p><a href= "https://rcube.ddns.net/r3files.html">Tous Fichiers sur serveur</a></p>
+<p><a href= "https://rcube.ddns.net/files/grib/">Fichiers Grib sur serveur</a></p>
+<p><a href= "https://rcube.ddns.net/files/currentgrib/">Fichiers Grib Courants sur serveur</a></p>
+<p><a href= "https://rcube.ddns.net/files/pol/">Fichiers Polaires sur serveur</a></p>
+<p><a href= "https://rcube.ddns.net/files/wavepol/">Fichiers Polaires de Vagues sur serveur</a></p>
 <p><a href="https://nomads.ncep.noaa.gov/">Fichiers Grib NOAA</a></p>
 <p><a href="https://data.ecmwf.int/">Fichiers Grib ECMWF</a></p>
 <p><a href="https://meteo.data.gouv.fr/">Fichiers Grib Météo France</a></p>

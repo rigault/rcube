@@ -5,10 +5,10 @@ WD:               Working Directory. TO KEEP ON FIRST LINE !
 ALLWAYS_SEA:      If 1 (true) then there is no earth avoidance. Allways on sea.
 POI:              Point of Interests
 PORT:             Point of Interest (ports)
-POR:              Point of Origin (lat, lon)
-PDEST:            Point of Destination (lat, lon)
-WP:               Way Point (lat, lon). Severeal WP are accepted
-COMPETITOR:       lat, lon, name of competitor. Ex WP: 56.78, 45.18, GRHUM
+POR:              Point of Origin [lat, lon]
+PDEST:            Point of Destination [lat, lon]
+WP:               List of waypoints. Each WP is specified as - [lat0, lon0], one waypoint per line
+COMPETITORS:      color, lat, lon, name of competitor, specified as - [1, 56.78, 45.18, GRHUM], one competitor per line 
 POR_NAME:         Name of Origin Point
 PDEST_NAME:       Name of Destination Point
 CGRIB:            Grib File Name
@@ -96,5 +96,5 @@ WINDY_API_KEY:    Windy API Key
 GOOGLE_API_KEY:   Google API Key for google map 
 EDITOR:           Editor Name
 SPREADSHEET:      SpreadSheet name (be careful)
-FORBID_ZONE:      Specification of Forbidden Zone
+FORBID_ZONES:     Specification of Forbidden Zone. Esach forbid zone is a list of [lat, lon]. Like - [[lat0, lon0], [lat1, lon1], ..., [latN, lonN]] 
 NMEA:             NMEA port followed by index of speed. eg. NMEA: /dev/ttyUSB0, 14

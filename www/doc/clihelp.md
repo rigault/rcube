@@ -1,6 +1,6 @@
-# Option for routing program in CLI mode
+# Option in CLI mode
 
-<pre>./routing [-c | -g | -h | -p | -P | -r | -s | -v ] <parameterFile></pre>
+<pre>./... [-c | -g | -G | -h | -p | -P | -r | -s | -v ] <parameterFile></pre>
 
 - -c (cap)
 compute cap to go from pt A to py B and return
@@ -9,6 +9,8 @@ compute cap to go from pt A to py B and return
 Print grib wind file
 Meta Info about zone
 Check informations
+
+- -G (grib for current)
 
 - -h (help)
 Print this help
