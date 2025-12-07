@@ -5,7 +5,7 @@ cppcheck --enable=warning,performance,portability *.c
 
 echo "gcc analyser"
 
-list=("engine.c" "r3grib.c" "readgriballeccodes.c" "readgriballwithouteccodes.c" "polar.c" "routing.c" "option.c")
+list=("engine.c" "r3grib.c" "readgriballeccodes.c" "readgriballwithouteccodes.c" "polar.c" "option.c")
 
 for file in "${list[@]}"; do
    gcc -fanalyzer -c $file

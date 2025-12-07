@@ -55,7 +55,7 @@ typedef struct {
 Sector sector [2][MAX_N_SECTORS];               // we keep even and odd last sectors
 
 /*! return distance (nm) from point X do segment [AB]. Meaning to foot H, orthogonal projection of X on [AB] */
-static double distSegmentWithFoot(double latX, double lonX, double latA, double lonA, double latB, double lonB, double *latH, double *lonH) {
+static inline double distSegmentWithFoot(double latX, double lonX, double latA, double lonA, double latB, double lonB, double *latH, double *lonH) {
    // Conversion degree -> NM
    const double cosLat = cos(latX * DEG_TO_RAD);
 
@@ -194,7 +194,7 @@ static inline int forwardSectorOptimize (const Pp *pOr, const Pp *pDest, int nIs
          ((current->vmc >= previous->vmc))) {
 
          optIsoc[k] = optIsoc [iSector];
-         optIsoc[k].sector = iSector;
+         //optIsoc[k].sector = iSector;
          k++;
       }
    }
@@ -219,12 +219,10 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
                                double t, double dt, Pp *newList, double *bestVmc, double *biggestOrthoVmc) {
    static const double epsilon = 0.01;
    Pp newPt;
-   bool motor;
    int lenNewL = 0;
    double u, v, gust, w, twa, sog, uCurr, vCurr, currTwd, currTws, vDirectCap;
    double dLat, dLon, penalty, efficiency;
    double waveCorrection, invDenominator, twd, tws;
-   struct tm tm0 = gribDateToTm(zone.dataDate[0], zone.dataTime[0] / 100);
    int bidon; // useless
 
    *bestVmc = 0;
@@ -233,23 +231,19 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
    for (int k = 0; k < isoLen; k++) {
       const Pp *isoPt = &isoList[k];
 
-      if (!isInZone (isoPt->lat, isoPt->lon, &zone) && (par.constWindTws == 0))
-         continue;
+      if (!isInZone (isoPt->lat, isoPt->lon, &zone) && (par.constWindTws == 0)) continue;
 
       findWindGrib (isoPt->lat, isoPt->lon, t, &u, &v, &gust, &w, &twd, &tws);
-      if (tws > par.maxWind)
-         continue; // avoid location where wind speed too high...
+      if (tws > par.maxWind) continue; // avoid location where wind speed too high...
 
-      if (par.withCurrent)
-         findCurrentGrib (isoPt->lat, isoPt->lon, t - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
+      if (par.withCurrent) findCurrentGrib (isoPt->lat, isoPt->lon, t - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
 
       vDirectCap = orthoCap (isoPt->lat, isoPt->lon, pDest->lat, pDest->lon);
-      motor = (maxSpeedInPolarAt (tws * par.xWind, &polMat) < par.threshold) && (par.motorSpeed > 0);
+      const bool useMotor = (maxSpeedInPolarAt (tws * par.xWind, &polMat) < par.threshold) && (par.motorSpeed > 0);
       invDenominator = 1.0 / MAX (epsilon, cos (DEG_TO_RAD * isoPt->lat));
       
-      struct tm localTm = tm0; // working on local copy improve performances
       if (par.dayEfficiency == par.nightEfficiency) efficiency = par.dayEfficiency;
-      else efficiency = isDayLight (&localTm, t, isoPt->lat, isoPt->lon) ? par.dayEfficiency : par.nightEfficiency;
+      else efficiency = isDay(t, zone.dataDate[0], zone.dataTime[0], isoPt->lat, isoPt->lon) ? par.dayEfficiency : par.nightEfficiency;
 
       const double minCog = vDirectCap - par.rangeCog;
       const double maxCog = vDirectCap + par.rangeCog;
@@ -259,14 +253,14 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
          newPt.amure = (twa > 0.0) ? TRIBORD : BABORD;
          newPt.toIndexWp = pDest->toIndexWp;
 
-         if (motor) {
+         if (useMotor) {
             sog = par.motorSpeed;
             newPt.sail = 0;
          } else {
             sog = efficiency * findPolar (twa, tws * par.xWind, &polMat, &sailPolMat, &newPt.sail);
          }
          
-         newPt.motor = motor;
+         newPt.motor = useMotor;
          waveCorrection = 1.0;
          if (par.withWaves && (w > 0.0))
             waveCorrection = findPolar( twa, w, &wavePolMat, NULL, &bidon) / 100.0;
@@ -274,7 +268,7 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
          sog *= waveCorrection;
          penalty = 0.0;
 
-         if (!motor) {
+         if (!useMotor) {
             if (newPt.amure != isoPt->amure) {
                if (fabs (twa) < 90.0) penalty = par.penalty0 / 3600.0;     // Tack
                else penalty = par.penalty1 / 3600.0;                       // Gybe
@@ -300,9 +294,9 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
          newPt.father = isoPt->id;
          newPt.vmc = 0.0;
          newPt.orthoVmc = 0.0;
-         newPt.sector = 0;
+         // newPt.sector = 0;
 
-         if (par.allwaysSea || isSea(tIsSea, newPt.lat, newPt.lon)) {
+         if (par.allwaysSea || isSeaTolerant(tIsSea, newPt.lat, newPt.lon)) {
             newPt.dd = orthoDist (newPt.lat, newPt.lon, pDest->lat, pDest->lon);
             const double alpha = orthoCap (pOr->lat, pOr->lon, newPt.lat, newPt.lon) - pOrToPDestCog;
             const double newPtToPorDist = orthoDist (newPt.lat, newPt.lon, pOr->lat, pOr->lon);
@@ -311,10 +305,8 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
             if (newPt.vmc > *bestVmc) *bestVmc = newPt.vmc;
             if (newPt.orthoVmc > *biggestOrthoVmc) *biggestOrthoVmc = newPt.orthoVmc;
 
-            if (lenNewL < MAX_SIZE_ISOC)
-               newList [lenNewL++] = newPt;                      // new point added to the isochrone
-            else
-               return -1;
+            if (lenNewL < MAX_SIZE_ISOC) newList [lenNewL++] = newPt;       // new point added to the isochrone
+            else return -1;
          }
       }
    }
@@ -483,6 +475,13 @@ static void statRoute (SailRoute *route) {
       }
       route->totDist += route->t [i-1].od;
       
+      findWindGrib (p.lat, p.lon, par.startTimeInHours + route->t [i-1].time, 
+                    &route->t [i-1].u, &route->t [i-1].v, &route->t [i-1].g, &route->t [i-1].w, 
+                    &route->t [i-1].twd, &route->t [i-1].tws);
+
+      /*double twa = fTwa (route->t[i-1].lCap, route->t[i-1].twd);
+      route-> t [i-1].amure = (twa > 0.0) ? TRIBORD : BABORD; // rewrite because bug
+      */
       // printf ("i = %d, od = %.2lf, tot = %.2lf\n", i, route->t [i-1].od, route->totDist);
       if ((i > 1) && (route-> t [i-1].sail != route-> t [i-2].sail)) {
          route->t [i-1].stamina = fmax (0.0, route->t [i-2].stamina - 100.0 * fPointLoss (STAMINA_SHIP, STAMINA_SAIL, route ->t [i-2].tws, STAMINA_FULL_PACK));
@@ -504,12 +503,8 @@ static void statRoute (SailRoute *route) {
          else if (route->t [i-1].amure == BABORD)
             route->babordDist += route->t [i-1].od;
       }
-      findWindGrib (p.lat, p.lon, par.startTimeInHours + route->t [i-1].time, 
-                    &route->t [i-1].u, &route->t [i-1].v, &route->t [i-1].g, &route->t [i-1].w, 
-                    &route->t [i-1].twd, &route->t [i-1].tws);
-
-      //double twa = fTwa (route->t[i-1].lCap, route->t[i-1].twd);
-      //route->t [i-1].sail = closestInPolar (twa, route->t[i-1].tws * par.xWind, &sailPolMat); 
+      // printf ("i-1: %d, amure: %d, stamina: %.2lf, twa: %.2lf\n", i - 1, route-> t [i-1].amure, route->t [i-1].stamina, twa); 
+      // route->t [i-1].sail = closestInPolar (twa, route->t[i-1].tws * par.xWind, &sailPolMat); 
       route->avrTws  += route->t [i-1].tws;
       route->avrGust += route->t [i-1].g;
       route->avrWave += route->t [i-1].w;
@@ -618,8 +613,7 @@ bool storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest) {
 
 /*! produce string that says if Motor, Tribord, Babord */
 static char *motorTribordBabord (bool motor, int amure, char* str, size_t maxLen) {
-   if (motor)
-      g_strlcpy (str, "Mot", maxLen);
+   if (motor) g_strlcpy (str, "Mot", maxLen);
    else
       if (amure == TRIBORD)
          g_strlcpy (str, "Tri", maxLen);
@@ -639,19 +633,21 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
    double sumAws = 0.0;
    double twa = fTwa (route->t[0].lCap, route->t[0].twd);
    fAwaAws (twa, route->t[0].tws, route->t[0].sog, &awa, &aws);
-   if (maxLen < MAX_SIZE_LINE)
+   if (maxLen < MAX_SIZE_LINE) {
+      fprintf (stderr, "In routeToStr, maxLen too small: %zu\n", maxLen);
       return false;
+   }
 
    fSailName (route->t[0].sail, strSail, sizeof (strSail)),
 
-   g_strlcpy (str, "  No;  WP; Lat;        Lon;         Date-Time;         Sail;  M/T/B;   HDG;\
+   g_strlcpy (str, "  No;  WP; Lat;        Lon;         Date-Time;            Sail;  M/T/B;   HDG;\
     Dist;     SOG;   Twd;   Twa;     Tws;    Gust;   Awa;     Aws;   Waves; Stamina\n", MAX_SIZE_LINE);
    snprintf (line, MAX_SIZE_LINE, \
-      " pOr; %3d; %-12s;%-12s; %s; %5s; %6s; %4d°; %7.2lf; %7.2lf; %4d°; %4.0lf°; %7.2lf; %7.2lf; %4.0lf°; %7.2lf; %7.2lf; %7.2lf\n",\
+      " pOr; %3d; %-12s;%-12s; %s; %-8s; %6s; %4d°; %7.2lf; %7.2lf; %4d°; %4.0lf°; %7.2lf; %7.2lf; %4.0lf°; %7.2lf; %7.2lf; %7.2lf\n",\
       route->t[0].toIndexWp,\
       latToStr (route->t[0].lat, par.dispDms, strLat, sizeof (strLat)),\
       lonToStr (route->t[0].lon, par.dispDms, strLon, sizeof (strLon)),\
-      newDate (route->dataDate, route->dataTime/100 + route->t[0].time, strDate, sizeof (strDate)),\
+      newDate (route->dataDate, route->dataTime/100 + par.startTimeInHours + route->t[0].time, strDate, sizeof (strDate)),\
       strSail, \
       motorTribordBabord (route->t[0].motor, route->t[0].amure, shortStr, SMALL_SIZE),\
       ((int) (route->t[0].oCap + 360) % 360), route->t[0].od, route->t[0].sog,\
@@ -669,12 +665,12 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
          snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Error on latitude or longitude\n", i-1);   
       else
          snprintf (line, MAX_SIZE_LINE, \
-           "%4d; %3d; %-12s;%-12s; %s; %5s; %6s; %4d°; %7.2f; %7.2lf; %4d°; %4.0lf°; %7.2lf; %7.2lf; %4.0lf°; %7.2lf; %7.2lf; %7.2lf\n",\
+           "%4d; %3d; %-12s;%-12s; %s; %-8s; %6s; %4d°; %7.2f; %7.2lf; %4d°; %4.0lf°; %7.2lf; %7.2lf; %4.0lf°; %7.2lf; %7.2lf; %7.2lf\n",\
             i-1,\
             route->t[i].toIndexWp,\
             latToStr (route->t[i].lat, par.dispDms, strLat, sizeof (strLat)),\
             lonToStr (route->t[i].lon, par.dispDms, strLon, sizeof (strLon)),\
-            newDate (route->dataDate, route->dataTime/100 + route->t[i].time, strDate, sizeof (strDate)), \
+            newDate (route->dataDate, route->dataTime/100 + par.startTimeInHours + route->t[i].time, strDate, sizeof (strDate)), \
             fSailName (route->t[i].sail, strSail, sizeof (strSail)), \
             motorTribordBabord (route->t[i].motor, route->t[i].amure, shortStr, SMALL_SIZE), \
             ((int) (route->t[i].oCap  + 360) % 360), route->t[i].od, route->t[i].sog,\
@@ -707,6 +703,104 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
    return true;
 }
 
+/*! return true if pDest can be reached from pA - in less time than dt
+   timeTo give the time to get to pDest 
+   motor true if goal reached with motor 
+   current not considered for this last step
+   penalty not considered because may bug 
+*/
+static inline bool simpleGoalP (const Pp *pA, const Pp *pDest, double t, double dt, double *timeTo,
+                   double *distance, bool *motor, int *amure, int *sail) {
+   static const double epsilon = 0.1; // kn
+   double u, v, gust, w, twd, tws, sog, efficiency;
+   int bidon;
+   const double d = orthoDist (pDest->lat, pDest->lon, pA->lat, pA->lon);
+   *distance = d;
+
+   // Cap (COG) from pA to pDest
+   const double coeffLat = cos(DEG_TO_RAD * ((pA->lat + pDest->lat) * 0.5));
+   const double dLat = pDest->lat - pA->lat;
+   const double dLon = (pDest->lon - pA->lon) * coeffLat;
+   const double cog = RAD_TO_DEG * atan2(dLon, dLat);
+
+   // Wind & waves  at A point 
+   findWindGrib(pA->lat, pA->lon, t, &u, &v, &gust, &w, &twd, &tws);
+
+   // TWA & amure
+   const double twa = fTwa(cog, twd);
+   *amure = (twa > 0) ? TRIBORD : BABORD;
+
+   // Motor if speed with polar under threshold 
+   const bool useMotor = ((maxSpeedInPolarAt(tws * par.xWind, &polMat) < par.threshold) && (par.motorSpeed > 0.0));
+   *motor = useMotor;
+
+   // Day/Night efficiency 
+   if (par.dayEfficiency == par.nightEfficiency) efficiency = par.dayEfficiency;
+   else efficiency = isDay(t, zone.dataDate[0], zone.dataTime[0], pA->lat, pA->lon) ? par.dayEfficiency : par.nightEfficiency;
+   
+   // Speed (kn)
+   int sailChoice = 0;
+   if (useMotor) {
+      sog = par.motorSpeed;
+      *sail = 0;
+   } else {
+      sog = efficiency * findPolar(twa, tws * par.xWind, &polMat, &sailPolMat, &sailChoice);
+      *sail = sailChoice;
+   }
+
+   // Wave Correction
+   if (par.withWaves && w > 0.0 ) {
+      const double waveCorrection = findPolar(twa, w, &wavePolMat, NULL, &bidon);
+      if (waveCorrection > 0.0) sog *= waveCorrection * 0.01;
+   }
+
+   if (sog <= epsilon) {
+      *timeTo = DBL_MAX; // hours
+      return false;
+   }
+   
+   // Time to go to best point in hours
+   *timeTo = d / sog; // NM / (NM/h) = h
+
+   // Reachability test in dt interval time (hours)
+   return (sog * dt) >= d;
+}
+
+/*! true if goal can be reached directly in dt from isochrone 
+  update isoDesc
+  side effect : pDest.father can be modified ! */
+static inline bool simpleGoal (Pp *pDest, Pp *isoList, int len, double t, double dt, double *lastStepDuration, bool *motor, int *amure) {
+   double bestTime = DBL_MAX, time, distance;
+   bool destinationReached = false, locMotor, bestMotor = false;
+   int sail, locAmure, bestAmure = 0;
+
+   for (int k = 0; k < len; k++) {
+      const Pp *curr = &isoList[k];
+      if (!par.allwaysSea && !isSea(tIsSea, curr->lat, curr->lon)) continue;
+      if (simpleGoalP (curr, pDest, t, dt, &time, &distance, &locMotor, &locAmure, &sail)) {
+         destinationReached = true;
+      }
+      if (time < bestTime) {
+         bestTime = time;
+         if (destinationReached) {
+            pDest->father = curr->id;
+            pDest->motor = *motor;
+            pDest->amure = *amure;
+            pDest->sail = sail;
+            bestMotor = locMotor;
+            bestAmure = locAmure;
+         }
+         // if (distance < minDistance) minDistance = distance;
+      }
+   }
+   // isoDesc[nIsoc -1].distance = minDistance;
+   *lastStepDuration = bestTime;
+   *motor = bestMotor;
+   *amure = bestAmure;
+   return destinationReached;
+}
+
+/*! return closest index point to pDest in Isoc, and this point */ 
 /*! return true if pDest can be reached from segment [pA pB] - in less time than dt
    timeTo give the time to get to pDest 
    motor true if goal reached with motor 
@@ -756,9 +850,9 @@ static inline bool goalP (const Pp *pA, const Pp *pB, const Pp *pDest, double t,
    const bool useMotor = ((maxSpeedInPolarAt(tws * par.xWind, &polMat) < par.threshold) && (par.motorSpeed > 0.0));
    *motor = useMotor;
    // 6) Day/Night efficiency
-   struct tm tm0 = gribDateToTm(zone.dataDate[0], zone.dataTime[0] / 100);
    if (par.dayEfficiency == par.nightEfficiency) efficiency = par.dayEfficiency;
-   else efficiency = isDayLight(&tm0, t, bestLat, bestLon) ? par.dayEfficiency : par.nightEfficiency;
+   else efficiency = isDay(t, zone.dataDate[0], zone.dataTime[0], bestLat, bestLon) ? par.dayEfficiency : par.nightEfficiency;
+
 
    // 7) Speed (kn)
    int sailChoice = 0;
@@ -792,8 +886,7 @@ static inline bool goalP (const Pp *pA, const Pp *pB, const Pp *pDest, double t,
 /*! true if goal can be reached directly in dt from isochrone 
   update isoDesc
   side effect : pDest.father can be modified ! */
-static inline bool goal (Pp *pDest, Pp *isoList, int len, double t, double dt,
-                        double *lastStepDuration, bool *motor, int *amure) {
+static inline bool goal (Pp *pDest, Pp *isoList, int len, double t, double dt, double *lastStepDuration, bool *motor, int *amure) {
    double bestTime = DBL_MAX;
    double time, distance;
    bool destinationReached = false;
@@ -804,7 +897,7 @@ static inline bool goal (Pp *pDest, Pp *isoList, int len, double t, double dt,
 
    for (int k = 1; k < len; k++) {
       const Pp *curr = &isoList[k];
-      if (par.allwaysSea || isSea(tIsSea, curr->lat, curr->lon)) {
+      if (par.allwaysSea || isSeaTolerant(tIsSea, curr->lat, curr->lon)) {
          if (goalP (prev, curr, pDest, t, dt, &time, &distance, motor, amure, &sail, &bestFirst)) {
             destinationReached = true;
          }
@@ -815,7 +908,7 @@ static inline bool goal (Pp *pDest, Pp *isoList, int len, double t, double dt,
                pDest->motor = *motor;
                pDest->amure = *amure;
                pDest->sail = sail;
-              }
+            }
          }
          // if (distance < minDistance) minDistance = distance;
       }
@@ -972,8 +1065,8 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
       }
       t += dt;
       // printf ("nIsoc = %d\n", nIsoc);
-      if (goal (pDest, &isocArray [(nIsoc - 1) * MAX_SIZE_ISOC], 
-                isoDesc[nIsoc - 1].size, t, dt, &timeLastStep, &motor, &amure)) {
+      if (simpleGoal (pDest, &isocArray [(nIsoc - 1) * MAX_SIZE_ISOC], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep, &motor, &amure)) {
+      // if (goal (pDest, &isocArray [(nIsoc - 1) * MAX_SIZE_ISOC], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep, &motor, &amure)) {
 
          isoDesc [nIsoc].size = optimize (pOr, pDest, nIsoc, par.opt, tempList, lTempList, &isocArray [nIsoc * MAX_SIZE_ISOC]);
          if (isoDesc [nIsoc].size == 0) { // no Wind ... we copy
@@ -1130,9 +1223,10 @@ void *routingLaunch () {
          route.lastStepWpDuration [i] = lastStepDuration;
          if (ret > 0) {
             wayPointStartTime = par.startTimeInHours + (nIsoc * par.tStep) + lastStepDuration;
-            isocArray [nIsoc * MAX_SIZE_ISOC + 0].lat = wayPoints.t[i].lat;
-            isocArray [nIsoc * MAX_SIZE_ISOC + 0].lon = wayPoints.t[i].lon;
+            isocArray [nIsoc * MAX_SIZE_ISOC + 0].lat = pNext.lat;
+            isocArray [nIsoc * MAX_SIZE_ISOC + 0].lon = pNext.lon;
             isocArray [nIsoc * MAX_SIZE_ISOC + 0].father = pNext.father;
+            isocArray [nIsoc * MAX_SIZE_ISOC + 0].amure = pNext.amure;
             isocArray [nIsoc * MAX_SIZE_ISOC + 0].id = pId++;
             isoDesc [nIsoc].size = 1;
             isoDesc [nIsoc].toIndexWp = (i < (wayPoints.n - 1)) ? i + 1 : -1;
@@ -1326,14 +1420,12 @@ void logReport (int n) {
 bool exportRouteToGpx (const SailRoute *route, const char *fileName) {
    FILE *f;
    char strTime [MAX_SIZE_DATE]; 
-   time_t theTime0 = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]); // epoch Grib Time
    if (! route || ! fileName || fileName [0] == '\0') return false;
 
    if ((f = fopen (fileName, "w")) == NULL) {
       fprintf (stderr, "In exportRouteToGpx: Impossible to write open %s:", fileName);
       return true;
    }
-   theTime0 += offsetLocalUTC ();
    // GPX header
    fprintf (f, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
    fprintf (f, "<gpx version=\"1.1\" creator=\"%s\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n", PROG_NAME);
@@ -1344,9 +1436,7 @@ bool exportRouteToGpx (const SailRoute *route, const char *fileName) {
    for (int i = 0; i < route->n; i++) {
       SailPoint *p = &route->t[i];
       
-      time_t theTime = theTime0 + (time_t)(p->time * 3600.0);               // Add offset time
-      struct tm *utcTime = gmtime (&theTime);                               // UTC conversion
-      strftime (strTime, sizeof (strTime), "%Y-%m-%dT%H:%M:%SZ", utcTime);  // format ISO 8601
+      newDate (route->dataDate, route->dataTime/100 + par.startTimeInHours + p->time, strTime, sizeof (strTime));
 
       fprintf (f, "    <rtept lat=\"%.6f\" lon=\"%.6f\">\n", p->lat, p->lon);
       fprintf (f, "      <name>%d</name>\n", i);

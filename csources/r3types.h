@@ -170,15 +170,15 @@ typedef struct {
 
 /*! Point in isochrone */
 typedef struct {
-   int    id;
-   int    father;
-   int    amure;
-   int    sail;
-   bool   motor;
-   int    sector;
-   int    toIndexWp;
-   double lat;
-   double lon;
+   int    id;        // unique point Id
+   int    father;    // the id of the father of this poiint
+   int    amure;     // amure (TRIBORD, BABORD)
+   int    sail;      // sail used 
+   bool   motor;    // true if used motor
+   //int    sector;
+   int    toIndexWp; // index of Targeted Waypoint (-1 if par.pOr.pDest)
+   double lat;       // latitude in decimal degrees
+   double lon;       // longitude ...
    double dd;        // distance to pDest
    double vmc;       // velocity made on course
    double orthoVmc;  // distance to the middle direction
@@ -199,18 +199,18 @@ typedef struct {
 
 /*! polar Matrix description */
 typedef struct {
-   char jsonHeader [MAX_SIZE_JSON_HEADER];
-   double t [MAX_N_POL_MAT_LINES][MAX_N_POL_MAT_COLS];
-   double maxAll;
-   int    nLine;
-   int    nCol;
-   bool   fromJson;
-   size_t nSail;
+   char   jsonHeader [MAX_SIZE_JSON_HEADER];           // json header if polr info read from json file
+   double t [MAX_N_POL_MAT_LINES][MAX_N_POL_MAT_COLS]; // the table
+   double maxAll;                   // max speed in all polar
+   int    nLine;                    // number of raws includine line 0 (tws)
+   int    nCol;                     // number of colmumn includoing col 0 (twa)
+   bool   fromJson;                 // true id polar information collected from json file
+   size_t nSail;                    // number of sail in polar. 0 is no information
    struct {
-      int id;
-      char name [MAX_SIZE_NAME];
-      double max;
-   } tSail [MAX_N_SAIL]; 
+      int    id;                    // sail ID
+      char   name [MAX_SIZE_NAME];  // sail Name
+      double max;                   // max speed with this sail
+   } tSail [MAX_N_SAIL];            // table of sails
 } PolMat;
 
 /*! Point for way point route */

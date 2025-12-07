@@ -171,52 +171,77 @@ static inline double orthoDist2 (double lat1, double lon1, double lat2, double l
 }
 
 /*! find in polar boat speed or wave coeff */
-static inline double oldFindPolar (double twa, double w, const PolMat *mat) {
+static inline double findPolar (double twa, double w, const PolMat *mat, const PolMat *sailMat, int *sail) {
+   const int nLine = mat->nLine;   // local copy for perf
+   const int nCol = mat->nCol; 
    int l, c, lInf, cInf, lSup, cSup;
+   int bestL, bestC; // for sail
+
    if (twa > 180.0) twa = 360.0 - twa;
    else if (twa < 0.0) twa = -twa;
 
-   for (l = 1; l < mat->nLine; l++) 
+   for (l = 1; l < nLine; l++) {
       if (mat->t [l][0] > twa) break;
-
-   lSup = (l < mat->nLine - 1) ? l : mat->nLine - 1;
+   }
+   lSup = (l < nLine) ? l : nLine - 1;
    lInf = (l == 1) ? 1 : l - 1;
 
-   for (c = 1; c < mat->nCol; c++) 
+   for (c = 1; c < nCol; c++) {
       if (mat->t [0][c] > w) break;
-
-   cSup = (c < mat->nCol - 1) ? c : mat->nCol - 1;
+   }
+   cSup = (c < nCol - 1) ? c : nCol - 1;
    cInf = (c == 1) ? 1 : c - 1;
 
-   double lInf0 = mat->t [lInf][0];
-   double lSup0 = mat->t [lSup][0];
-   
+   // sail
+   if (sailMat != NULL && sailMat->nLine == nLine && sailMat->nCol == nCol) {       // sail requested
+      bestL = ((twa - mat->t [lInf][0]) < (mat->t [lSup][0] - twa)) ? lInf : lSup;  // for sail line
+      bestC = ((w - mat->t [0][cInf]) < (mat->t [0][cSup] - w)) ? cInf : cSup;      // for sail col
+      *sail = sailMat->t [bestL][bestC];                                            // sail found
+   }
+   else *sail = 0;
+
+   const double lInf0 = mat->t [lInf][0];
+   const double lSup0 = mat->t [lSup][0];
    double s0 = interpolate (twa, lInf0, lSup0, mat->t [lInf][cInf], mat->t [lSup][cInf]);
    double s1 = interpolate (twa, lInf0, lSup0, mat->t [lInf][cSup], mat->t [lSup][cSup]);
    return interpolate (w, mat->t [0][cInf], mat->t [0][cSup], s0, s1);
 }
 
-/*! dichotomic search */
-static inline int binarySearch (const double *arr, int size, double val) {
-   int low = 1, high = size;
-   while (low < high) {
-      int mid = (low + high) / 2;
-      if (arr [mid] == val) 
-         return mid + 1;
-      if (arr[mid] > val) 
-         high = mid; // look for value stritly greater than val
-      else 
-         low = mid + 1;
-   }
-   return low;       // low is first index with arr[low] > val
+/*! dichotomic search on column 0 (TWA), using rows [1 .. nLine-1] */
+static inline int binarySearchTwa (const PolMat *mat, double val) {
+    const int nLine = mat->nLine;
+    int low  = 1;
+    int high = nLine;  // sentinel: just after last line
+
+    while (low < high) {
+        int mid = low + (high - low) / 2;
+        double midVal = mat->t[mid][0];   // colonne 0
+        if (midVal > val) high = mid;
+        else low = mid + 1;
+    }
+    return low;
+}
+
+/*! dichotomic search on row 0 (wind speed), using columns [1 .. nCol-1] */
+static inline int binarySearchW (const double *row0, int nCol, double val) {
+    int low  = 1;
+    int high = nCol; // sentinel: just after last col
+
+    while (low < high) {
+        int mid = low + (high - low) / 2;
+        double midVal = row0[mid];
+        if (midVal > val) high = mid;
+        else low = mid + 1;
+    }
+    return low;   // in [1..nCol]
 }
 
 /*! find in polar boat speed or wave coeff and sail number if sailMat != NULL */
-static inline double findPolar (double twa, double w, const PolMat *mat, const PolMat *sailMat, int *sail) {
+/*  Version = findPolar, with W dichotomic search */
+static inline double findPolar1 (double twa, double w, const PolMat *mat, const PolMat *sailMat, int *sail) {
    const int nLine = mat->nLine;   // local copy for perf
    const int nCol = mat->nCol; 
    int l, c, lInf, cInf, lSup, cSup;
-   double s0, s1;
    int bestL, bestC; // for sail
 
    if (twa > 180.0) twa = 360.0 - twa;
@@ -228,48 +253,55 @@ static inline double findPolar (double twa, double w, const PolMat *mat, const P
    lSup = (l < nLine - 1) ? l : nLine - 1;
    lInf = (l == 1) ? 1 : l - 1;
    
-   c = binarySearch (&mat->t [0][0], nCol - 1, w);
-   //printf ("c = %d   ", c); 
-   //for (c = 1; c < nCol; c++) {
-     // if (mat->t [0][c] > w) break;
-   //}
-   //printf ("c = %d\n", c);
+   c = binarySearchW (&mat->t [0][0], nCol, w);
    cSup = (c < nCol - 1) ? c : nCol - 1;
    cInf = (c == 1) ? 1 : c - 1;
 
    // sail
-   if (sailMat != NULL && sailMat->nLine == nLine && sailMat->nCol == nCol) { // sail requested
-      bestL = ((twa - mat->t [lInf][0]) < (mat->t [lInf][0] - twa)) ? lInf : lSup; // for sail
-      bestC = ((w - mat->t [0][cInf]) < (mat->t [0][cSup] - twa)) ? cInf : cSup; // for sail
-      *sail = sailMat->t [bestL][bestC]; // sail found
+   if (sailMat != NULL && sailMat->nLine == nLine && sailMat->nCol == nCol) {       // sail requested
+      bestL = ((twa - mat->t [lInf][0]) < (mat->t [lSup][0] - twa)) ? lInf : lSup;  // for sail line
+      bestC = ((w - mat->t [0][cInf]) < (mat->t [0][cSup] - w)) ? cInf : cSup;      // for sail col
+      *sail = sailMat->t [bestL][bestC];                                            // sail found
    }
    else *sail = 0;
-
-   double lInf0 = mat->t [lInf][0];
-   double lSup0 = mat->t [lSup][0];
-   double invRangeL = 1.0 / (lSup0 - lInf0);
-
-   if (lSup0  == lInf0) s0 = s1 = mat->t [lInf][cInf];
-   else {
-      s0 = mat->t [lInf][cInf] + (twa - lInf0) * (mat->t [lSup][cInf] - mat->t [lInf][cInf]) * invRangeL;
-      s1 = mat->t [lInf][cSup] + (twa - lInf0) * (mat->t [lSup][cSup] - mat->t [lInf][cSup]) * invRangeL;
-   }
-   if (mat->t [0][cInf] == mat->t [0][cSup]) return s0;
-   return s0 + (w - mat->t [0][cInf]) * (s1 - s0) / (mat->t [0][cSup] - mat->t [0][cInf]);
+   
+   const double lInf0 = mat->t [lInf][0];
+   const double lSup0 = mat->t [lSup][0];
+   double s0 = interpolate (twa, lInf0, lSup0, mat->t [lInf][cInf], mat->t [lSup][cInf]);
+   double s1 = interpolate (twa, lInf0, lSup0, mat->t [lInf][cSup], mat->t [lSup][cSup]);
+   return interpolate (w, mat->t [0][cInf], mat->t [0][cSup], s0, s1);
 }
 
-/*! return max speed of boat at tws for all twa */
-static inline double oldMaxSpeedInPolarAt (double tws, const PolMat *mat) {
-   double max = 0.0;
-   double speed;
-   int sail;
-   const int n = mat->nLine; // local storage
+/*! find in polar boat speed or wave coeff and sail number if sailMat != NULL */
+/*  Version = findPolar, with both W and TWA dichotomic search */
+static inline double findPolar2 (double twa, double w, const PolMat *mat, const PolMat *sailMat, int *sail) {
+   const int nLine = mat->nLine;   // local copy for perf
+   const int nCol  = mat->nCol; 
+   int l, c, lInf, cInf, lSup, cSup;
+   int bestL, bestC; // for sail
 
-   for (int i = 1; i < n; i++) {
-      speed = findPolar (mat->t[i][0], tws, mat, NULL, &sail);
-      if (speed > max) max = speed;
-   }
-   return max;
+   if (twa > 180.0)      twa = 360.0 - twa;
+   else if (twa < 0.0)   twa = -twa;
+
+   l = binarySearchTwa(mat, twa);        // retourne [1 .. nLine]
+   lSup = (l < nLine - 1) ? l : (nLine - 1);
+   lInf = (l == 1) ? 1 : (l - 1);
+
+   c = binarySearchW(&mat->t[0][0], nCol, w);
+   cSup = (c < nCol - 1) ? c : nCol - 1;
+   cInf = (c == 1) ? 1 : c - 1;
+
+   if (sailMat != NULL && sailMat->nLine == nLine && sailMat->nCol == nCol) {       // sail requested
+      bestL = ((twa - mat->t[lInf][0]) < (mat->t[lSup][0] - twa)) ? lInf : lSup;   // for sail line
+      bestC = ((w   - mat->t[0][cInf]) < (mat->t[0][cSup] - w))   ? cInf : cSup;   // for sail col
+      *sail = sailMat->t[bestL][bestC];                                            // sail found
+   } else *sail = 0;
+
+   double lInf0 = mat->t[lInf][0];
+   double lSup0 = mat->t[lSup][0];
+   double s0 = interpolate (twa, lInf0, lSup0, mat->t [lInf][cInf], mat->t [lSup][cInf]);
+   double s1 = interpolate (twa, lInf0, lSup0, mat->t [lInf][cSup], mat->t [lSup][cSup]);
+   return interpolate (w, mat->t [0][cInf], mat->t [0][cSup], s0, s1);
 }
 
 /*! return max speed of boat at tws for all twa */
@@ -278,7 +310,7 @@ static inline double maxSpeedInPolarAt (double tws, const PolMat *mat) {
    double s0, s1, speed;
    const int nCol = mat->nCol; 
    const int nLine = mat->nLine; // local storage
-   const int c = binarySearch (&mat->t [0][0], nCol - 1, tws);
+   const int c = binarySearchW (&mat->t [0][0], nCol, tws);
    const int cSup = (c < nCol - 1) ? c : nCol - 1;
    const int cInf = (c == 1) ? 1 : c - 1;
 
@@ -377,5 +409,34 @@ static inline void orthoFindInterPoint(double lat1, double lon1,
    *lonR = lonCanonize(lambdaR * RAD_TO_DEG);
 }
 
+/*! true if day light, false if night
+ *  - t : hours since beginning of GRIB (UTC)
+ *  - dataDate : YYYYMMDD (UTC)
+ *  - dataTime : HHMM (UTC)
+ *  Approximation:
+ *    - local solar hour = GRIB_UTC_time + t + lon/15
+ *    - day if localHour in [6, 18]
+ *    - polar caps: rough month-based rule
+ */
+static inline bool isDay(double t, long dataDate, long dataTime, double lat, double lon) {
+   lon = lonCanonize(lon);
 
+   // Polar case: only beginning og grib considered GRIB
+   int month = (int)((dataDate % 10000) / 100);   // 1..12
 
+   if (lat > 75.0) return (month > 4 && month < 10);          // 5..9 May to December: day 
+   if (lat < -75.0) return !(month > 4 && month < 10);  
+
+   // Start GRIB (UTC) – minutes allways 00
+   int hour0 = (int)(dataTime / 100);    // ex: 1500 -> 15
+
+   // Theorical local geographic hour: UTC + t + lon/15
+   double localHours = hour0 + t + lon / 15.0;
+
+   // convert to [0, 24)
+   localHours = fmod(localHours, 24.0);
+   if (localHours < 0.0) localHours += 24.0;
+
+   // Say if local hour between 6:00 an 18:00
+   return (localHours >= 6.0) && (localHours <= 18.0);
+}

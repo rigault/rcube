@@ -6,8 +6,12 @@ extern void    findCurrentGrib (double lat, double lon, double t, double *uCurr,
 extern char    *gribToStr (const Zone *zone, char *str, size_t maxLen);
 extern void    printGrib (const Zone *zone, const FlowP *gribData);
 extern bool    checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen);
-extern bool    checkGribToStr (char *buffer, size_t maxLen);
+extern bool    checkGribToStr (bool hasCurrentGrib, char *buffer, size_t maxLen);
 extern char    *gribToStrJson (const char *fileName, char *out, size_t maxLen);
+extern float   *buildUVGWarray(const Zone *zone, const char *initialOfNames, const FlowP *gribData, size_t *outNValues);
+extern bool    uvPresentGrib (const Zone *zone);
+extern bool    isPresentGrib (const Zone *zone, const char *name);
+
 
 
 

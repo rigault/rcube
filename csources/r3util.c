@@ -84,8 +84,8 @@ char *newFileNameSuffix (const char *fileName, const char *suffix, char *newFile
       return NULL; // not enough space
    }
    g_strlcpy (newFileName, fileName, baseLen + 1);
-   strcat (newFileName, ".");
-   strcat (newFileName, suffix);
+   strlcat (newFileName, ".", maxLen);
+   strlcat (newFileName, suffix, maxLen);
 
    return newFileName;
 }
@@ -177,6 +177,7 @@ bool isNumber (const char *name) {
 
 /*! translate str in double for latitude longitude */
 double getCoord (const char *str, double minLimit, double maxLimit) {
+   if (str == NULL) return 0.0;
    double deg = 0.0, min = 0.0, sec = 0.0;
    bool minFound = false;
    const char *neg = "SsWwOo";            // value returned is negative if south or West
@@ -242,18 +243,144 @@ char *buildRootName(const char *fileName, char *rootName, size_t maxLen) {
    return rootName;
 }
 
-/*! return tm struct equivalent to date hours found in grib (UTC time) */
+/*! convert epoch time to string with or without seconds */
+char *epochToStr (time_t t, bool seconds, char *str, size_t maxLen) {
+   struct tm *utc = gmtime (&t);
+   if (!utc) return NULL;
+   if (seconds)
+      snprintf (str, maxLen, "%04d-%02d-%02d %02d:%02d:%02d", 
+         utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
+         utc->tm_hour, utc->tm_min, utc->tm_sec);
+   else
+      snprintf (str, maxLen, "%04d-%02d-%02d %02d:%02d", 
+         utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
+         utc->tm_hour, utc->tm_min);
+      
+   return str;
+}
+
+/*! return offset Local UTC in seconds */
+double offsetLocalUTC (void) {
+   time_t now;
+   time (&now);                           
+   struct tm localTm = *localtime (&now);
+   struct tm utcTm = *gmtime (&now);
+   time_t localTime = mktime (&localTm);
+   time_t utcTime = mktime (&utcTm);
+   double offsetSeconds = difftime (localTime, utcTime);
+   if (localTm.tm_isdst > 0) offsetSeconds += 3600;  // add one hour if summer time
+   return offsetSeconds;
+}
+
+/*! return str representing grib date */
+char *gribDateTimeToStr (long date, long time, char *str, size_t maxLen) {
+   const int year = date / 10000;
+   const int mon = (date % 10000) / 100;
+   const int day = date % 100;
+   const int hour = time / 100;
+   const int min = time % 100;
+   snprintf (str, maxLen, "%04d/%02d/%02d %02d:%02d", year, mon, day, hour, min);
+   return str;
+}
+
+/*! return tm struct equivalent to date hours found in grib (UTC time) 
 struct tm gribDateToTm (long intDate, double nHours) {
    struct tm tm0 = {0};
    tm0.tm_year = (intDate / 10000) - 1900;
    tm0.tm_mon = ((intDate % 10000) / 100) - 1;
    tm0.tm_mday = intDate % 100;
-   tm0.tm_isdst = -1;                     // avoid adjustments with hours summer winter
+   tm0.tm_isdst = -1;                     
    const int totalMinutes = (int)(nHours * 60);
    tm0.tm_min += totalMinutes;            // adjust tm0 struct (manage day, mon year overflow)
    mktime (&tm0);  
    return tm0;
+}*/
+
+struct tm gribDateToTm(long intDate, double nHours) {
+    struct tm tm0 = {0};
+
+    tm0.tm_year = (int)(intDate / 10000) - 1900;
+    tm0.tm_mon  = (int)((intDate % 10000) / 100) - 1;
+    tm0.tm_mday = (int)(intDate % 100);
+
+    int totalMinutes = (int)lround(nHours * 60.0);
+    int days         = totalMinutes / (24 * 60);
+    int minutesDay   = totalMinutes % (24 * 60);
+
+    tm0.tm_mday += days;
+    tm0.tm_hour  = minutesDay / 60;
+    tm0.tm_min   = minutesDay % 60;
+    tm0.tm_isdst = 0;  // UTC → no DST
+
+    // Normalize pure UTC pur
+    time_t t = timegm(&tm0);
+    struct tm out;
+    gmtime_r(&t, &out);
+    return out;
 }
+
+/*! retrurn true if year is bissextile  */
+static inline bool bissextile (int year) { /* */
+   return (((year % 4 == 0) && (year % 100 != 0)) || (year % 400 == 0));
+}
+
+/*! return year, month (1..12), day, hour, minutes from Grib dataDate and hours */
+static bool getYMDHM (long dataDate, double nHours, int *yyyy, int *mm, int *dd, int *hh, int *min) {
+   if (nHours < 0.0) {
+      fprintf(stderr, "getYMDHM: nHours must be >= 0 (%.3f)\n", nHours);
+      return false;
+   }
+   static const int daysInMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+
+   int year  = (int)(dataDate / 10000);
+   int month = (int)((dataDate % 10000) / 100) - 1;  // 0..11
+   int day   = (int)(dataDate % 100);
+
+   long totalMinutes = lround(nHours * 60.0);
+   int addDays   = (int)(totalMinutes / (60 * 24));
+   int hour  = (int)((totalMinutes / 60) % 24);
+   int minute   = (int)(totalMinutes % 60);
+
+   day  += addDays;
+
+   if (minute >= 60) {
+      hour += minute / 60;
+      minute = minute % 60;
+   }
+   if (hour >= 24) {
+      day += hour / 24;
+      hour = hour % 24;
+   }
+
+   for (;;) {
+      int dim = daysInMonth[month];
+      if (month == 1 && bissextile(year)) dim += 1;
+      if (day <= dim) break;
+      day -= dim;
+      month++;
+      if (month >= 12) {
+         month = 0;
+         year++;
+      }
+   }
+   *yyyy = year;
+   *mm   = month + 1;  // 1..12 for caller
+   *dd   = day;
+   *hh   = hour;
+   *min  = minute;
+   return true;
+}
+
+
+/*! return date and time using ISO notation after adding myTime (hours) to the Date */
+char *otherNewDate (long dataDate, double nHours, char *res, size_t maxLen) {
+   //struct tm tm0 = gribDateToTm (intDate, nHours);
+   int yyyy = 0, mm = 0, dd = 0 , hh = 0, min = 0;
+   getYMDHM (dataDate, nHours, &yyyy, &mm, &dd, &hh, &min);
+   snprintf (res, maxLen, "%4d-%02d-%02d %02d:%02d", yyyy, mm, dd, hh, min);
+   return res;
+}
+
 
 /*! return date and time using ISO notation after adding myTime (hours) to the Date */
 char *newDate (long intDate, double nHours, char *res, size_t maxLen) {
@@ -276,6 +403,38 @@ char *newDateWeekDayVerbose (long intDate, double nHours, char *res, size_t maxL
    strftime (res, maxLen, "%A, %b %d at %H:%M UTC", &tm0);
    return res;
 }
+
+/*! convert long date/time from GRIB to time_t (UTC, via timegm) */
+time_t gribDateTimeToEpoch(long date, long hhmm) {
+    struct tm tm_utc = {0}; // UTC time with tm_utc.tm_isdst = 0;
+    tm_utc.tm_year = (int)(date / 10000) - 1900;          // YYYY -> tm_year
+    tm_utc.tm_mon  = (int)((date % 10000) / 100) - 1;     // MM   -> 0..11
+    tm_utc.tm_mday = (int)(date % 100);                   // DD
+    tm_utc.tm_hour = (int)(hhmm / 100);                   // HH
+    tm_utc.tm_min  = (int)(hhmm % 100);                   // MM
+
+    return timegm(&tm_utc);
+}
+
+/*! calculate difference in hours between departure time in UTC and time 0 */
+double getDepartureTimeInHour (struct tm *startUtc) {
+    const time_t t0 = gribDateTimeToEpoch(zone.dataDate[0], zone.dataTime[0]);
+    if (t0 == (time_t)-1) return NAN;
+    const time_t tStart = timegm(startUtc);   // interprétation en UTC
+    if (tStart == (time_t)-1) return NAN;
+    return difftime(tStart, t0) / 3600.0;
+}
+
+/*! convert hours in string with days, hours, minutes */
+char *durationToStr (double duration, char *res, size_t maxLen) {
+   const int nDays = duration / 24;
+   const int nHours = fmod (duration, 24.0);
+   const int nMin = 60 * fmod (duration, 1.0);
+   if (nDays == 0) snprintf (res, maxLen, "%02d:%02d", nHours, nMin); 
+   else snprintf (res, maxLen, "%d Days %02d:%02d", nDays, nHours, nMin);
+   // printf ("Duration: %.2lf hours, equivalent to %d days, %02d:%02d\n", duration, nDays, nHours, nMin);
+   return res;
+} 
 
 /*! convert lat to str according to type */
 char *latToStr (double lat, int type, char* str, size_t maxLen) {
@@ -321,17 +480,6 @@ char *lonToStr (double lon, int type, char *str, size_t maxLen) {
    return str;
 }
 
-/*! convert hours in string with days, hours, minutes */
-char *durationToStr (double duration, char *res, size_t maxLen) {
-   const int nDays = duration / 24;
-   const int nHours = fmod (duration, 24.0);
-   const int nMin = 60 * fmod (duration, 1.0);
-   if (nDays == 0) snprintf (res, maxLen, "%02d:%02d", nHours, nMin); 
-   else snprintf (res, maxLen, "%d Days %02d:%02d", nDays, nHours, nMin);
-   // printf ("Duration: %.2lf hours, equivalent to %d days, %02d:%02d\n", duration, nDays, nHours, nMin);
-   return res;
-} 
-
 /*! read issea file and fill table tIsSea */
 bool readIsSea (const char *fileName) {
    FILE *f = NULL;
@@ -357,148 +505,6 @@ bool readIsSea (const char *fileName) {
    // printf ("isSea file     : %s, Size: %d, nIsea: %d, Proportion sea: %lf\n", fileName, i, nSea, (double) nSea/ (double) i); 
    return true;
 } 
-
-/*! convert epoch time to string with or without seconds */
-char *epochToStr (time_t t, bool seconds, char *str, size_t maxLen) {
-   struct tm *utc = gmtime (&t);
-   if (seconds)
-      snprintf (str, maxLen, "%d-%02d-%02d %02d:%02d:%02d", 
-         utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
-         utc->tm_hour, utc->tm_min, utc->tm_sec);
-   else
-      snprintf (str, maxLen, "%d-%02d-%02d %02d:%02d", 
-         utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
-         utc->tm_hour, utc->tm_min);
-      
-   return str;
-}
-
-/*! return offset Local UTC in seconds */
-double offsetLocalUTC (void) {
-   time_t now;
-   time (&now);                           
-   struct tm localTm = *localtime (&now);
-   struct tm utcTm = *gmtime (&now);
-   time_t localTime = mktime (&localTm);
-   time_t utcTime = mktime (&utcTm);
-   double offsetSeconds = difftime (localTime, utcTime);
-   if (localTm.tm_isdst > 0) offsetSeconds += 3600;  // add one hour if summer time
-   return offsetSeconds;
-}
-
-/*! return str representing grib date */
-char *gribDateTimeToStr (long date, long time, char *str, size_t maxLen) {
-   const int year = date / 10000;
-   const int mon = (date % 10000) / 100;
-   const int day = date % 100;
-   const int hour = time / 100;
-   const int min = time % 100;
-   snprintf (str, maxLen, "%4d/%02d/%02d %02d:%02d", year, mon, day, hour, min);
-   return str;
-}
-
-/*! convert long date found in grib file in seconds time_t */
-time_t wronggribDateTimeToEpoch (long date, long time) {
-   struct tm tm0 = {0};
-   tm0.tm_year = (date / 10000) - 1900;
-   tm0.tm_mon = ((date % 10000) / 100) - 1;
-   tm0.tm_mday = date % 100;
-   tm0.tm_hour = time / 100;
-   tm0.tm_min = time % 100;
-   tm0.tm_isdst = -1;                        // avoid adjustments with hours summer winter
-   return mktime (&tm0);                                 
-}
-
-/*! convert long date found in grib file in seconds time_t */
-/*time_t gribDateTimeToEpoch (long date, long time) {
-   int year = date / 10000;
-   int month = (date % 10000) / 100;
-   int day = date % 100;
-   int hour = time / 100;
-   int minute = time % 100;
-
-   GDateTime *dt = g_date_time_new_utc(year, month, day, hour, minute, 0.0);
-   if (!dt) {
-     fprintf (stderr, "Invalid date/time: %04d-%02d-%02d %02d:%02d UTC",
-              year, month, day, hour, minute);
-     return (time_t)-1;
-   }
-
-   time_t t = g_date_time_to_unix (dt);
-   g_date_time_unref (dt);
-   return t;
-}*/
-
-/*! convert long date found in grib file in seconds time_t (UTC, via timegm) */
-time_t gribDateTimeToEpoch (long date, long timehhmm) {
-   const int year   = (int)(date / 10000);
-   const int month  = (int)((date % 10000) / 100);
-   const int day    = (int)(date % 100);
-   const int hour   = (int)(timehhmm / 100);
-   const int minute = (int)(timehhmm % 100);
-
-   /* garde-fous rapides */
-   if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31 ||
-      hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-      fprintf(stderr, "Invalid date/time: %04d-%02d-%02d %02d:%02d UTC\n",
-             year, month, day, hour, minute);
-      return (time_t)-1;
-   }
-
-   struct tm tm_utc;
-   memset(&tm_utc, 0, sizeof tm_utc);
-   tm_utc.tm_year  = year - 1900;
-   tm_utc.tm_mon   = month - 1;
-   tm_utc.tm_mday  = day;
-   tm_utc.tm_hour  = hour;
-   tm_utc.tm_min   = minute;
-   tm_utc.tm_sec   = 0;
-   tm_utc.tm_isdst = 0;   // UTC 
-
-   const time_t t = timegm(&tm_utc);  
-   if (t == (time_t)-1) {
-      fprintf(stderr, "Invalid date/time: %04d-%02d-%02d %02d:%02d UTC\n",
-             year, month, day, hour, minute);
-      return (time_t)-1;
-   }
-
-   // strict validation
-   struct tm back;
-   if (!gmtime_r(&t, &back) ||
-      back.tm_year != year - 1900 || back.tm_mon != month - 1 ||
-      back.tm_mday != day || back.tm_hour != hour || back.tm_min != minute) {
-      fprintf(stderr, "Invalid date/time: %04d-%02d-%02d %02d:%02d UTC\n",
-             year, month, day, hour, minute);
-      return (time_t)-1;
-   }
-   return t;
-}
-
-/*! calculate difference in hours between departure time and time 0 */
-double getDepartureTimeInHour (struct tm *start) {
-   const time_t theTime0 = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]);
-   start->tm_isdst = -1;                                       // avoid adjustments with hours summer winter
-   const time_t startTime = mktime (start);                          
-   return (startTime - theTime0)/3600.0;                       // calculated in hours
-} 
-
-/*! find name, lat and lon with format: lat, lon or [lat, lon */
-bool analyseCoord (const char *strCoord, double *lat, double *lon) {
-   if (!strCoord || !lat || !lon) return false; 
-   char *pt = NULL;
-   char *str = g_strdup (strCoord);
-   g_strstrip (str);
-   // be careful with '-' separator: ambiguity if -45-60
-   if (isNumber (str) && ((pt = strchr (str, ',')) || (pt = strchr (str, '-'))) && isNumber (pt + 1)) {
-      *lon = getCoord (pt + 1, MIN_LON, MAX_LON);
-      *pt = '\0'; // cut str in two parts
-      *lat = getCoord (str, MIN_LAT, MAX_LAT);
-      free (str);
-      return true;
-   }
-   free (str);
-   return false;
-}
 
 /*! fill str with polygon information */
 /*! return true if p is in polygon po
@@ -555,7 +561,7 @@ static void forbidZoneAdd (char *line, int n) {
    forbidZones [n].points[idx].lon = getCoord (lonToken, MIN_LON, MAX_LON);
    idx = 1;
    while ((idx < MAX_SIZE_FORBID_ZONE) && ((latToken = strtok (NULL, ",")) != NULL) && ((lonToken = strtok (NULL, "]")) != NULL)) {
-      printf ("latToken: %s, lonToken: %s\n", latToken, lonToken);
+      // printf ("latToken: %s, lonToken: %s\n", latToken, lonToken);
       forbidZones [n].points[idx].lat = getCoord (latToken, MIN_LAT, MAX_LAT);  
       forbidZones [n].points[idx].lon = getCoord (lonToken, MIN_LON, MAX_LON);
       idx += 1;
@@ -565,10 +571,10 @@ static void forbidZoneAdd (char *line, int n) {
 
 /*! read parameter file and build par struct */
 bool readParam (const char *fileName, bool initDisp) {
-   bool inWp = false, inForbidZone = false, inCompetitor = true;
+   bool inWp = false, inForbidZone = false, inCompetitor = false;
    FILE *f = NULL;
    char *pt = NULL;
-   char str [MAX_SIZE_LINE];
+   char str [MAX_SIZE_LINE], strLat [MAX_SIZE_NAME] = "", strLon [MAX_SIZE_NAME] = "";
    char buffer [MAX_SIZE_TEXT];
    char *pLine = &buffer [0];
    memset (&par, 0, sizeof (Par));
@@ -604,7 +610,7 @@ bool readParam (const char *fileName, bool initDisp) {
 
    while (fgets (pLine, sizeof (buffer), f) != NULL ) {
       str [0] = '\0';
-      while (isspace (*pLine)) pLine++;
+      g_strstrip (pLine);
       // printf ("%s", pLine);
       if ((!*pLine) || *pLine == '#' || *pLine == '\n') continue;
       if ((pt = strchr (pLine, '#')) != NULL)                    // comment elimination
@@ -612,6 +618,7 @@ bool readParam (const char *fileName, bool initDisp) {
       if (strncmp (pLine, "-", 1) != 0) inWp = inForbidZone = inCompetitor = false;
 
       if (strncmp (pLine, "---", 3) == 0) {}                     // ignore for  yaml compatibility
+      // if (strncmp (pLine, "...", 3) == 0) break;                 // end for yaml compatibility
       else if (sscanf (pLine, "DESC:%255[^\n]", par.description) > 0)
          g_strstrip (par.description);
       else if (sscanf (pLine, "ALLWAYS_SEA:%d", &par.allwaysSea) > 0);
@@ -620,48 +627,48 @@ bool readParam (const char *fileName, bool initDisp) {
          buildRootName (str, par.poiFileName, sizeof (par.poiFileName));
       else if (sscanf (pLine, "PORT:%255s", str) > 0)
          buildRootName (str, par.portFileName, sizeof (par.portFileName));
-      else if (sscanf (pLine, "POR: [%255[^]]" , str)) {
-         if (analyseCoord (str , &par.pOr.lat, &par.pOr.lon)) {
-            //par.pOr.lon = lonCanonize (par.pOr.lon);
-            par.pOr.id = par.pOr.father = -1;
-         }
-      } 
-      else if (sscanf (pLine, "PDEST: [%255[^]]" , str)) {
-         if (analyseCoord (str, &par.pDest.lat, &par.pDest.lon)) {
-            //par.pDest.lon = lonCanonize (par.pDest.lon);
-            par.pDest.id = par.pDest.father = 0;
-         }
+
+      else if (sscanf(pLine, "POR: [%63[^,], %63[^]]", strLat, strLon) == 2) { // POR: [lat, lon]
+         par.pOr.lat = getCoord (strLat, MIN_LAT, MAX_LAT);
+         par.pOr.lon = getCoord (strLon, MIN_LON, MAX_LON);
+         par.pOr.id = par.pOr.father = -1;
       }
+
+      else if (sscanf(pLine, "PDEST: [%63[^,], %63[^]]", strLat, strLon) == 2) { // PDEST: [lat, lon]
+         par.pDest.lat = getCoord (strLat, MIN_LAT, MAX_LAT);
+         par.pDest.lon = getCoord (strLon, MIN_LON, MAX_LON);
+         par.pDest.id = par.pDest.father = 0;
+      }
+
       else if  (strstr (pLine, "WP:") != NULL) inWp = true;  // format is WP: then -
-      else if (inWp &&  (sscanf (pLine, "- [%255[^]]", str))) {
+      else if (inWp && (sscanf (pLine, "- [%63[^,], %63[^]]", strLat, strLon) == 2)) { // - [lat, lon]
          if (wayPoints.n > MAX_N_WAY_POINT)
             fprintf (stderr, "In readParam, Error: number of wayPoints exceeded; %d\n", MAX_N_WAY_POINT);
          else {
-            if (analyseCoord (str, &wayPoints.t [wayPoints.n].lat, &wayPoints.t [wayPoints.n].lon)) {
-               wayPoints.n += 1;
-            }
+            wayPoints.t [wayPoints.n].lat = getCoord (strLat, MIN_LAT, MAX_LAT);
+            wayPoints.t [wayPoints.n].lon = getCoord (strLon, MIN_LAT, MAX_LAT);
+            wayPoints.n += 1;
          }
       }
-      else if  (strstr (pLine, "COMPETITORS:") != NULL) inCompetitor = true;  // format is COMPETITORS: then -
+      else if  (strstr (pLine, "COMPETITORS:") != NULL) inCompetitor = true;   // format is COMPETITORS: then -
       else if (inCompetitor && 
-         (sscanf (pLine, "- [%d, %255[^]]", &competitors.t [competitors.n].colorIndex, str) == 2) && 
-         ((pt = strrchr (str, ',' )) != NULL)) {
-
+               (sscanf (pLine, "- [%d, %63[^,], %63[^,], %63[^]]",             // - [color, lat, lon, name]
+                    &competitors.t [competitors.n].colorIndex, strLat, strLon, competitors.t [competitors.n].name) == 4)
+              ) {
          if (competitors.n > MAX_N_COMPETITORS)
             fprintf (stderr, "In readParam, Error number of competitors exceeded; %d\n", MAX_N_COMPETITORS);
          else {
-            strlcpy (competitors.t [competitors.n].name, pt + 1, MAX_SIZE_NAME);
             g_strstrip (competitors.t [competitors.n].name);
-            if (analyseCoord (str, &competitors.t [competitors.n].lat, &competitors.t [competitors.n].lon)) {
-               if (competitors.n == 0) {
-                  par.pOr.lat = competitors.t [0].lat;
-                  par.pOr.lon = competitors.t [0].lon;
-               }
-               competitors.n += 1;
+            competitors.t [competitors.n].lat = getCoord (strLat, MIN_LAT, MAX_LAT);
+            competitors.t [competitors.n].lon = getCoord (strLon, MIN_LAT, MAX_LAT);
+            if (competitors.n == 0) {
+               par.pOr.lat = competitors.t [0].lat;
+               par.pOr.lon = competitors.t [0].lon;
             }
-            else fprintf (stderr, "In readParam, COMPETITORS: Coordinates Error: %s\n", str);
+            competitors.n += 1;
          }
       }
+
       else if (sscanf (pLine, "POR_NAME:%255s", par.pOrName) > 0);
       else if (sscanf (pLine, "PDEST_NAME:%255s", par.pDestName) > 0);
       else if (sscanf (pLine, "GRIB_RESOLUTION:%lf", &par.gribResolution) > 0);
@@ -791,7 +798,7 @@ bool readParam (const char *fileName, bool initDisp) {
          par.nNmea += 1;
       }
       else fprintf (stderr, "In readParam, Error Cannot interpret: %s\n", pLine);
-   }
+   } // end while
    if (par.mailPw [0] != '\0') {
       par.storeMailPw = true;
    }
@@ -967,27 +974,10 @@ bool writeParam (const char *fileName, bool header, bool password, bool yaml) {
    }
    if (password)
       fprintf (f, "MAIL_PW:          %s\n", par.mailPw);
+   if (yaml) fprintf (f, "...\n");
 
    fclose (f);
    return true;
-}
-
-/*! true if day light, false if night 
-   simplified : day if local theoric time is >= 6 and <= 18 
-   t is the time in hours from beginning of grib specified in tm0 */
-bool isDayLight (struct tm *tm0, double t, double lat, double lon) {
-    lon = lonCanonize(lon);
-
-    // Ajouter les heures/minutes directement
-    tm0->tm_hour += (int)(t + lon / 15.0);  
-    tm0->tm_min  += (int)((t + lon / 15.0) * 60) % 60;
-
-    mktime (tm0);  // Ajustement des débordements (ex : passage à un autre jour)
- 
-    if (lat > 75.0) return (tm0->tm_mon > 3 && tm0->tm_mon < 9);
-    if (lat < -75.0) return !(tm0->tm_mon > 3 && tm0->tm_mon < 9);
-    
-    return (tm0->tm_hour >= 6) && (tm0->tm_hour <= 18);
 }
 
 /*! for virtual Regatta. return penalty in seconds for manoeuvre type. Depend on tws and energy. Give also sTamina coefficient */
@@ -1114,34 +1104,38 @@ double monotonic (void) {
 
 /*! read all text file in buffer. Allocate memory */
 char *readTextFile (const char *fileName, char *errMessage, size_t maxLen) {
-   FILE *f;
+   FILE *f = fopen(fileName, "rb");
+   if (!f) {
+      snprintf(errMessage, maxLen, "In readFile: Error Cannot open: %s\n", fileName);
+      return NULL;
+   }
    struct stat st;
-   if (stat (fileName, &st) != 0){
-      snprintf (errMessage, maxLen, "In readFile: cannot stat %s\n", fileName);
+   if (fstat(fileno(f), &st) != 0) {
+      snprintf(errMessage, maxLen, "In readFile: cannot stat %s\n", fileName);
+      fclose(f);
       return NULL;
    }
-   const size_t bufferSize = (size_t) st.st_size + 1;
-   char *str = (char *) malloc (bufferSize);
-   if (str == NULL) {
-      snprintf (errMessage, maxLen, "In readFile: Malloc failed: %zu", bufferSize);
+   if (st.st_size < 0) {
+      snprintf(errMessage, maxLen, "In readFile: negative file size?\n");
+      fclose(f);
       return NULL;
    }
-   char *buffer = (char *) malloc (bufferSize);
-   if (buffer == NULL) {
-      snprintf (errMessage, maxLen, "In readFile: Malloc failed: %zu", bufferSize);
-      free (str);
+   size_t fileSize = (size_t)st.st_size;
+   char *buffer = malloc(fileSize + 1);  // +1 pour '\0'
+   if (!buffer) {
+      snprintf(errMessage, maxLen, "In readFile: Malloc failed: %zu\n", fileSize + 1);
+      fclose(f);
       return NULL;
    }
-   buffer [0] = '\0';
-   if ((f = fopen (fileName, "r")) == NULL) {
-      snprintf (errMessage, maxLen, "In readFile: Error Cannot open: %s\n", fileName);
-      free (str);
-      free (buffer);
+   size_t nread = fread(buffer, 1, fileSize, f);
+   if (nread != fileSize && ferror(f)) {
+      snprintf(errMessage, maxLen, "In readFile: fread error\n");
+      free(buffer);
+      fclose(f);
       return NULL;
    }
-   while (fgets (str, bufferSize, f) != NULL) strlcat (buffer, str, st.st_size);
-   fclose (f);
-   free (str);
+   buffer[nread] = '\0';
+   fclose(f);
    return buffer;
 }
 
@@ -1151,7 +1145,7 @@ bool readMarkCSVToJson (const char *fileName, char *out, size_t maxLen) {
    FILE *f = NULL;
    char buffer [MAX_SIZE_TEXT_FILE];
    char str [MAX_SIZE_TEXT];
-   char *what, *name, *id, *coord0, *coord1, *status, *end;
+   char *what, *name, *id, *coord0, *coord1, *status, *end, *ptLon;
    double lat0 = 0.0, lon0 = 0.0, lat1 = 0.0, lon1 = 0.0;
    char empty [] = "";
 
@@ -1173,8 +1167,15 @@ bool readMarkCSVToJson (const char *fileName, char *out, size_t maxLen) {
       coord1 = t[4] ? g_strstrip(t[4]) : empty;
       status = t[5] ? g_strstrip(t[5]) : empty;
 
-      analyseCoord (coord0, &lat0, &lon0);
-      analyseCoord (coord1, &lat1, &lon1);
+      ptLon = coord0 ? strchr (coord0, '-') : NULL;
+      if (ptLon) *ptLon = '\0'; // cut coord end eliminate '-'
+      lat0 = getCoord (coord0, MIN_LAT, MAX_LAT);
+      lon0 = ptLon ? getCoord (ptLon + 1, MIN_LON, MAX_LON) : 0.0;
+
+      ptLon = coord1 ? strchr (coord1, '-') : NULL;
+      if (ptLon) *ptLon = '\0'; // cut coord end eliminate '-'
+      lat1 = getCoord (coord1, MIN_LAT, MAX_LAT);
+      lon1 = ptLon ? getCoord (ptLon + 1, MIN_LON, MAX_LON) : 0.0;
 
       snprintf(str, sizeof str,
          "  {\"what\": \"%s\", \"name\": \"%s\", \"id\": \"%s\", "

@@ -38,16 +38,19 @@ static bool strtodNew(const char *str, double *v){
 /*! Check polar and return false and a report if something to say */
 static bool polarCheck (PolMat *mat, char *report, size_t maxLen) {
    double maxInRow, maxInCol;
+   char str [MAX_SIZE_LINE];
    int cMax, rowMax;
    report [0] ='\0';
    for (int c = 1; c < mat->nCol; c += 1) {  // check values in line 0 progress
       if (mat->t [0][c] < mat->t[0][c-1]) {
-         snprintf (report, maxLen, "Report: values in row 0 should progress, col: %d\n", c);
+         snprintf (str, sizeof str, "Values in row 0 should progress, col: %d; ", c);
+         g_strlcat (report, str, maxLen);
       }
    }
    for (int row = 1; row < mat->nLine; row += 1) {
       if ((mat->t [row][0] < mat->t[row-1] [0])) {
-         snprintf (report, maxLen, "Report: values in col 0 should progress, row: %d\n", row);
+         snprintf (str, sizeof str, "Values in col 0 should progress, row: %d; ", row);
+         g_strlcat (report, str, maxLen);
       }
    }
    for (int row = 1; row < mat->nLine; row += 1) {
@@ -61,12 +64,16 @@ static bool polarCheck (PolMat *mat, char *report, size_t maxLen) {
       }
       for (int c = 2; c <= cMax; c += 1) {
          if (mat->t [row][c] < mat->t[row][c-1]) {
-            snprintf (report, maxLen, "Report: values in row: %d should progress at col: %d up to maxInRow: %.2lf\n", row, c, maxInRow);
+            snprintf (str, sizeof str, "Values in row: %d should progress at col: %d up to maxInRow: %.2lf; ", row, c, maxInRow);
+            g_strlcat (report, str, maxLen);
+            break;
          }
       }
       for (int c = cMax + 1; c < mat->nCol; c += 1) {
          if ((mat->t [row][c] > mat->t[row][c-1])) {
-            snprintf (report, maxLen, "Report: values in row: %d should regress at col: %d after maxInRow: %.2lf\n", row, c, maxInRow);
+            snprintf (str, sizeof str, "Values in row: %d should regress at col: %d after maxInRow: %.2lf; ", row, c, maxInRow);
+            g_strlcat (report, str, maxLen);
+            break;
          }
       }
    }
@@ -82,12 +89,16 @@ static bool polarCheck (PolMat *mat, char *report, size_t maxLen) {
       }
       for (int row = 2; row <= rowMax; row += 1) {
          if (mat->t [row][c] < mat->t[row-1][c]) {
-            snprintf (report, maxLen, "Report: values in col: %d should progress at row: %d up to maxInCol: %.2lf\n", c, row, maxInCol);
+            snprintf (str, sizeof str, "Values in col: %d should progress at row: %d up to maxInCol: %.2lf; ", c, row, maxInCol);
+            g_strlcat (report, str, maxLen);
+            break;
          }
       }
       for (int row = rowMax + 1; row < mat->nLine; row += 1) {
          if ((mat->t [row][c] > mat->t[row-1][c])) {
-            snprintf (report, maxLen, "Report: values in col: %d should regress at row: %d after maxInCol: %.2lf\n", c, row, maxInCol);
+            snprintf (str, sizeof str, "Values in col: %d should regress at row: %d after maxInCol: %.2lf; ", c, row, maxInCol);
+            g_strlcat (report, str, maxLen);
+            break;
          }
       }
    }
@@ -123,7 +134,7 @@ static bool readPolarCsv (const char *fileName, PolMat *mat, char *errMessage, s
             if ((mat->nLine != 0) && (c != 0)) max = fmax (max, v);
             c += 1;
          }
-         if ((mat->nLine == 0) && (c == 0))
+         if ((mat->nLine == 0) && (c == 0))  // whatever accepted including not number at c == l == 0
             c += 1;
          strToken = strtok (NULL, CSV_SEP_POLAR);
       }
@@ -374,7 +385,7 @@ static bool readPolarJson (const char *fileName, PolMat *polMat, PolMat *sailPol
 }
 
 /*! Launch readPolarCsv or readPolarJson according to type */
-bool readPolar (bool check, const char *fileName, PolMat *mat, PolMat *sailPolMat, char *errMessage, size_t maxLen) {
+bool readPolar (const char *fileName, PolMat *mat, PolMat *sailPolMat, char *errMessage, size_t maxLen) {
    char sailPolFileName [MAX_SIZE_NAME] = "";
    char bidon [MAX_SIZE_LINE];
    bool res = false;
@@ -401,12 +412,11 @@ bool readPolar (bool check, const char *fileName, PolMat *mat, PolMat *sailPolMa
          else mat->nSail = 1;
       }
    }
-   if (check) polarCheck (mat, errMessage, maxLen);
    return res;
 }
 
 /*! write polar information in string Json format */
-char *polToStrJson (const char *fileName, const char *objName, char *out, size_t maxLen) {
+char *polToStrJson (bool report, const char *fileName, const char *objName, char *out, size_t maxLen) {
    char polarName [MAX_SIZE_FILE_NAME];
    char errMessage [MAX_SIZE_LINE];
    char str [MAX_SIZE_TEXT] = "";;
@@ -414,13 +424,13 @@ char *polToStrJson (const char *fileName, const char *objName, char *out, size_t
    buildRootName (fileName, polarName, sizeof (polarName));
    out [0] = '\0';
 
-   if (!readPolar (false, polarName, &mat, &sailMat, errMessage, sizeof (errMessage))) {
+   if (!readPolar (polarName, &mat, &sailMat, errMessage, sizeof (errMessage))) {
       fprintf (stderr, "%s", errMessage);
       snprintf (out, maxLen, "{}\n");
       return out;
    }
    if ((mat.nLine < 2) || (mat.nCol < 2)) {
-      fprintf (stderr, "In polToJson Error: no value in: %s\n", polarName);
+      fprintf (stderr, "In polToStrJson Error: no value in: %s\n", polarName);
       snprintf (out, maxLen, "{}\n");
       return out;
    }
@@ -440,31 +450,39 @@ char *polToStrJson (const char *fileName, const char *objName, char *out, size_t
       g_strlcat (out, str, maxLen);
    }
    g_strlcat (out, "]", maxLen);
-   if (mat.nSail <= 1) { // no sail specification
-      g_strlcat (out, "\n}\n", maxLen);
-      return out;
-   }
+
    // if several sails, generate two dimensions array with sail number
-   g_strlcat (out, ",\n\"arraySail\":\n[\n", maxLen);
+   if (mat.nSail > 1) {
+      g_strlcat (out, ",\n\"arraySail\":\n[\n", maxLen);
    
-   for (int i = 0; i < mat.nLine ; i++) {
-      g_strlcat (out, "   [", maxLen);
-      for (int j = 0; j < mat.nCol - 1; j++) {
-         snprintf (str, sizeof str, "%.0f, ", sailMat.t [i][j]);
+      for (int i = 0; i < mat.nLine ; i++) {
+         g_strlcat (out, "   [", maxLen);
+         for (int j = 0; j < mat.nCol - 1; j++) {
+            snprintf (str, sizeof str, "%.0f, ", sailMat.t [i][j]);
+            g_strlcat (out, str, maxLen);
+         }
+         snprintf (str, sizeof (str), "%.0f]%s\n", sailMat.t [i][mat.nCol -1], (i < mat.nLine - 1) ? "," : "");
          g_strlcat (out, str, maxLen);
       }
-      snprintf (str, sizeof (str), "%.0f]%s\n", sailMat.t [i][mat.nCol -1], (i < mat.nLine - 1) ? "," : "");
-      g_strlcat (out, str, maxLen);
-   }
-   g_strlcat (out, "],\n", maxLen);
+      g_strlcat (out, "],\n", maxLen);
 
-   // generate one dimension array that list the name of sails, ordered NA = 0, Sail1, sail2 etc
-   g_strlcat (out, "\"legend\": [", maxLen);
-   g_strlcat (out, "\"NA\",", maxLen); // first is NA (id 0)
-   for (size_t i = 0; i < mat.nSail; i += 1) {
-      snprintf (str, sizeof str, "\"%s\"%s", mat.tSail [i].name, (i < mat.nSail -1) ? ", " : "");
+      // generate one dimension array that list the name of sails, ordered NA = 0, Sail1, sail2 etc
+      g_strlcat (out, "\"legend\": [", maxLen);
+      g_strlcat (out, "\"NA\",", maxLen); // first is NA (id 0)
+      for (size_t i = 0; i < mat.nSail; i += 1) {
+         snprintf (str, sizeof str, "\"%s\"%s", mat.tSail [i].name, (i < mat.nSail -1) ? ", " : "");
+         g_strlcat (out, str, maxLen);
+      }
+      g_strlcat (out, "]", maxLen);   
+   } // end if mat.nSail > 1
+   
+   // generate report
+   if (report) {
+      g_strlcat (out, ",\n\"report\": \"", maxLen);  
+      polarCheck (&mat, str, sizeof str);
       g_strlcat (out, str, maxLen);
+      g_strlcat (out, "\"", maxLen);
    }
-   g_strlcat (out, "]\n}\n", maxLen);
+   g_strlcat (out, "\n}\n", maxLen);
    return out;
 }

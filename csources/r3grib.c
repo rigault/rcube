@@ -25,6 +25,46 @@ double zoneTimeDiff (const Zone *zone1, const Zone *zone0) {
    else return 0;
 } 
 
+/*! return array of outNvalues floats
+   n = nTimeStamp * nbLat * nbLon * nShortNames
+   values = [u1, v0, g0, w0,  u1, v1, g1, w1,  ...]
+   g, w are optionnal
+*/
+float *buildUVGWarray(const Zone *zone, const char *initialOfNames, const FlowP *gribData, size_t *outNValues) {
+   size_t nPoints = zone->nTimeStamp * zone->nbLat * zone->nbLon;
+   *outNValues = 0;
+   if (! strchr(initialOfNames, 'u') || ! strchr(initialOfNames, 'v')) { // u, v should be present
+      return NULL; 
+   }
+   bool hasG = (strchr(initialOfNames, 'g') != NULL);
+   bool hasW = (strchr(initialOfNames, 'w') != NULL);
+   size_t nComp = 2; // u, v
+   if (hasG) nComp += 1;
+   if (hasW) nComp += 1;
+
+   size_t nValues = nPoints * nComp;
+
+   float *arr = malloc(nValues * sizeof(float));
+   if (!arr) return NULL;
+   
+   size_t idx = 0;
+   long iGrib;
+
+   for (size_t k = 0; k < zone->nTimeStamp; k++) {
+      for (long i = 0; i < zone->nbLat; i++) {
+         for (long j = 0; j < zone->nbLon; j++) {
+            iGrib = (k * zone->nbLat * zone->nbLon) + (i * zone->nbLon) + j;
+            arr[idx++] = gribData[iGrib].u;           // u allways sent
+            arr[idx++] = gribData[iGrib].v;           // v allways sent
+            if (hasG) arr[idx++] = gribData[iGrib].g; // g is an option
+            if (hasW) arr[idx++] = gribData[iGrib].w; // w is an option
+         }
+      }
+   }
+   *outNValues = idx;
+   return arr;
+}
+
 /*! print Grib u v ... for all lat lon time information */
 void printGrib (const Zone *zone, const FlowP *gribData) {
    long iGrib;
@@ -37,12 +77,12 @@ void printGrib (const Zone *zone, const FlowP *gribData) {
          for (int j = 0; j < zone->nbLon; j++) {
 	         iGrib = (k * zone->nbLat * zone->nbLon) + (i * zone->nbLon) + j;
             printf (" %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f\n", \
-            gribData [iGrib].lon, \
-	         gribData [iGrib].lat, \
-            gribData [iGrib].u, \
-            gribData [iGrib].v, \
-            gribData [iGrib].g, \
-            gribData [iGrib].w);
+               gribData [iGrib].lon, \
+	            gribData [iGrib].lat, \
+               gribData [iGrib].u, \
+               gribData [iGrib].v, \
+               gribData [iGrib].g, \
+               gribData [iGrib].w);
          }
       }
       printf ("\n");
@@ -112,7 +152,7 @@ static bool timeStepRegularGrib (const Zone *zone) {
 }
 
 /*! true if u and v (or uCurr, vCurr) are in zone */
-static bool uvPresentGrib (const Zone *zone) {
+bool uvPresentGrib (const Zone *zone) {
    bool uPresent = false, vPresent = false;
    for (size_t i = 0; i < zone->nShortName; i++) {
       if ((strcmp (zone->shortName [i], "10u") == 0) || (strcmp (zone->shortName [i], "u") == 0) ||
@@ -123,6 +163,14 @@ static bool uvPresentGrib (const Zone *zone) {
 		vPresent = true;
    }
    return uPresent && vPresent;
+}
+
+/*! true if shortname in zone */
+bool isPresentGrib (const Zone *zone, const char *name) {
+   for (size_t i = 0; i < zone->nShortName; i++) {
+      if (strcmp (zone->shortName [i], name) == 0) return true;
+   }
+   return false;
 }
 
 /*! check lat, lon are consistent with indice 
@@ -265,12 +313,13 @@ bool checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen) {
 
 /*! check Grib information and write report in the buffer
     return false if something wrong  */
-bool checkGribToStr (char *buffer, size_t maxLen) {
+bool checkGribToStr (bool hasCurrentGrib, char *buffer, size_t maxLen) {
    char str [MAX_SIZE_LINE] = "";
    buffer [0] = '\0';
 
    bool OK = (checkGribInfoToStr (WIND, &zone, buffer, maxLen));
    if (OK) buffer [0] = '\0';
+   if (!hasCurrentGrib) return OK;
    if (! checkGribInfoToStr (CURRENT, &currentZone, buffer, maxLen)) OK = false;
    if (OK) buffer [0] = '\0';
 
@@ -325,7 +374,7 @@ static inline double arrondiMax (double v, double step) {
    return ((double) ceil (v/step)) * step;
 }
 
-/*! provide 4 wind points around p */
+/*! provide 4 wind points around point lat, lon */
 static inline void find4PointsAround (double lat, double lon,  double *latMin, 
    double *latMax, double *lonMin, double *lonMax, Zone *zone) {
 
@@ -580,12 +629,14 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
    snprintf (out, maxLen, 
       "{\n  \"centreID\": %ld, \"centreName\": \"%s\", \"edNumber\": %ld, \n"
       "  \"runStart\": \"%s\", \"runEnd\": \"%s\", \n"
+      "  \"epochStart\": %ld,\n"
       "  \"topLat\": %.6f, \"leftLon\": %.6f, \"bottomLat\": %.6f, \"rightLon\": %.6f, \n"
       "  \"latStep\": %.4f, \"lonStep\": %.4f, \n"
       "  \"nLat\": %ld, \"nLon\": %ld, \"nValues\": %ld, \"nTimeStamp\": %zu,\n"
       "  \"timeStamps\": \n  [",
       gZone.centreId, centreName, gZone.editionNumber,
       str0, str1,
+      gribDateTimeToEpoch(gZone.dataDate[0], gZone.dataTime[0]),
       gZone.latMax, gZone.lonLeft, gZone.latMin, gZone.lonRight,
       gZone.latStep, gZone.lonStep,
       gZone.nbLat, gZone.nbLon, gZone.numberOfValues, gZone.nTimeStamp
@@ -610,7 +661,7 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
    if (tm_info) strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S", tm_info);
    
    char *gribBaseName = g_path_get_basename (fileName);
-   snprintf (str, sizeof (str),  "  \"fileName\": \"%s\", \"fileSize\": %ld, \"fileTime\": \"%s\",\n", 
+   snprintf (str, sizeof (str),  "  \"name\": \"%s\", \"fileSize\": %ld, \"fileTime\": \"%s\",\n", 
             gribBaseName, st.st_size, strTime);
    g_strlcat (out, str, maxLen);
    free (gribBaseName);
@@ -618,8 +669,7 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
    if ((gZone.nDataDate != 1) || (gZone.nDataTime != 1)) {
       snprintf (infoStr, sizeof (infoStr), "Warning number of Date: %zu, number of Time: %zu", gZone.nDataDate, gZone.nDataTime);
    }
-
-   snprintf (str, sizeof (str), "  \"Info\": \"%s\"\n}\n", infoStr);
+   snprintf (str, sizeof (str), "  \"info\": \"%s\"\n}\n", infoStr);
    g_strlcat (out, str, maxLen);
    return out;
 }

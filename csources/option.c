@@ -4,8 +4,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>   // uint64_t
 #include "r3types.h"
-#include "rtypes.h"
 #include "grib.h"
 #include "readgriball.h"
 #include "r3util.h"
@@ -14,61 +14,23 @@
 #include "glibwrapper.h"
 #include "inline.h"
 
-/*! Load polar and gribs after parameter file load */
-static bool initScenarioOption (void) {
-   char str [MAX_SIZE_LINE];
-   char errMessage [MAX_SIZE_TEXT] = "";
-   int readGribRet;
-   if (par.gribFileName [0] != '\0') {
-      readGribRet = readGribAll (par.gribFileName, &zone, WIND);
-      if (readGribRet == 0) {
-         fprintf (stderr, "In initScenarioOption, Error: Unable to read grib file: %s\n ", par.gribFileName);
-         return false;
-      }
-      printf ("Grib loaded    : %s\n", par.gribFileName);
-      printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (zone.dataDate [0], zone.dataTime [0], str, sizeof (str)));
-   }
-
-   if (par.currentGribFileName [0] != '\0') {
-      readGribRet = readGribAll (par.currentGribFileName, &zone, WIND);
-      printf ("Cur grib loaded: %s\n", par.currentGribFileName);
-      printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (currentZone.dataDate [0], currentZone.dataTime [0], str, sizeof (str)));
-   }
-   if (readPolar (true, par.polarFileName, &polMat, &sailPolMat, errMessage, sizeof (errMessage))) {
-      printf ("Polar loaded   : %s\n", par.polarFileName);
-   }
-   else {
-      fprintf (stderr, "In initScenarioOption, Error readPolar: %s\n", errMessage);
-      return false;
-   }
-      
-   if (readPolar (true, par.wavePolFileName, &wavePolMat, NULL, errMessage, sizeof (errMessage)))
-      printf ("Polar loaded   : %s\n", par.wavePolFileName);
-   else
-      fprintf (stderr, "In initScenatioOption, Error readPolar: %s\n", errMessage);
-   return true;
-}
-
 /*! Manage command line option reduced to one character */
 void optionManage (char option) {
-   const long iterations = 100000;
 	FILE *f = NULL;
-   char directory [MAX_SIZE_DIR_NAME];
    char *buffer = NULL;
    char footer [MAX_SIZE_LINE] = "";
-   double w, twa, tws, lon, lat, lat2, lon2, cog, t;
-   char errMessage [MAX_SIZE_TEXT] = "";
+   double w, twa, tws, lon, lat, lat2, lon2, cog, t, hours;
    char str [MAX_SIZE_LINE] = "";
-   clock_t start, end;
-   int sail;
-
-   struct tm tm0;
-   int intRes;
+   int sail, intRes, nTries;
+   long dataDate;
+   const long nIter = 1e9;
 
    if ((buffer = (char *) malloc (MAX_SIZE_BUFFER)) == NULL) {
       fprintf (stderr, "In optionManage, Error Malloc %d\n", MAX_SIZE_BUFFER); 
       return;
    }
+   buffer [0] = '\0'; 
+   printf ("\n");
    
    switch (option) {
    case 'c': // cap
@@ -87,28 +49,21 @@ void optionManage (char option) {
       printf ("Loxodist1  : %.2lf,   Loxodist2 : %.2lf\n", loxoDist(lat, lon, lat2, lon2), loxoDist (lat2, lon2, lat, lon));
       break;
    case 'g': // grib
-      if (par.mostRecentGrib) {// most recent grib will replace existing grib
-         snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir); 
-         mostRecentFile (directory, ".gr", "", par.gribFileName, sizeof (par.gribFileName));
-      }
-      printf ("Grib File Name: %s\n", par.gribFileName);
-      readGribAll (par.gribFileName, &zone, WIND);
       gribToStr (&zone, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       printf ("grib print...\n");
       printGrib (&zone, tGribData [WIND]);
       printf ("\n\nFollowing lines are suspects info...\n");
-      checkGribToStr (buffer, MAX_SIZE_BUFFER);
+      checkGribToStr (true, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       break;
    case 'G': // grib current
-      readGribAll (par.currentGribFileName, &currentZone, CURRENT);
       gribToStr (&currentZone, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       printf ("grib print...\n");
       printGrib (&currentZone, tGribData [CURRENT]);
       printf ("\n\nFollowing lines are suspects info...\n");
-      checkGribToStr (buffer, MAX_SIZE_BUFFER);
+      checkGribToStr (true, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       break;
    case 'h': // help
@@ -122,7 +77,6 @@ void optionManage (char option) {
       fclose (f);
       break;
    case 'p': // polar
-      readPolar (true, par.polarFileName, &polMat, &sailPolMat, errMessage, sizeof (errMessage));
       polToStr (&polMat, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       polToStr (&sailPolMat, buffer, MAX_SIZE_BUFFER);
@@ -132,13 +86,29 @@ void optionManage (char option) {
          if (scanf ("%lf", &twa) < 1) break;
          printf ("tws true wind speed = ");
          if (scanf ("%lf", &tws) < 1) break;
-         printf ("Old Speed over ground: %.2lf\n", oldFindPolar (twa, tws, &polMat));
-         printf ("Speed over ground: %.2lf\n", findPolar (twa, tws, &polMat, &sailPolMat, &sail));
-         printf ("Sail: %d,", sail); 
+         printf ("- Speed over ground: %.2lf\n", findPolar  (twa, tws, &polMat, &sailPolMat, &sail));
+         printf ("1 Speed over ground: %.2lf\n", findPolar1 (twa, tws, &polMat, &sailPolMat, &sail));
+         printf ("2 Speed over ground: %.2lf\n", findPolar2 (twa, tws, &polMat, &sailPolMat, &sail));
+         printf ("Sail: %d\n", sail); 
+
+         double t0 = monotonic ();
+         for (long i = 0; i < nIter; i += 1) findPolar (fmod (twa+=10.0, 180.0), fmod (tws+=13.0, 90.0), &polMat, &sailPolMat, &sail);
+
+         double t1 = monotonic ();
+         for (long i = 0; i < nIter; i += 1) findPolar1 (fmod (twa+=10.0, 180.0), fmod (tws+=13.0, 90.0), &polMat, &sailPolMat, &sail);
+         
+         double t2 = monotonic ();
+         for (long i = 0; i < nIter; i += 1) findPolar2 (fmod (twa+=10.0, 180.0), fmod (tws+=13.0, 90.0), &polMat, &sailPolMat, &sail);
+
+         double t3 = monotonic ();
+
+         printf ("✅ findPolar.: %.2lf seconds\n", t1 - t0);
+         printf ("✅ findPolar1: %.2lf seconds\n", t2 - t1);
+         printf ("✅ findPolar2: %.2lf seconds\n", t3 - t2);
       }
+    
       break;
    case 'P': // Wave polar
-      readPolar (true, par.wavePolFileName, &wavePolMat, NULL, errMessage, sizeof (errMessage));
       polToStr (&wavePolMat, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
@@ -150,32 +120,29 @@ void optionManage (char option) {
       }
       break;
    case 'q':
-      readPolar (true, par.polarFileName, &polMat, &sailPolMat, errMessage, sizeof (errMessage));
       polToStr (&polMat, buffer, MAX_SIZE_BUFFER);
       printf ("%s\n", buffer);
       while (true) {
          printf ("tws = " );
          if (scanf ("%lf", &tws) < 1) break;
-         printf ("oldMaxSpeedInPolarAt   : %.4lf\n", oldMaxSpeedInPolarAt (tws, &polMat));
          printf ("newMaxSpeedInPolarAt: %.4lf\n", maxSpeedInPolarAt (tws, &polMat));
       }
       break;
    case 'r': // routing
-      if (par.mostRecentGrib) {// most recent grib will replace existing grib
-         snprintf (directory, sizeof (directory), "%sgrib/", par.workingDir); 
-         mostRecentFile (directory, ".gr", "", par.gribFileName, sizeof (par.gribFileName));
-      }
-      if (!initScenarioOption ()) {
-         fprintf (stderr, "Error in Gtib or Polar load\n");
-         break;
-      }
       routingLaunch ();
-      routeToStr (&route, buffer, sizeof (buffer), footer, sizeof (footer));
+      routeToStr (&route, buffer, MAX_SIZE_BUFFER, footer, sizeof (footer));
+      printf ("%s\n", buffer);
+      printf ("%s\n", footer);
+      break;
+   case 'R': // routing
+      printf ("nTries: ");
+      if (scanf ("%d", &nTries) != 1) break;
+      for (int i = 0; i < nTries; i += 1) routingLaunch ();
+      routeToStr (&route, buffer, MAX_SIZE_BUFFER, footer, sizeof (footer));
       printf ("%s\n", buffer);
       printf ("%s\n", footer);
       break;
    case 's': // isIsea
-      readIsSea (par.isSeaFileName);
       if (tIsSea == NULL) printf ("in readIsSea : bizarre\n");
       // dumpIsSea ();
       while (1) {
@@ -189,33 +156,34 @@ void optionManage (char option) {
       }
       break;
    case 't': // test
-      readGribAll (par.gribFileName, &zone, WIND);
-      tm0 = gribDateToTm (zone.dataDate [0], zone.dataTime [0] / 100);
-      printf ("Grib Time: %s\n", asctime (&tm0));
-      printf ("Lat = ");
-      if (scanf ("%lf", &lat) < 1) break;
-      printf ("Lon = ");
-      if (scanf ("%lf", &lon) < 1) break;
-      printf ("t = ");
-      if (scanf ("%lf", &t) < 1) break;
-      start = clock();
-      for (long i = 0; i < iterations; i++) {
-        struct tm localTm = tm0;
-        intRes = isDayLight (&localTm, t, lat, lon);;
-      }
-      end = clock();
-      printf("isDayLight:      %.2f, last result = %d\n", 
-           (double)(end - start) * 1000.0 / CLOCKS_PER_SEC, intRes);
-
-      break;
-   case 'T': // test
-      while (1) {
-         double lon;
-         printf ("lon = ");
+      readGribAll ("/home/rr/routing/grib/GFS_20251121_12Z_144.grb", &zone, WIND);
+      printf ("GribTime: %s\n", gribDateTimeToStr (zone.dataDate[0], zone.dataTime[0], str, sizeof str));
+      while (true) {
+         printf ("Lat = ");
+         if (scanf ("%lf", &lat) < 1) break;
+         printf ("Lon = ");
          if (scanf ("%lf", &lon) < 1) break;
-         printf ("fMod (lon)= %.2lf, lonCanonize (lon) = %.2lf\n", fmod (lon, 360.0), lonCanonize (lon));
+         printf ("t = ");
+         if (scanf ("%lf", &t) < 1) break;
+         intRes = isDay (t, zone.dataDate[0], zone.dataTime[0], lat, lon);;
+         printf("res: %s\n", intRes ? "day" : "night");
       }
       break;
+   case 'T': // time
+      printf ("GribTime: %s\n", gribDateTimeToStr (zone.dataDate[0], zone.dataTime[0], str, sizeof str));
+      printf ("offsetLocalUTC: %lf s\n", offsetLocalUTC ());
+      time_t t = time (NULL);
+      printf ("now epochToStr: %s\n", epochToStr (t, true, str, sizeof str)); 
+      t = gribDateTimeToEpoch (zone.dataDate[0], zone.dataTime[0]);
+      printf ("grib start epochToStr: %s\n", epochToStr (t, true, str, sizeof str)); 
+      while (true) {
+         printf ("date: ");
+         if (scanf ("%ld", &dataDate) < 1) break;
+         printf ("decimal hours: ");
+         if (scanf ("%lf", &hours) < 1) break;
+         printf ("DateUtc:    %s\n", newDate (dataDate, hours, str, sizeof str));
+      }
+ break;
    case 'v': // version
       printf ("Prog version: %s, %s, %s\n", PROG_NAME, PROG_VERSION, PROG_AUTHOR);
       printf ("Compilation-date: %s\n", __DATE__);

@@ -27,16 +27,22 @@
 #include "readgriball.h"
 #include "polar.h"
 #include "inline.h"
+#include "option.h"
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#define SYNOPSYS               "<port> [<parameter file>]"
+#define GREEN  "\033[32m"
+#define RED    "\033[31m"
+#define YELLOW "\033[33m"
+#define BLUE   "\033[34m"
+#define NORMAL "\033[0m"
+#define SYNOPSYS               "<port> | -<option> [<parameter file>]"
 #define MAX_SIZE_REQUEST       2048        // Max size from request client
 #define MAX_SIZE_RESOURCE_NAME 256         // Max size polar or grib name
 #define PATTERN                "GFS"
 #define MAX_SIZE_FEED_BACK     1024
 #define ADMIN_LEVEL            10          // level of authorization for administrator
-#define BIG_BUFFER_SIZE        (30*MILLION)
+#define BIG_BUFFER_SIZE        (300*MILLION)
 #define MAX_SIZE_MESS          100000
 #define GPX_ROUTE_FILE_NAME    "gpxroute.tmp"
 
@@ -48,7 +54,7 @@ const char *filter[] = {".csv", ".pol", ".grb", ".grb2", ".log", ".txt", ".par",
 enum {REQ_KILL = -1793, REQ_TEST = 0, REQ_ROUTING = 1, REQ_COORD = 2, REQ_FORBID = 3, REQ_POLAR = 4, 
       REQ_GRIB = 5, REQ_DIR = 6, REQ_PAR_RAW = 7, REQ_PAR_JSON = 8, 
       REQ_INIT = 9, REQ_FEEDBACK = 10, REQ_DUMP_FILE = 11, REQ_NEAREST_PORT = 12, 
-      REQ_MARKS = 13, REQ_CHECK_GRIB = 14, REQ_GPX_ROUTE = 15}; // type of request
+      REQ_MARKS = 13, REQ_CHECK_GRIB = 14, REQ_GPX_ROUTE = 15, REQ_GRIB_DUMP = 16}; // type of request
 
 // level of authorization
 //const int typeLevel [16] = {0, 1, 0, 0, 0, 0, 0, 0, 0, ADMIN_LEVEL, 0, 0, 0, 0, 0, 0};        
@@ -144,7 +150,7 @@ static bool updateWindGrib (ClientRequest *clientReq, char *checkMessage, size_t
    if (clientReq->gribName [0] == '\0') return false;
    // change grib if requested MAY TAKE TIME !!!!
    buildRootName (clientReq->gribName, strGrib, sizeof strGrib);
-   printf ("grib found: %s\n", strGrib);
+   printf ("Grib Found: %s\n", strGrib);
    if (strncmp (par.gribFileName, strGrib, strlen (strGrib)) != 0) {
       if (readGribAll (strGrib, &zone, WIND)) {
          g_strlcpy (par.gribFileName, strGrib, sizeof par.gribFileName);
@@ -167,7 +173,7 @@ static bool updateCurrentGrib (ClientRequest *clientReq, char *checkMessage, siz
    if (clientReq->currentGribName [0] == '\0') return false;
 
    buildRootName (clientReq->currentGribName, strGrib, sizeof strGrib);
-   printf ("current grib found: %s\n", strGrib);
+   printf ("Current Grib Found: %s\n", strGrib);
    if (strncmp (par.currentGribFileName, strGrib, strlen (strGrib)) != 0) {
       printf ("current readGrib: %s\n", strGrib);
       if (readGribAll (strGrib, &currentZone, CURRENT)) {
@@ -473,6 +479,10 @@ static char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res,
    return res;
 }
 
+static inline double round4(double x) {
+   return round(x * 10000.0) / 10000.0;
+}
+
 /*! 
  * information associated to coord (lat lon)
  * isSea, isSeaTolerant, grib wind and current
@@ -507,7 +517,8 @@ static void infoCoordToJson (double lat, double lon, ClientRequest *clientReq, c
     
    for (int i = 0; i < tMax; i += 1) {
       findWindGrib (lat, lon, i, &u, &v, &g, &w, &twd, &tws);
-      snprintf (str, sizeof str, "    [%.4lf, %.4lf, %.4lf, %.4lf]%s\n", u, v, g, w, (i < tMax - 1) ? "," : ""); 
+      // snprintf (str, sizeof str, "    [%.4lf, %.4lf, %.4lf, %.4lf]%s\n", u, v, g, w, (i < tMax - 1) ? "," : ""); 
+      snprintf(str, sizeof str, "    [%g, %g, %g, %g]%s\n", round4(u), round4(v), round4(g), round4(w), (i < tMax - 1) ? "," : "");
       strlcat (res, str, maxLen);
    }
    strlcat (res, "  ]\n}\n", maxLen);
@@ -575,7 +586,7 @@ static bool allowedLevel (ClientRequest *clientReq) {
       return true;
    }
    if ((clientReq->type == 1) && (strstr (clientReq->model, "GFS") != NULL)) {
-      printf ("GFS allowed whatever the level for  type 1 request\n");    
+      printf ("GFS allowed whatever the level for type 1 request\n");    
       return true; // GFS allowed to anyone
    }
    if ((clientReq->level >= 0) && (clientReq->level <= ADMIN_LEVEL)) {
@@ -781,13 +792,13 @@ static bool initContext (const char *parameterFileName, const char *pattern) {
       printf ("Cur grib loaded: %s\n", par.currentGribFileName);
       printf ("Grib DateTime0 : %s\n", gribDateTimeToStr (currentZone.dataDate [0], currentZone.dataTime [0], str, sizeof str));
    }
-   if (readPolar (true, par.polarFileName, &polMat, &sailPolMat, errMessage, sizeof errMessage)) {
+   if (readPolar (par.polarFileName, &polMat, &sailPolMat, errMessage, sizeof errMessage)) {
       printf ("Polar loaded   : %s\n", par.polarFileName);
    }
    else {
       fprintf (stderr, "In initContext, Error readPolar: %s\n", errMessage);
    }   
-   if (readPolar (true, par.wavePolFileName, &wavePolMat, NULL, errMessage, sizeof errMessage)) {
+   if (readPolar (par.wavePolFileName, &wavePolMat, NULL, errMessage, sizeof errMessage)) {
       printf ("Polar loaded   : %s\n", par.wavePolFileName);
    }
    else {
@@ -812,7 +823,7 @@ static const char* getCurrentDate () {
    return dateBuffer;
 }
 
-/*! store ck information */
+/*! store feedback information */
 static void handleFeedbackRequest (const char *fileName, const char *date, const char *clientIPAddress, const char *string) {
    FILE *file = fopen (fileName, "a");
    if (file == NULL) {
@@ -1003,7 +1014,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
       printf ("polar found: %s\n", strPolar);
       if (strncmp (par.polarFileName, strPolar, strlen (strPolar)) != 0) {
          printf ("read polar: %s\n", strPolar);
-         if (readPolar (false, strPolar, &polMat, &sailPolMat, checkMessage, maxLen)) {
+         if (readPolar (strPolar, &polMat, &sailPolMat, checkMessage, maxLen)) {
             g_strlcpy (par.polarFileName, strPolar, sizeof par.polarFileName);
             printf ("Polar loaded   : %s\n", strPolar);
          }
@@ -1018,7 +1029,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
       printf ("wave polar found: %s\n", strPolar);
       if (strncmp (par.wavePolFileName, strPolar, strlen (strPolar)) != 0) {
          printf ("read wave polar: %s\n", strPolar);
-         if (readPolar (false, strPolar, &wavePolMat, NULL, checkMessage, maxLen)) {
+         if (readPolar (strPolar, &wavePolMat, NULL, checkMessage, maxLen)) {
             g_strlcpy (par.wavePolFileName, strPolar, sizeof par.wavePolFileName);
             printf ("Wave Polar loaded : %s\n", strPolar);
          }
@@ -1029,8 +1040,11 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
       }  
    }
    if (clientReq->model [0] != '\0' && clientReq->gribName [0] == '\0') { // there is a model specified but no grib file
-      snprintf (directory, sizeof directory, "%s/%s", par.workingDir, "grib"); 
-      mostRecentFile (directory, ".gr", clientReq->model, clientReq->gribName, sizeof clientReq->gribName);
+      snprintf (directory, sizeof directory, "%s%sgrib", par.workingDir, hasSlash (par.workingDir) ? "" : "/"); 
+      if (!mostRecentFile (directory, ".gr", clientReq->model, clientReq->gribName, sizeof clientReq->gribName)) {
+         snprintf (checkMessage, maxLen, "0: No grib file with model: %s", clientReq->model);
+         return false;
+      };
    }
    updateWindGrib (clientReq, checkMessage, maxLen);
    if (checkMessage [0] != '\0') return false;
@@ -1088,7 +1102,7 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
    wayPoints.n = clientReq->nWp - 1;
 
    if ((par.startTimeInHours < 0) || (par.startTimeInHours > zone.timeStamp [zone.nTimeStamp -1])) {
-         snprintf (checkMessage, maxLen, "\"4: start Time not in Grib time window\"");
+         snprintf (checkMessage, maxLen, "9: start Time not in Grib time window");
       return false;
    }
 
@@ -1175,38 +1189,6 @@ int memoryUsage (void) {
    return mem;  // in KB
 }
 
-/*! Raw dump of file fileName into 'out' (NULL-terminated). Truncates if needed. */
-static char *dumpFileToStr(const char *fileName, char *out, size_t maxLen) {
-   char fullFileName[MAX_SIZE_FILE_NAME];
-   buildRootName(fileName, fullFileName, sizeof fullFileName);
-
-   if (maxLen == 0) return out;
-   out[0] = '\0';
-
-   FILE *fp = fopen (fullFileName, "rb");  // b = binary, no CR/LF translation
-   if (!fp) {
-      snprintf(out, maxLen, "{\"_Error\": \"%s\"}\n", strerror(errno));
-      return out;
-   }
-
-   size_t total = 0;
-   while (total + 1 < maxLen) {
-      size_t n = fread(out + total, 1, maxLen - 1 - total, fp);
-      total += n;
-      if (n == 0) break;                  // EOF or error
-   }
-   out[total] = '\0';
-
-   if (ferror(fp)) {
-      snprintf(out, maxLen, "{\"_Error\": \"%s\"}\n", strerror(errno));
-   } else if (!feof(fp)) {
-      fprintf (stderr, "dumpFileToStr: output buffer truncated to %zu bytes\n", maxLen - 1);
-   }
-
-   fclose(fp);
-   return out;
-}
-
 /*! Provide system information */
 static char *testToJson (int serverPort, const char *clientIP, const char *userAgent, int level, char *out, size_t maxLen) {
    char strWind [MAX_SIZE_LINE] = "";
@@ -1236,20 +1218,64 @@ static char *testToJson (int serverPort, const char *clientIP, const char *userA
    return out;
 }
 
+/*! send over network binary data */
+void sendBinaryResponse(int sock, const void *data, size_t len, const char *shortnames) {
+   char header[512];
+   const char *corsHeaders =
+      "Access-Control-Allow-Origin: *\r\n"
+      "Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n"
+      "Access-Control-Allow-Headers: Content-Type\r\n"
+      "Access-Control-Expose-Headers: X-Shortnames\r\n"; // Important to read X-Shortnames
+
+   int n = snprintf(header, sizeof header,
+              "HTTP/1.1 200 OK\r\n"
+              "Content-Type: application/octet-stream\r\n"
+              "X-Shortnames: %s\r\n"
+              "%s"
+              "Content-Length: %zu\r\n"
+              "Connection: close\r\n"
+              "\r\n",
+              shortnames, corsHeaders, len);
+
+   if ((n < 0)  || (size_t)n >= sizeof header) {
+      fprintf (stderr, "In sendBinaryResponse, Error n:%d\n", n);
+      return;
+   }
+   send(sock, header, (size_t)n, 0);
+   send(sock, data, len, 0);
+}
+
+/*! build list of short names. Only initials. Result can be uv, uvg, uvw, uvwg. 
+   uv mandatory. Response is false if not u and v */
+static void buildInitialOfShortNameList(const Zone *zone, char *str, size_t len) {
+   int i = 0;
+   str [0] = '\0';
+   if (len < 5) return;
+   if (! uvPresentGrib (zone)) return;
+   str [i++] = 'u';
+   str [i++] = 'v';
+   if (isPresentGrib (zone, "gust")) str[i++] = 'g';
+   if (isPresentGrib (zone, "swh"))  str[i++] = 'w';
+   str [i] = '\0';
+}
 
 /*! launch action and returns outBuffer after execution */
-static char *launchAction (int serverPort, ClientRequest *clientReq, 
+static bool launchAction (int serverPort, int sock, ClientRequest *clientReq, 
              const char *date, const char *clientIPAddress, const char *userAgent, char *outBuffer, size_t maxLen) {
    char tempFileName [MAX_SIZE_FILE_NAME];
    char checkMessage [MAX_SIZE_TEXT];
+   char errMessage [MAX_SIZE_TEXT] = "";
    char directory [MAX_SIZE_DIR_NAME];
-   char strGrib [MAX_SIZE_FILE_NAME];
+   char str [MAX_SIZE_NAME];
+   char *strTemp = NULL;
+   int  len;
+   bool resp = true;
    bigBuffer [0] = '\0';
    // printf ("client.req = %d\n", clientReq->type);
    switch (clientReq->type) {
    case REQ_KILL:
       printf ("Killed on port: %d, At: %s, By: %s\n", serverPort, date, clientIPAddress);
-      snprintf (outBuffer, maxLen, "{\n   \"killed_on_port\": %d, \"date\": %s, \"by\": %s\"\n}\n", serverPort, date, clientIPAddress);
+      snprintf (outBuffer, maxLen, "{\n  \"killed_on_port\": %d,\n  \"date\": \"%s\",\n  \"by\": \"%s\"\n}\n", serverPort, date, clientIPAddress);
       break;
    case REQ_TEST:
       testToJson (serverPort, clientIPAddress, userAgent, clientReq->level, outBuffer, maxLen);
@@ -1281,20 +1307,23 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
    case REQ_POLAR:
       if (clientReq->polarName [0] != '\0') {
          if (strstr (clientReq->polarName, "wavepol")) {
-            polToStrJson (clientReq->polarName, "wavePolarName", outBuffer, maxLen);
+            polToStrJson (false, clientReq->polarName, "wavePolarName", outBuffer, maxLen);
          }
          else {
-            polToStrJson (clientReq->polarName , "polarName", outBuffer, maxLen);
+            polToStrJson (true, clientReq->polarName , "polarName", outBuffer, maxLen);
          }
          break;
       }
-      polToStrJson (par.polarFileName, "polarName", outBuffer, maxLen);
+      polToStrJson (true, par.polarFileName, "polarName", outBuffer, maxLen);
       break;
    case REQ_GRIB:
       if (clientReq->model [0] != '\0' && clientReq->gribName [0] == '\0') { // there is a model specified but no grib file
          printf ("model: %s\n", clientReq->model);
          snprintf (directory, sizeof directory, "%s%sgrib", par.workingDir, hasSlash (par.workingDir) ? "" : "/"); 
-         mostRecentFile (directory, ".gr", clientReq->model, clientReq->gribName, sizeof clientReq->gribName);
+         if (!mostRecentFile (directory, ".gr", clientReq->model, clientReq->gribName, sizeof clientReq->gribName)) {
+            snprintf (outBuffer, maxLen, "{\"_Error\": \"No grib with model: %s\"}\n", clientReq->model);
+            break;
+         }
       }
       if (clientReq->gribName [0] != '\0') gribToStrJson (clientReq->gribName, outBuffer, maxLen);
       else snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", "No Grib");
@@ -1305,8 +1334,15 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
    case REQ_PAR_RAW:
       // yaml style if model = 1
       bool yaml = clientReq->model [0] == 'y';
-      writeParam (buildRootName (TEMP_FILE_NAME, tempFileName, sizeof tempFileName), false, false, yaml);
-      dumpFileToStr (TEMP_FILE_NAME, outBuffer, maxLen);
+      buildRootName (TEMP_FILE_NAME, tempFileName, sizeof tempFileName);
+      writeParam (tempFileName, false, false, yaml);
+      strTemp = readTextFile (tempFileName, errMessage, sizeof errMessage);
+      if (strTemp == NULL) {
+         snprintf (outBuffer, maxLen, "{\n  \"_Error\": \"%s\"\n}\n", errMessage);
+         break;
+      }
+      strlcat (outBuffer, strTemp, maxLen);
+      free (strTemp);
       if (yaml) normalizeSpaces (outBuffer);
       break;
    case REQ_PAR_JSON:
@@ -1323,7 +1359,14 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
          snprintf (outBuffer, maxLen, "{\"_Feedback\": \"%s\"}\n", "OK");
       break;
    case REQ_DUMP_FILE:  // raw dump
-      dumpFileToStr (clientReq->fileName, outBuffer, maxLen);
+      buildRootName (clientReq->fileName, tempFileName, sizeof tempFileName);
+      strTemp = readTextFile (tempFileName, errMessage, sizeof errMessage);
+      if (strTemp == NULL) {
+         snprintf (outBuffer, maxLen, "{\n  \"_Error\": \"%s\"\n}\n", errMessage);
+         break;
+      }
+      strlcat (outBuffer, strTemp, maxLen);
+      free (strTemp);
       break;
    case REQ_MARKS: 
       if (! readMarkCSVToJson (par.marksFileName, outBuffer, maxLen)) {
@@ -1336,21 +1379,18 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
       else snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", "No coordinates found");
       break;
    case REQ_CHECK_GRIB: 
-      if ((clientReq->gribName [0] == '\0') || (clientReq->currentGribName [0] == '\0')) {
-         snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", "Both wind grib and current grib required");
+      len = strlen (clientReq->gribName);
+      bool hasGrib = len > 0 && clientReq->gribName [len - 1] != '/';
+      len = strlen (clientReq->currentGribName);
+      bool hasCurrentGrib = len > 0 && clientReq->currentGribName [len - 1] != '/';
+      if (!hasGrib  && !hasCurrentGrib) {
+         snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", "Either wind grib and current grib required");
          break;
       }
-      buildRootName (clientReq->gribName, strGrib, sizeof strGrib);
-      if (! readGribAll (strGrib, &zone, WIND)) {
-         snprintf (outBuffer, maxLen, "{\"_Error\": \"%s %s\"}\n", "Cannot Read Wind Grib:", strGrib);
-         break;
-      }
-      buildRootName (clientReq->currentGribName, strGrib, sizeof strGrib);
-      if (! readGribAll (strGrib, &currentZone, CURRENT)) {
-         snprintf (outBuffer, maxLen, "{\"_Error\": \"%s %s\"}\n", "Cannot Read Current Grib:", strGrib);
-         break;
-      }
-      checkGribToStr (outBuffer, maxLen);
+      if (hasGrib && !(updateWindGrib (clientReq, outBuffer, maxLen))) break;
+      if (hasCurrentGrib && !(updateCurrentGrib (clientReq, outBuffer, maxLen))) break;
+
+      checkGribToStr (hasCurrentGrib, outBuffer, maxLen);
       if (outBuffer [0] == '\0') g_strlcpy (outBuffer, "All is OK\n", maxLen);
       break;
    case REQ_GPX_ROUTE:
@@ -1359,11 +1399,39 @@ static char *launchAction (int serverPort, ClientRequest *clientReq,
          snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", "No route");
          break;
       }
-      dumpFileToStr(tempFileName, outBuffer, maxLen);
+      strTemp = readTextFile (tempFileName, errMessage, sizeof errMessage);
+      if (strTemp == NULL) {
+         snprintf (outBuffer, maxLen, "{\n  \"_Error\": \"%s\"\n}\n", errMessage);
+         break;
+      }
+      strlcat (outBuffer, strTemp, maxLen);
+      free (strTemp);
+      break;
+   case REQ_GRIB_DUMP:
+      if (clientReq->model [0] != '\0' && clientReq->gribName [0] == '\0') { // there is a model specified but no grib file
+         printf ("model: %s\n", clientReq->model);
+         snprintf (directory, sizeof directory, "%s%sgrib", par.workingDir, hasSlash (par.workingDir) ? "" : "/"); 
+         mostRecentFile (directory, ".gr", clientReq->model, clientReq->gribName, sizeof clientReq->gribName);
+      }
+      if (clientReq->gribName [0] == '\0') {
+         snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", "No Grib");
+         break;
+      }
+      updateWindGrib (clientReq, checkMessage, sizeof checkMessage);
+      size_t dataLen = 0;
+      buildInitialOfShortNameList(&zone, str, sizeof str);
+      // strlcpy (str, "uvgw", 5); // ATT ecrase le précédent
+      float *buf = buildUVGWarray(&zone, str, tGribData[WIND], &dataLen); // dataLen in number of float
+      printf("Send Binary float array with: Len=%zu, Bytes=%zu, Shortnames=%s\n",
+         dataLen, dataLen * sizeof(float), str);
+
+      sendBinaryResponse(sock, buf, dataLen * sizeof(float), str);
+      free(buf);
+      resp = false;
       break;
    default:;
    }
-   return outBuffer;
+   return resp;
 }
 
 /*! robust send */
@@ -1387,6 +1455,7 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
    char saveBuffer [MAX_SIZE_REQUEST];
    char buffer [MAX_SIZE_REQUEST] = "";
    char clientIPAddress [MAX_SIZE_LINE];
+   bool resp = true;
 
    // read HTTP request
    const int bytes_read = recv (clientFd, buffer, sizeof buffer - 1, 0);
@@ -1406,11 +1475,8 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
 
    // Extract HTTP first line request
    char *requestLine = strtok (buffer, "\r\n");
-   if (!requestLine) {
-     return false;
-   }
-   printf ("Request line: %s\n", requestLine);
-
+   if (!requestLine) return false;
+   
    // check if Rest API (POST) or static file (GET)
    if (strncmp (requestLine, "POST", 4) != 0) {
       printf ("GET Request, static file\n");
@@ -1442,7 +1508,7 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
 
    char* userAgent = extractUserAgent (saveBuffer);
    postData += 4; // Ignore HTTP request separators
-   printf ("POST Request:\n%s\n", postData);
+   printf ("✅ POST Request:\n"GREEN"%s"NORMAL"\n", postData);
 
    // data for log
    const double start = monotonic (); 
@@ -1457,7 +1523,7 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
    clientReq.level = extractLevel (saveBuffer);
    printf ("user level: %d\n", clientReq.level);
 
-   const char *cors_headers = "Access-Control-Allow-Origin: *\r\n"
+   const char *corsHeaders = "Access-Control-Allow-Origin: *\r\n"
               "Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n"
               "Access-Control-Allow-Headers: Content-Type\r\n";
 
@@ -1465,22 +1531,24 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
       g_strlcpy (bigBuffer, "{\"_Error\": \"Too low level of authorization\"}\n", BIG_BUFFER_SIZE);
    }
    else {
-      launchAction (serverPort, &clientReq, date, clientIPAddress, userAgent, bigBuffer, BIG_BUFFER_SIZE);
+      resp = launchAction (serverPort, clientFd, &clientReq, date, clientIPAddress, userAgent, bigBuffer, BIG_BUFFER_SIZE);
    }
-   char header [512];
-   const size_t bigBufferLen = strlen (bigBuffer);
-   const int headerLen = snprintf (header, sizeof header,
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Type: application/json\r\n"
-      "%s"
-      "Content-Length: %zu\r\n"
-      "\r\n",
-      cors_headers, bigBufferLen);
+   if (resp) {
+      char header [512];
+      const size_t bigBufferLen = strlen (bigBuffer);
+      const int headerLen = snprintf (header, sizeof header,
+         "HTTP/1.1 200 OK\r\n"
+         "Content-Type: application/json\r\n"
+         "%s"
+         "Content-Length: %zu\r\n"
+         "\r\n",
+         corsHeaders, bigBufferLen);
 
-   if (sendAll (clientFd, header, (size_t) headerLen) < 0) return false;
-   if (sendAll (clientFd, bigBuffer, bigBufferLen) < 0) return false;
-   printf ("Response sent to client. Size: %zu\n\n", headerLen + bigBufferLen);
-   // printf ("%s%s\n", header, bigBuffer);
+      if (sendAll (clientFd, header, (size_t) headerLen) < 0) return false;
+      if (sendAll (clientFd, bigBuffer, bigBufferLen) < 0) return false;
+      printf ("Response sent to client. Size: %zu\n\n", headerLen + bigBufferLen);
+      // printf ("%s%s\n", header, bigBuffer);
+   }
 
    const double duration = monotonic () - start; 
    logRequest (par.logFileName, date, serverPort, clientIPAddress, postData, userAgent, &clientReq, duration);
@@ -1513,12 +1581,7 @@ int main (int argc, char *argv[]) {
       fprintf (stderr, "Synopsys: %s %s\n", argv [0], SYNOPSYS);
       return EXIT_FAILURE;
    }
-   serverPort = atoi (argv [1]);
-   if (serverPort < 80 || serverPort > 9000) {
-      fprintf (stderr, "In main, Error: port server not in range\n");
-      return EXIT_FAILURE;
-   }
-
+   
    if (argc > 2)
       g_strlcpy (parameterFileName, argv [2], sizeof parameterFileName);
    else 
@@ -1526,6 +1589,19 @@ int main (int argc, char *argv[]) {
 
    if (! initContext (parameterFileName, ""))
       return EXIT_FAILURE;
+
+   // option case, launch optionManage
+   if (argv[1][0] == '-') {
+      optionManage (argv [1][1]);
+      return EXIT_SUCCESS;
+   }
+
+   // No option, normal case, launch of server
+   serverPort = atoi (argv [1]);
+   if (serverPort < 80 || serverPort > 9000) {
+      fprintf (stderr, "In main, Error: port server not in range\n");
+      return EXIT_FAILURE;
+   }
 
    // Socket 
    serverFd = socket (AF_INET, SOCK_STREAM, 0);
