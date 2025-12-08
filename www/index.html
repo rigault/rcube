@@ -4,18 +4,25 @@
    <title>Rcube</title>
    <meta charset="UTF-8">
    <link rel="icon" type="image/ico" href="favicon.ico">
+
+   <!-- CSS appli -->
    <link rel="stylesheet" type="text/css" href="r3.css">
    <link rel="stylesheet" type="text/css" href="r3par.css">
    <link rel="stylesheet" type="text/css" href="stamina.css">
    <link rel="stylesheet" type="text/css" href="launch.css">
-   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-   <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"></script>
-   <script src="https://api.windy.com/assets/map-forecast/libBoot.js"></script>
-   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-   <!-- <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>-->
-   <!-- Utilise la version la plus récente de Plotly.js -->
-   <script src="https://cdn.plot.ly/plotly-2.11.0.min.js"></script>
-   <!-- <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>-->
+
+   <!-- Font Awesome local -->
+   <link rel="stylesheet" href="lib/fontawesome/all.min.css">
+
+   <!-- Leaflet local (OSM + GeoJSON) -->
+   <link rel="stylesheet" href="lib/leaflet/leaflet.css">
+
+   <!-- Librairies JS locales -->
+   <script src="lib/leaflet/leaflet.js"></script>
+   <script src="lib/swal/sweetalert2.all.min.js"></script>
+   <script src="lib/plotly/plotly-2.11.0.min.js"></script>
+
+   <script src="init.js"></script>
    <script src="filedump.js"></script>
    <script src="r3grib.js"></script>
    <script src="r3polar.js"></script>
@@ -158,34 +165,34 @@
          <span id="sliderValue">1</span>
       </span>
 
-   <script>      
-      function updateTimeLine(val) {
-         document.getElementById("timeLineValue").textContent = String(val).padStart(3, '0') + "%";
-         const boatName = Object.keys(route)[0];  // Extract first key from response
-         index = Math.round (val / 100 * (route[boatName].track.length - 1)); 
-         console.log (`length: ${route[boatName].track.length}, index: ${index}`);
-         if (route != null) {
-            //updateWindyMap(route);
-            updateAllBoats ();
+      <script>      
+         function updateTimeLine(val) {
+            document.getElementById("timeLineValue").textContent = String(val).padStart(3, '0') + "%";
+            const boatName = Object.keys(route)[0];  // Extract first key from response
+            index = Math.round (val / 100 * (route[boatName].track.length - 1)); 
+            console.log (`length: ${route[boatName].track.length}, index: ${index}`);
+            if (route != null) {
+               //updateWindyMap(route);
+               updateAllBoats ();
+            }
          }
-      }
 
-      function updateValue(val) {
-         document.getElementById("sliderValue").textContent = val;
-         const isIsocChecked = document.getElementById("isocCheckbox").checked;
-         moduloIsoc = isIsocChecked ? val : 0;
-         if (route != null) {
-            updateWindyMap(route);
-            updateAllBoats ();
+         function updateValue(val) {
+            document.getElementById("sliderValue").textContent = val;
+            const isIsocChecked = document.getElementById("isocCheckbox").checked;
+            moduloIsoc = isIsocChecked ? val : 0;
+            if (route != null) {
+               updateWindyMap(route);
+               updateAllBoats ();
+            }
          }
-      }
 
-      document.getElementById("isocCheckbox").addEventListener("change", function() {
-         const sliderVal = document.getElementById("slider").value;
-         updateValue(sliderVal);
-      });
-</script>
-   </div>
+         document.getElementById("isocCheckbox").addEventListener("change", function() {
+            const sliderVal = document.getElementById("slider").value;
+            updateValue(sliderVal);
+         });
+   </script>
+   </div> <!-- tools -->
    <footer class="footer">
       <span id = "infoRoute">Info</span>
       <span id="coords"> </span>
@@ -194,6 +201,21 @@
 </div>
 
 <script>
+   document.addEventListener('DOMContentLoaded', async () => {
+      try {
+         if (clearAppState) localStorage.clear(); else loadAppState ();
+         mapMode = await chooseMapMode(mapMode);
+         console.log('Selected map mode:', mapMode);
+         saveAppState ();
+         initMapAccordingToMode();
+      } catch (e) {
+         console.error('Error choosing map mode:', e);
+         // fallback
+         mapMode = MAP_MODE.LOCAL;
+         initMapAccordingToMode();
+      }
+   });
+
    /* listen CTRL D to display developper menu */
    document.addEventListener("keydown", (e) => {
       if (e.ctrlKey && e.key === "d") {
@@ -202,17 +224,6 @@
          if (menu) {
             menu.style.display = (menu.style.display === "none") ? "inline-block" : "none";
          }
-      }
-   });
-
-   /* listen CTRL S to switch between Windy and OSM */
-   document.addEventListener("keydown", (e) => {
-      if (e.ctrlKey && e.key === "s") {
-         e.preventDefault(); // éviter le marque-page sur certains navigateurs
-         windyPlay = ! windyPlay;
-         // alert (`windyplay: ${windyPlay}`);
-         saveAppState ();
-         location.reload ();
       }
    });
 
@@ -273,44 +284,6 @@
       const url = `https://www.google.com/maps/place/${lat},${lon}`;
       window.open(url, '_blank');
    }
-
-   // Initialize map
-   if (clearAppState) localStorage.clear(); else loadAppState ();
-   if (windyPlay == "false") windyPlay = false; else windyPlay = true;
-   /**
-   * Initializes the Windy API and retrieves the map and store objects.
-   *
-   * This function initializes the Windy API with the given options and assigns the 
-   * `windy`, `map`, and `store` objects for further interactions.
-   *
-   * @param {Object} options - Configuration options for Windy API initialization.
-   * @param {function(Object): void} callback - Callback function that receives the Windy API instance.
-   */
-   if (windyPlay)
-   windyInit (options, windyAPI => {
-      windy = windyAPI;
-      map = windy.map;
-      store = windy.store;
-
-      // Correct initial date & time
-      let initialTimestamp = store.get ('timestamp');
-      if (initialTimestamp > 1e10) {
-         initialTimestamp = Math.floor (initialTimestamp / 1000);
-      }
-
-      // Listen to timestamp changes
-      store.on ('timestamp', (newTimestamp) => {
-         if (newTimestamp > 1e10) {
-            newTimestamp = Math.floor(newTimestamp / 1000);
-         }
-         // updateRouteDisplay (newTimestamp);
-      });
-      additionalInit ();
-   });
-   else {
-      initMap('windy');
-      additionalInit ();
-   };
 </script>
 </body>
 </html>

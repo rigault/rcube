@@ -376,7 +376,7 @@ async function promptForCreds() {
 }
 
 /**
- * Init grib file name from server
+ * Get Grib name from server, fit map in grib bounds and display init Info UNUSED
  */
 function showInitMessage (language = 'fr') {
    const messages = {
@@ -409,7 +409,7 @@ Menu <b>Route/Launch</b> to launch route calculation.`,
       }
    }).then((result) => {
       if (result.isConfirmed) {
-         showInitMessage(language === 'fr' ? 'en' : 'fr');
+         oldShowInitMessage(language === 'fr' ? 'en' : 'fr');
       }
    });
 }
@@ -437,7 +437,7 @@ function getServerInit () {
       gribLimits.rightLon = data.rightLon;
       gribLimits.name = data.grib;
       updateStatusBar ();
-      showInitMessage ();
+      // showInitMessage ();
       const bounds = [[gribLimits.bottomLat, gribLimits.leftLon],[gribLimits.topLat, gribLimits.rightLon]];
       map.fitBounds(bounds);
       // alert (`bottomLat: ${gribLimits.bottomLat}, leftLon: ${gribLimits.leftLon}, topLat: ${gribLimits.topLat}, rigthtLon: ${gribLimits.rightLon}`);
@@ -447,7 +447,6 @@ function getServerInit () {
       Swal.fire("Erreur", "Impossible to access server", "error");
    });
 }
-
 
 function helpInfoHtml(data, full) {
   const head = `

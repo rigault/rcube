@@ -1,6 +1,8 @@
 /* jshint esversion: 6 */
+const MAP_MODE = {WINDY:0, OSM:1, LOCAL:2};
+let mapMode = MAP_MODE.WINDY;
+
 let animation = false;
-let windyPlay = true;   // true if windyb is used, false in OSM mode
 let barbDisp = true;    // diplay barbs in OSM mode
 let clipBoard = false;  // to set request in clipBoard
 let windCanvas = {};
@@ -23,10 +25,6 @@ let competitors = [
   { name: "jojo",     lat: 47, lon: -4, color: 1, marker: {}},
   { name: "titi",     lat: 48, lon: -5, color: 2, marker: {}}
 ];
-
-/*let competitors = [
-  { name: "noname", lat: 46, lon: -3, color: 0, marker: {}, route: [] },
-];*/
 
 let routeParam = {
    iBoat: 1,               // 0 reserved for all boats
@@ -73,6 +71,9 @@ const options = {
 let bounds;
 let marker;
 let map;
+let portsLayer = null; // for addPorts
+let layersControl = null; // for addPorts
+
 let store;
 let destination = null;
 let orthoRoute = null;
@@ -196,7 +197,7 @@ function saveAppState() {
    localStorage.setItem("polarName", polarName);
    localStorage.setItem("POIs", JSON.stringify(getSerializablePOIs()));
    localStorage.setItem("myWayPoints", JSON.stringify(myWayPoints));
-   localStorage.setItem("windyPlay", windyPlay);
+   localStorage.setItem("mapMode", mapMode);
    localStorage.setItem("routeParam", JSON.stringify(routeParam));
 }
 
@@ -343,7 +344,7 @@ function loadAppState() {
    const savedPolar = localStorage.getItem ("polarName");
    const savedPOIs = localStorage.getItem ("POIs");
    const savedWaypoints = localStorage.getItem ("myWayPoints");
-   const savedWindyPlay = localStorage.getItem ("windyPlay");
+   const savedMapMode = localStorage.getItem ("mapMode");
    const savedRouteParam = localStorage.getItem ("routeParam");
    if (saved) {
       const parsed = JSON.parse(saved);
@@ -359,7 +360,7 @@ function loadAppState() {
    if (savedPolar) polarName = savedPolar;
    if (savedPOIs) POIs = JSON.parse (savedPOIs);
    if (savedWaypoints) myWayPoints = JSON.parse(savedWaypoints);
-   if (savedWindyPlay) windyPlay = savedWindyPlay;
+   if (savedMapMode) mapMode = savedMapMode;
    //  if (savedRouteParam) routeParam = JSON.parse (savedRouteParam);
 }
 
@@ -826,7 +827,7 @@ async function finalUpdate (boatName) {
    gribLimits.rightLon = route [boatName]?.rightLon || gribLimits.rightLon;
    gribLimits.name = route [boatName]?.grib || gribLimits.name;
 
-   if (!windyPlay && barbDisp) {
+   if (mapMode != MAP_MODE.WINDY && barbDisp) {
       try {
          updateStatusBar (route, "Updating Grib");
          await gribMetaAndLoad("grib", "", gribLimits.name, true); // load if not windy
@@ -1525,7 +1526,7 @@ function move (iComp, firstTrack, index) {
 
    // Center map on new boat position
    // map.setView(newLatLng, map.getZoom());
-   if (windyPlay) store.set ('timestamp', time);                     // update Windy time
+   if (mapMode === MAP_MODE.WINDY) store.set ('timestamp', time);                     // update Windy time
    updateHeading (competitors [iComp], firstTrack);
    updateStatusBar (route); 
 }
@@ -1586,7 +1587,7 @@ function updateHeading (competitor, firstTrack) {
  */
 function updateAllBoats () {
    if (!route) return;
-   if (!windyPlay && barbDisp) drawWind ();
+   if (mapMode !== MAP_MODE.WINDY && barbDisp) drawWind ();
    const boatNames = Object.keys(route);
    console.log ("boatNames:", boatNames);
    boatNames.forEach((name, i) => {
@@ -1962,155 +1963,4 @@ function refreshMarker (competitor, iComp) {
       competitor.marker._icon.setAttribute('data-heading', heading); 
       updateIconStyle (competitor.marker);
    }
-}
-
-function additionalInit () {
-   updateBoatSelect ();
-   competitors.forEach (addMarker); // show initial position of boats
-   isochroneLayerGroup = L.layerGroup().addTo(map);
-   orthoRouteGroup = L.layerGroup().addTo(map);
-
-   map.doubleClickZoom.disable();
-   map.on ("contextmenu", showContextMenu);	
-
-   let isContextMenuOpen = false; // Avoid multiple display
-
-   document.addEventListener("touchstart", function (event) {
-      if (isContextMenuOpen) return; // Do not open several contect menus
-         let touch = event.touches [0];
-
-      // check if user touch <header>, #tool ou <footer>
-      let targetElement = event.target.closest("header, #tool, footer");
-      if (targetElement) return; // Ignore one of these elem
-
-      let timeout = setTimeout (() => {
-         let latlng = map.containerPointToLatLng([touch.clientX, touch.clientY]);
-         isContextMenuOpen = true; // Avoid multiple display
-         let fakeEvent = {
-            latlng: latlng,
-            originalEvent: {
-               clientX: touch.clientX,
-               clientY: touch.clientY
-            }
-         };
-
-         showContextMenu (fakeEvent);
-
-         // Authorize menu again after close
-         document.addEventListener("click", () => {
-            isContextMenuOpen = false;
-         }, { once: true });
-
-      }, 500); // 500 ms => long touch
-
-      document.addEventListener("touchmove", function () {
-         clearTimeout(timeout); // Annuler si l'utilisateur bouge
-      }, { passive: true });
-
-   }, { passive: true });
-
-   map.on ('mousemove', function (event) {
-        let lat = event.latlng.lat; //
-        let lon = event.latlng.lng; 
-        document.getElementById ('coords').textContent = latLonToStr (lat, lon, DMSType);
-    });
-   // Handle some events. We need to update the rotation of icons ideally each time
-   // leaflet re-renders. them.
-
-   map.on("zoomend", function () {
-      competitors.forEach(function (competitor) {
-         updateIconStyle(competitor.marker);
-      });
-      drawGribLimits(gribLimits);
-   });
-   map.on("zoom", function () {
-      competitors.forEach(function (competitor) {
-         updateIconStyle(competitor.marker);
-      });
-      drawGribLimits (gribLimits);
-   });
-   map.on ("viewreset", function () {
-      competitors.forEach(function (competitor) {
-         updateIconStyle(competitor.marker);
-      });
-      drawGribLimits (gribLimits);
-   });
-   getServerInit ();
-   updateStatusBar ();
-   showWayPoint (myWayPoints, windyPlay);
-   showPOI (POIs);
-
-   const polygonsLayer = L.layerGroup().addTo(map);
-   marks = getMarks (map);
-
-   map.on('dblclick', function (e) { // doule clic for info on  lat lon
-      const { lat, lng } = e.latlng;
-      coordStatus(lat, lng);
-   });
-
-   drawPolygons(map, polygonsLayer)
-      .catch(err => console.error(err));
-   
-   if (gpsActivated && gpsTimer > 0) {
-      fetchGpsPosition();
-      setInterval (fetchGpsPosition, gpsTimer * 1000);
-   }
-   if (aisActivated && aisTimer > 0) {
-      fetchAisPosition();
-      setInterval (fetchAisPosition, aisTimer * 1000);
-   }
-
-   lastPointLayer = L.layerGroup().addTo(map);
-
-   meters (map);
-}
-
-// Initializes a Leaflet map with OpenStreetMap base and OpenSeaMap seamarks overlay,
-function initMap(containerId) {
-  // --- Map setup ---
-   map = L.map(containerId, { 
-      zoomControl: true /* preferCanvas: true */ 
-   });
-
-  // Base layer: OpenStreetMap
-   const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
-   }).addTo(map);
-
-   // OpenSeaMap seamarks overlay (on top of the base map)
-   const seamark = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      opacity: 1.0,
-      attribution: 'Seamarks &copy; OpenSeaMap contributors'
-   }).addTo(map);
-
-  // Layers control to toggle overlay/route
-  L.control.layers(
-     { 'OpenStreetMap': osm },
-     { 'OpenSeaMap Seamarks': seamark},
-     { collapsed: false }
-   ).addTo(map);
-
-   // Scale bar (optional)
-   L.control.scale({
-      position: 'topleft', 
-      imperial: false     
-   }).addTo(map);
-
-   const windPane = map.createPane('windPane');
-   windPane.style.zIndex = 350;
-   windPane.style.pointerEvents = 'none';
-
-   windCanvas = document.createElement('canvas');
-   windCanvas.id = 'wind-layer';
-   windCanvas.style.position = 'absolute';
-   windCanvas.style.pointerEvents = 'none';
-
-   windPane.appendChild(windCanvas);
-   map.on('move zoom resize', drawWind); // ou 'moveend', 'zoomend', 'resize'
-
-   // Tip: If you prefer to fit to the route instead of the bbox, use:
-   // map.fitBounds(routeLine.getBounds());
-   // updateRouteDisplay (0);
 }
