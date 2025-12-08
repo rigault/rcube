@@ -6,9 +6,12 @@
    padding: 0;
    display: flex;
    flex-direction: column;
+   overflow: hidden;       /* no scroll bar */
 }
 
 header {
+   position: relative;
+   z-index: 1000;
    background-color: black;
    width: 100%;
 }
@@ -37,8 +40,6 @@ header a, .menu {
   pointer-events: none;
   z-index: 300; /* lower than .leaflet-popup-pane (700) */
 }
-
-
 
 #cadenas {
    color: lightgray;
@@ -128,7 +129,7 @@ header a:hover, .menu:hover {
 }
 
 .footer {
-   position: fixed;
+   /*position: fixed;*/
    bottom: 0;
    width: 100%;
    background-color: #333;
@@ -139,6 +140,8 @@ header a:hover, .menu:hover {
    justify-content: space-between;
    align-items: center;
    font-size: 14px;
+   position: relative;
+   z-index: 1000;
 }
 .footer .left {
    display: flex;
@@ -194,8 +197,11 @@ input[type="range"] {
 }
 
 #windy {
-   flex: 1; /* Prend tout l'espace restant */
-   position: relative; /* Utile pour la carte Windy */
+   flex: 1 1 auto;
+   position: relative;        /* important for z-index */
+   z-index: 0;                /* lesse than header/footer */
+   background-color: #d0e7ff; /* blue sea*/
+   position: relative;        /* Useful for Windy map*/
 }
 
 /* Masquer la timeline + son player */
@@ -204,7 +210,7 @@ input[type="range"] {
 }
 
 #tools {
-   height: 100px;
+   height: 50px;
    display: flex;
    align-items: center;
 }
