@@ -30,12 +30,8 @@
 #include "option.h"
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h> // for signal(SIGPIPE, SIG_IGN)
 
-#define GREEN  "\033[32m"
-#define RED    "\033[31m"
-#define YELLOW "\033[33m"
-#define BLUE   "\033[34m"
-#define NORMAL "\033[0m"
 #define SYNOPSYS               "<port> | -<option> [<parameter file>]"
 #define MAX_SIZE_REQUEST       2048        // Max size from request client
 #define MAX_SIZE_RESOURCE_NAME 256         // Max size polar or grib name
@@ -132,7 +128,6 @@ static void polygonToJson (MyPolygon *po, char *str, size_t maxLen) {
    double lat, lon;
 
    strlcpy (str, "  [", maxLen);
-   printf ("Number of points in polygon: %d\n", n);
    for (int k = 0; k < n; k++) {
       lat = (po->points [k].lat);
       lon = (po->points [k].lon);
@@ -1120,14 +1115,15 @@ static bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, s
 static const char *getMimeType (const char *path) {
    const char *ext = strrchr(path, '.');
    if (!ext) return "application/octet-stream";
-   if (strcmp(ext, ".html") == 0) return "text/html";
-   if (strcmp(ext, ".css") == 0) return "text/css";
-   if (strcmp(ext, ".js") == 0) return "application/javascript";
-   if (strcmp(ext, ".png") == 0) return "image/png";
-   if (strcmp(ext, ".jpg") == 0) return "image/jpeg";
-   if (strcmp(ext, ".gif") == 0) return "image/gif";
-   if (strcmp(ext, ".txt") == 0) return "text/plain";
-   if (strcmp(ext, ".par") == 0) return "text/plain";
+   if (strcmp(ext, ".html") == 0)   return "text/html";
+   if (strcmp(ext, ".css") == 0)    return "text/css";
+   if (strcmp(ext, ".js") == 0)     return "application/javascript";
+   if (strcmp(ext, ".png") == 0)    return "image/png";
+   if (strcmp(ext, ".jpg") == 0)    return "image/jpeg";
+   if (strcmp(ext, ".gif") == 0)    return "image/gif";
+   if (strcmp(ext, ".txt") == 0)    return "text/plain";
+   if (strcmp(ext, ".par") == 0)    return "text/plain";
+   if (strcmp(ext, "geojson") == 0) return "application/geo+json; charset=utf-8";
    return "application/octet-stream";
 }
 
@@ -1135,6 +1131,9 @@ static const char *getMimeType (const char *path) {
 static void serveStaticFile (int client_socket, const char *requested_path) {
    char filepath [512];
    snprintf (filepath, sizeof filepath, "%s%s", par.web, requested_path);
+
+   char *q = strchr(filepath, '?'); // cut after ? to avoid issue with path/r3.js?v=0.2
+   if (q) *q = '\0';
    printf ("File Path: %s\n", filepath);
 
    // Check if file exist
@@ -1142,6 +1141,7 @@ static void serveStaticFile (int client_socket, const char *requested_path) {
    if (stat (filepath, &st) == -1 || S_ISDIR(st.st_mode)) {
       const char *not_found = "HTTP/1.1 404 Not Found\r\nContent-Length: 13\r\n\r\n404 Not Found";
       send (client_socket, not_found, strlen(not_found), 0);
+      fprintf (stderr, "In serveStaticFile, Error 404\n");
       return;
    }
 
@@ -1150,6 +1150,7 @@ static void serveStaticFile (int client_socket, const char *requested_path) {
    if (file == -1) {
       const char *error = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 21\r\n\r\n500 Internal Server Error";
       send (client_socket, error, strlen(error), 0);
+      fprintf (stderr, "In serveStaticFile, Error 500\n");
       return;
    }
 
@@ -1162,10 +1163,21 @@ static void serveStaticFile (int client_socket, const char *requested_path) {
    // Read end send file
    char buffer [1024];
    ssize_t bytesRead;
-   while ((bytesRead = read(file, buffer, sizeof buffer )) > 0) {
-      send (client_socket, buffer, bytesRead, 0);
+   while ((bytesRead = read(file, buffer, sizeof buffer)) > 0) {
+      ssize_t totalSent = 0;
+      while (totalSent < bytesRead) {
+         ssize_t sent = send(client_socket, buffer + totalSent, bytesRead - totalSent, 0);
+         if (sent <= 0) {
+            perror("send"); // we stop in a clean way if client disconnects
+            close(file);
+            fprintf(stderr, "In serveStaticFile, Client disconnected while sending file\n");
+            return;
+         }
+         totalSent += sent;
+      }
    }
    close (file);
+   printf ("✅ serveStaticFile OK\n");
 }
 
 /*!
@@ -1422,10 +1434,10 @@ static bool launchAction (int serverPort, int sock, ClientRequest *clientReq,
       buildInitialOfShortNameList(&zone, str, sizeof str);
       // strlcpy (str, "uvgw", 5); // ATT ecrase le précédent
       float *buf = buildUVGWarray(&zone, str, tGribData[WIND], &dataLen); // dataLen in number of float
-      printf("Send Binary float array with: Len=%zu, Bytes=%zu, Shortnames=%s\n",
+      sendBinaryResponse(sock, buf, dataLen * sizeof(float), str);
+      printf("✅ Send Binary float array with: Len=%zu, Bytes=%zu, Shortnames=%s\n\n",
          dataLen, dataLen * sizeof(float), str);
 
-      sendBinaryResponse(sock, buf, dataLen * sizeof(float), str);
       free(buf);
       resp = false;
       break;
@@ -1479,7 +1491,7 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
    
    // check if Rest API (POST) or static file (GET)
    if (strncmp (requestLine, "POST", 4) != 0) {
-      printf ("GET Request, static file\n");
+      printf ("📥 GET Request, static file: %s\n", requestLine);
       // static file
       const char *requested_path = strchr (requestLine, ' '); // space after "GET"
       if (!requested_path) {
@@ -1508,7 +1520,7 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
 
    char* userAgent = extractUserAgent (saveBuffer);
    postData += 4; // Ignore HTTP request separators
-   printf ("✅ POST Request:\n"GREEN"%s"NORMAL"\n", postData);
+   printf ("🟠 POST Request:\n%s\n", postData);
 
    // data for log
    const double start = monotonic (); 
@@ -1546,8 +1558,7 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
 
       if (sendAll (clientFd, header, (size_t) headerLen) < 0) return false;
       if (sendAll (clientFd, bigBuffer, bigBufferLen) < 0) return false;
-      printf ("Response sent to client. Size: %zu\n\n", headerLen + bigBufferLen);
-      // printf ("%s%s\n", header, bigBuffer);
+      printf ("✅ Response sent to client. Size: %zu\n\n", headerLen + bigBufferLen);
    }
 
    const double duration = monotonic () - start; 
@@ -1566,6 +1577,7 @@ int main (int argc, char *argv[]) {
    int addrlen = sizeof address;
    int serverPort, opt = 1;
    const double start = monotonic (); 
+   signal(SIGPIPE, SIG_IGN);   // Ignore SIGPIPE globally
 
    if ((bigBuffer =malloc (BIG_BUFFER_SIZE)) == NULL) {
       fprintf (stderr, "In main, Error: Malloc: %d,", BIG_BUFFER_SIZE);
