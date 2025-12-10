@@ -53,7 +53,7 @@
 /* Radios compacts */
 .radio-pill {
    display: inline-flex;
-   align-items: left;
+   align-items: flex-end;
    gap: 0;         
    line-height: 1;      
 }

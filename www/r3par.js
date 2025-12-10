@@ -30,13 +30,13 @@ function changeParam(routeParam) {
                <div class="form-group"><label>Night Efficiency:</label>
                   <input type="number" id="nightEfficiency" min="0.50" max="1.50" step="0.01" value="${routeParam.nightEfficiency || ''}">
                </div>
-               <div class="form-group"><label>Stamina</label><input type="number" min = "0" max = "110" id="staminaVR" value="${routeParam.staminaVR || ''}"></div>
+               <div class="form-group"><label>Stamina:</label><input type="number" min = "0" max = "110" id="staminaVR" value="${routeParam.staminaVR || ''}"></div>
                <div class="form-group"><label>Initial:</label>
-                  <label class="radio-pill" for="amureTribord">
+                  <label class="radio-pill">
                      <input type="radio" id="amureTribord" name="initialAmure" value="0" ${Number(routeParam?.initialAmure ?? 0) === 0 ? 'checked' : ''}>
                      Tri.
                   </label>
-                  <label class="radio-pill" for="amureBabord">
+                  <label class="radio-pill">
                      <input type="radio" id="amureBabord" name="initialAmure" value="1" ${Number(routeParam?.initialAmure ?? 0) === 1 ? 'checked' : ''}>
                      Bab.
                   </label>
@@ -63,7 +63,7 @@ function changeParam(routeParam) {
                <div class="form-group"><label>Const Wind TWD:</label><input type="number" id="constWindTwd" min="0" max="360" value="${routeParam.constWindTwd || ''}"></div>
                <div class="form-group"><label>Const Wave Height:</label><input type="number" id="constWave" min="0" max="10" value="${routeParam.constWave || ''}"></div>
                <div class="form-group"><label>Const Current Speed:</label><input type="number" id="constCurrentS" min="0" max="10" value="${routeParam.constCurrentS || ''}"></div>
-               <div class="form-group"><label>Const Current Dir.</label><input type="number" id="constCurrentD" min="0" max="360" value="${routeParam.constCurrentD || ''}"></div>
+               <div class="form-group"><label>Const Current Dir:</label><input type="number" id="constCurrentD" min="0" max="360" value="${routeParam.constCurrentD || ''}"></div>
             </div>
          </div>
          </div>

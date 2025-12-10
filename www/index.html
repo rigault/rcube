@@ -107,8 +107,8 @@
             <button class="menu-link" onclick="showNoaaMapGif ();">NOAA Map</button>
             <button class="menu-link" onclick="window.open (`https://ocean.weather.gov/shtml/A_brief.php`);">NOAA Ocean</button>
             <button class="menu-link" onclick="openGoogleMaps(competitors[0].lat, competitors[0].lon)">GoogleMap</button>
-            <button class="menu-link" onclick="showOpenStreetMap(competitors[0].lat, competitors[0].lon)">OpenStreet</button>
-            <button class="menu-link" onclick="showOpenSeaMap(competitors[0].lat, competitors[0].lon)">OpenSeaMap</button>
+            <button class="menu-link" onclick="openStreetMap(competitors[0].lat, competitors[0].lon)">OpenStreet</button>
+            <button class="menu-link" onclick="openSeaMap(competitors[0].lat, competitors[0].lon)">OpenSeaMap</button>
          </div>
       </div>
       <div class="dropdown">
@@ -126,6 +126,7 @@
             <button class="menu-link" onclick="replay ();">Replay</button>
             <button class="menu-link" onclick="showTrace(map, myTrace);">Trace</button>
             <button class="menu-link" onclick="initServer();">ReInit</button>
+            <button class="menu-link" onclick="dumpPorts();">dump Ports</button>
             <a href="doc/clihelp.md" target="_blank">CLI Help</a>
             <a href="doc/README.md" target="_blank">README</a>
             <a href="doc/r3ServerTechDoc.html" target="_blank">Server side Tech Doc</a>
@@ -229,9 +230,9 @@
 
    function showNoaaMapGif() {
       Swal.fire({
-         title: 'Carte Générale NOAA',
+         title: 'NOAA Map',
          html: `
-            <img src="https://tgftp.nws.noaa.gov/fax/PYAA01.gif" alt="Carte NOAA"
+            <img src="https://tgftp.nws.noaa.gov/fax/PYAA01.gif" alt="NOAA Map"
                style="transform: rotate(90deg); max-width: 90vh; max-height: 90vh;">
             `,
          width: 'auto',
@@ -246,33 +247,16 @@
       window.open(shomUrl, '_blank');
    }
 
-   function openWithSwal (title, url) {
-      Swal.fire({
-         title: `${title}`,
-         html: `
-            <iframe
-            src="${url}"
-            style="width: 100%; height: 70vh; border: none;"
-            allowfullscreen
-            ></iframe>
-         `,
-         width: '90%',
-         showCloseButton: true,
-         showConfirmButton: false,
-         background: '#f0f0f0',
-      });
-   }
-
-   function showOpenStreetMap(lat, lon) {
+   function openStreetMap(lat, lon) {
       const zoom = 10; // ajustable
       const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lon-0.02},${lat-0.02},${lon+0.02},${lat+0.02}&layer=mapnik&marker=${lat},${lon}`;
-      openWithSwal ('OpenStreetMap', url);
+      window.open(url, '_blank');
    }
 
-   function showOpenSeaMap(lat, lon) {
+   function openSeaMap(lat, lon) {
       const zoom = 10;
       const url = `https://map.openseamap.org/?lat=${lat}&lon=${lon}&zoom=${zoom}`;
-      openWithSwal ('OpenSeaMap', url);
+      window.open(url, '_blank');
    }
 
    function openWindy (lat, lon) {
