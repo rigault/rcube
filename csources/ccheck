@@ -5,13 +5,13 @@ cppcheck --enable=warning,performance,portability *.c
 
 echo "gcc analyser"
 
-list=("engine.c" "r3grib.c" "readgriballeccodes.c" "readgriballwithouteccodes.c" "polar.c" "option.c")
+list=("r3server.c capi.c engine.c" "r3grib.c" "readgriballeccodes.c" "readgriballwithouteccodes.c" "polar.c" "option.c")
 
 for file in "${list[@]}"; do
    gcc -fanalyzer -c $file
 done
 
+gcc -fanalyzer -Wno-analyzer-malloc-leak -Wno-analyzer-out-of-bounds -c common.c
 gcc -fanalyzer -Wno-analyzer-malloc-leak -Wno-analyzer-out-of-bounds -c r3util.c
-gcc -fanalyzer -Wno-analyzer-malloc-leak -Wno-analyzer-out-of-bounds -c r3server.c
 
 rm *.o

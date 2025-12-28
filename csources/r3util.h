@@ -1,4 +1,9 @@
 /*! Zone description */
+
+#pragma once
+#include "r3types.h"
+#include <stdbool.h>
+
 extern Zone zone;                      // wind
 extern Zone currentZone;               // current
 
@@ -30,6 +35,8 @@ extern char *tIsSea;                   // array of byte. 0 if earth, 1 if sea
 extern CompetitorsList competitors;
 
 /*! functions defined in r3util.c */
+/*! reinit zone describing geographic meta data */
+extern void   initZone (Zone *zone);
 extern char   *epochToStr (time_t t, bool seconds, char *str, size_t len);
 extern struct tm gribDateToTm (long intDate, double nHours);
 extern bool   isDayLight (struct tm *tm0, double t, double lat, double lon);
@@ -64,3 +71,4 @@ extern double monotonic (void);
 extern char   *readTextFile (const char *fileName, char *errMessage, size_t maxLen);
 extern bool   readMarkCSVToJson (const char *fileName, char *out, size_t maxLen);
 extern void   normalizeSpaces (char *s);
+

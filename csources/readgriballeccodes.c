@@ -194,6 +194,10 @@ static inline long indexOf (int timeStep, double lat, double lon, const Zone *zo
 /*! read grib file using eccodes C API 
    return true if OK */
 bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
+   if ((iFlow == WIND && par.constWindTws > 0) || (iFlow == CURRENT && par.constCurrentS > 0)) { // constant wind or current. Dont read file
+      initZone (zone);
+      return true;
+   }
    FILE* f = NULL;
    int err = 0;
    long iGrib;

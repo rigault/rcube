@@ -2,16 +2,22 @@
 . Constant definition with #define and enum
 . Type definitions with typedef
 */
+#pragma once
+//#include <sys/_types/_time_t.h>
+#include <stdbool.h>
 
-#define STAMINA_SHIP 0                          // Virtual Regatta shop index
-#define STAMINA_SAIL 2                          // Virtual Regatta index for sail change
-#define STAMINA_TACK 0                          // Virtual Regatta intex for tack or Gybe
-#define STAMINA_FULL_PACK 1                     // Virtual regatta full pack 
+#define MAX_SIZE_RESOURCE_NAME 256              // Max size polar or grib name
+#define MAX_SIZE_FEED_BACK    1024              // Max sieze of client feedback
+#define MAX_SIZE_MESS         100000
+#define STAMINA_SHIP          0                 // Virtual Regatta shop index
+#define STAMINA_SAIL          2                 // Virtual Regatta index for sail change
+#define STAMINA_TACK          0                 // Virtual Regatta intex for tack or Gybe
+#define STAMINA_FULL_PACK     1                 // Virtual regatta full pack 
 #define N_MAX_NMEA_PORTS      3
 #define CSV_SEP_POLAR         ";\t"             // for polar no comma because decimal separator may be comma 
 #define WORKING_DIR           "" //ATT          // Default Working Dir if nothing specified in routing.par file
 //#define WORKING_DIR           "/home/rr/routing/"
-#define PARAMETERS_FILE       WORKING_DIR"par/routing.par" // default parameter file
+#define PARAMETERS_FILE       WORKING_DIR"par/routing.yaml" // default parameter file
 #define TEMP_FILE_NAME        "routing.tmp"     // temporary file
 #define MIN_LAT               (-80.0)           // Minimum latitude for getCoord
 #define MAX_LAT               80.0              // Maximum latitude for getCoord
@@ -42,7 +48,7 @@
 #define MAX_N_POL_MAT_LINES   128               // Max number of lines in polar
 #define MAX_SIZE_JSON_HEADER  10000             // Max size json header when reading polar json
 
-#define MAX_SIZE_LINE         256		         // Max size of pLine in text files
+#define MAX_SIZE_LINE         1024		         // Max size of pLine in text files
 #define MAX_SIZE_STD          1024		         // Max size of lines standard
 #define MAX_SIZE_LINE_BASE64  1024              // Max size of line in base64 mail file
 #define MAX_SIZE_TEXT         2048		         // Max size of text
@@ -60,8 +66,8 @@
 #define MAX_SIZE_SHORT_NAME   16                // Max size of string representing very short name
 #define MAX_SIZE_NAME         64                // Max size of string representing a name
 #define MAX_SIZE_NUMBER       64                // Max size of string representing a number
-#define MAX_SIZE_FILE_NAME    128               // Max size of pLine in text files
-#define MAX_SIZE_DIR_NAME     192               // Max size of directory name
+#define MAX_SIZE_FILE_NAME    512               // Max size of pLine in text files
+#define MAX_SIZE_DIR_NAME     1024              // Max size of directory name
 #define MAX_N_SHP_FILES       4                 // Max number of shape file
 #define SMALL_SIZE            5                 // for short string
 #define MAX_SIZE_FORBID_ZONE  100               // Max size per forbidden zone
@@ -80,6 +86,62 @@ enum {BASIC, DD, DM, DMS};                      // degre, degre decimal, degre m
 enum {TRIBORD, BABORD};                         // amure TRIBORD = STARBOARD, BABORD = PORT
 enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION};                   // for chooseDeparture.ret values and allCompetitors check
 enum {ROUTING_STOPPED = -2, ROUTING_ERROR = -1, ROUTING_RUNNING = 0};   // for routingLaunch
+
+/*! Client Request description */
+typedef struct {
+   int level;                                // level of authorization
+   int type;                                 // type of request
+   int cogStep;                              // step of cog in degrees
+   int rangeCog;                             // range of cog from x - RANGE_GOG, x + RAGE_COG+1
+   int jFactor;                              // factor for target point distance used in sectorOptimize
+   int kFactor;                              // factor for target point distance used in sectorOptimize
+   int nSectors;                             // number of sector for optimization by sector
+   int penalty0;                             // penalty in seconds for tack
+   int penalty1;                             // penalty in seconds fot Gybe
+   int penalty2;                             // penalty in seconds for sail change
+   int initialAmure;                         // initial Amure of the routing calculation 0 = starboard = tribord, or 1 = port = babord
+   int timeStep;                             // isoc time step in seconds
+   time_t epochStart;                        // epoch time to start routing
+   bool onlyUV;                              // for grib dump requesting only U and V
+   bool isoc;                                // true if isochrones requested
+   bool isoDesc;                             // true if isochrone decriptor requested
+   bool sortByName;                          // true if directory should be sorted by name, false if sorted by modif date
+   bool forbid;                              // true if forbid zone (polygons or Earth) are considered
+   bool withWaves;                           // true if waves specified in wavePolName file are considered
+   bool withCurrent;                         // true if current specified in currentGribName is considered
+   double staminaVR;                         // Init stamina
+   double motorSpeed;                        // motor speed if used
+   double threshold;                         // threshold for motor use
+   double nightEfficiency;                   // efficiency of team at night
+   double dayEfficiency;                     // efficiency of team at day
+   double xWind;                             // multiply factor for wind
+   double maxWind;                           // max Wind supported
+   double constWindTws;                      // if not equal 0, constant wind used in place of grib file
+   double constWindTwd;                      // the direction of constant wind if used
+   double constWave;                         // constant wave height if used
+   double constCurrentS;                     // if not equal 0, contant current speed Knots
+   double constCurrentD;                     // the direction of constant current if used
+   int nBoats;                               // number of boats
+   struct {
+      char name [MAX_SIZE_NAME];             // name of the boat
+      double lat;                            // latitude
+      double lon;                            // longitude
+   } boats [MAX_N_COMPETITORS];              // boats
+   int nWp;                                  // number of waypoints
+   struct {
+      double lat;                            // latitude
+      double lon;                            // longitude
+   } wp [MAX_N_WAY_POINT];                   // way points
+   char model      [MAX_SIZE_RESOURCE_NAME]; // grib model
+   char dirName    [MAX_SIZE_RESOURCE_NAME]; // remote directory name
+   char wavePolName[MAX_SIZE_RESOURCE_NAME]; // polar file name
+   char polarName  [MAX_SIZE_RESOURCE_NAME]; // polar file name
+   char gribName   [MAX_SIZE_RESOURCE_NAME]; // grib file name
+   char fileName   [MAX_SIZE_RESOURCE_NAME]; // grib file name
+   char currentGribName [MAX_SIZE_RESOURCE_NAME];  // grib file name
+   char feedback   [MAX_SIZE_FEED_BACK];      // for feed back info
+} ClientRequest; 
+
 struct MeteoElmt {
    int id; 
    char name [MAX_SIZE_NAME];
@@ -420,3 +482,5 @@ typedef struct {
    int withWaves;                            // true if waves are considered
    int withCurrent;                          // true if current is  considered
 } Par;
+
+

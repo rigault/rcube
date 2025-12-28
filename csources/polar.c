@@ -363,7 +363,7 @@ static bool readPolarJson (const char *fileName, PolMat *polMat, PolMat *sailPol
    strlcpy (start, begin, (ptr-begin));
    const int len = strlen (start);
    if (start [len - 1] == ',') start [len - 1 ] = '\0';     // last comma elimination if exist 
-   snprintf (polMat->jsonHeader, sizeof polMat->jsonHeader, "{%s\n}", start); // header extracted
+   snprintf (polMat->jsonHeader, sizeof polMat->jsonHeader, "{%s}", start); // header extracted
 
    line = findListPol (true, MAX_N_POL_MAT_COLS, line, "\"tws\":[", polMat, sailPolMat, errMessage, maxLen);
    if (line == NULL) return false;
@@ -436,12 +436,12 @@ char *polToStrJson (bool report, const char *fileName, const char *objName, char
    }
    
    snprintf (out, maxLen, 
-      "{\"header\": %s,\n\"%s\": \"%s\", \"nLine\": %d, \"nCol\": %d, \"nSail\": %zu, \"max\": %.2lf, \"fromJson\": %s, \n\"array\":\n[\n", 
+      "{\n  \"header\": %s,\n  \"%s\": \"%s\",\n  \"nLine\": %d,\n  \"nCol\": %d,\n  \"nSail\": %zu,\n  \"max\": %.2lf,\n  \"fromJson\": %s,\n  \"array\": [\n", 
        mat.jsonHeader, objName, polarName, mat.nLine, mat.nCol, mat.nSail, mat.maxAll, mat.fromJson ? "true" : "false");
 
    // generate two dimensions array with the values 
    for (int i = 0; i < mat.nLine ; i++) {
-      g_strlcat (out, "   [", maxLen);
+      g_strlcat (out, "    [", maxLen);
       for (int j = 0; j < mat.nCol - 1; j++) {
          snprintf (str, sizeof str, "%.4f, ", mat.t [i][j]);
          g_strlcat (out, str, maxLen);
@@ -449,14 +449,14 @@ char *polToStrJson (bool report, const char *fileName, const char *objName, char
       snprintf (str, sizeof (str), "%.4f]%s\n", mat.t [i][mat.nCol -1], (i < mat.nLine - 1) ? "," : "");
       g_strlcat (out, str, maxLen);
    }
-   g_strlcat (out, "]", maxLen);
+   g_strlcat (out, "  ]", maxLen);
 
    // if several sails, generate two dimensions array with sail number
    if (mat.nSail > 1) {
-      g_strlcat (out, ",\n\"arraySail\":\n[\n", maxLen);
+      g_strlcat (out, ",\n  \"arraySail\": [\n", maxLen);
    
       for (int i = 0; i < mat.nLine ; i++) {
-         g_strlcat (out, "   [", maxLen);
+         g_strlcat (out, "    [", maxLen);
          for (int j = 0; j < mat.nCol - 1; j++) {
             snprintf (str, sizeof str, "%.0f, ", sailMat.t [i][j]);
             g_strlcat (out, str, maxLen);
@@ -464,21 +464,21 @@ char *polToStrJson (bool report, const char *fileName, const char *objName, char
          snprintf (str, sizeof (str), "%.0f]%s\n", sailMat.t [i][mat.nCol -1], (i < mat.nLine - 1) ? "," : "");
          g_strlcat (out, str, maxLen);
       }
-      g_strlcat (out, "],\n", maxLen);
+      g_strlcat (out, "  ],\n", maxLen);
 
       // generate one dimension array that list the name of sails, ordered NA = 0, Sail1, sail2 etc
-      g_strlcat (out, "\"legend\": [", maxLen);
+      g_strlcat (out, "  \"legend\": [", maxLen);
       g_strlcat (out, "\"NA\",", maxLen); // first is NA (id 0)
       for (size_t i = 0; i < mat.nSail; i += 1) {
          snprintf (str, sizeof str, "\"%s\"%s", mat.tSail [i].name, (i < mat.nSail -1) ? ", " : "");
          g_strlcat (out, str, maxLen);
       }
-      g_strlcat (out, "]", maxLen);   
+      g_strlcat (out, "  ]", maxLen);   
    } // end if mat.nSail > 1
    
    // generate report
    if (report) {
-      g_strlcat (out, ",\n\"report\": \"", maxLen);  
+      g_strlcat (out, ",\n  \"report\": \"", maxLen);  
       polarCheck (&mat, str, sizeof str);
       g_strlcat (out, str, maxLen);
       g_strlcat (out, "\"", maxLen);

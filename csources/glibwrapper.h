@@ -1,6 +1,12 @@
+#pragma once
 #include <stddef.h>
 #include <string.h>
 #include <math.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <limits.h>
+#include <stdatomic.h>
+
 #define G_PI 3.14159265358979323846
 #define MIN(i, j) (((i) < (j)) ? (i) : (j))
 #define MAX(i, j) (((i) > (j)) ? (i) : (j))
@@ -9,16 +15,7 @@
 #define g_strlcpy(dest, src, size) strlcpy((dest),(src),(size))
 #define g_strlcat(dest, src, size) strlcat((dest),(src),(size))
 
-#include <string.h>  /* strlen, memmove */
-#include <stdbool.h>
-
-/* mini_gstrsplit.h — drop-in sans GLib */
-#pragma once
-#include <stdlib.h>
-#include <string.h>
-#include <limits.h>
-
-/*: Length of array of string NULL terminated (like GLib g_strv_length) */
+/*! Length of array of string NULL terminated (like GLib g_strv_length) */
 static inline size_t g_strv_length (char * const *strv) {
    if (!strv) return 0;
    size_t n = 0; 
@@ -180,13 +177,11 @@ static inline bool g_str_has_prefix (const char *s, const char *prefix) {
    return strncmp(s, prefix, lp) == 0;
 }
 
-/*! Attention NOT SAFE */ 
 static inline int g_atomic_int_get (int *x) {
-   return *x;
+   return atomic_load((_Atomic int*)x);
 }
 
-/*! Attention NOT SAFE */ 
 static inline void g_atomic_int_set (int *x, int val) {
-   *x = val;
+   atomic_store((_Atomic int*)x, val);
 }
 

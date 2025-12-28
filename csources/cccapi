@@ -6,11 +6,12 @@ gcc $CFLAGS -c r3grib.c
 gcc $CFLAGS -c polar.c
 gcc $CFLAGS -c common.c
 gcc $CFLAGS -c -Wno-format-nonliteral r3util.c
-gcc $CFLAGS -c readgriballeccodes.c
+gcc $CFLAGS -c readgriballwithouteccodes.c
 gcc $CFLAGS -c -march=native -ffast-math -fno-math-errno -fno-trapping-math option.c
-gcc $CFLAGS -c r3server.c
+gcc $CFLAGS -c  capi.c
 
-gcc $CFLAGS r3server.o r3util.o r3grib.o readgriballeccodes.o polar.o engine.o option.o common.o -o r3server -lm -leccodes 
+#gcc $CFLAGS capi.o r3util.o r3grib.o readgriballwithouteccodes.o polar.o engine.o option.o common.o -o capi -lm -leccodes 
+gcc $CFLAGS capi.o r3util.o r3grib.o readgriballwithouteccodes.o polar.o engine.o option.o common.o -o capi -lm -leccodes 
 rm -f *.o
-mv r3server ../.
+mv capi ../.
 

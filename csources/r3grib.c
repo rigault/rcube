@@ -633,7 +633,7 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
       "  \"topLat\": %.6f, \"leftLon\": %.6f, \"bottomLat\": %.6f, \"rightLon\": %.6f, \n"
       "  \"latStep\": %.4f, \"lonStep\": %.4f, \n"
       "  \"nLat\": %ld, \"nLon\": %ld, \"nValues\": %ld, \"nTimeStamp\": %zu,\n"
-      "  \"timeStamps\": \n  [",
+      "  \"timeStamps\": [",
       gZone.centreId, centreName, gZone.editionNumber,
       str0, str1,
       gribDateTimeToEpoch(gZone.dataDate[0], gZone.dataTime[0]),

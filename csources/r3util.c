@@ -15,6 +15,7 @@
 #include <locale.h>
 #include "glibwrapper.h"
 #include "r3types.h"
+#include "grib.h"
 #include "inline.h"
 
 /* For virtual regatta Stamina calculation */
@@ -63,6 +64,67 @@ char *tIsSea = NULL;
 /*! geographic zone covered by grib file */
 Zone zone;                             // wind
 Zone currentZone;                      // current
+
+#include <time.h>
+#include <stdio.h>
+
+/*! translate time nnox in dataDate, datatime grib 
+ *  Minutes are allways 00. Hours are 00, 06, 12 or 18
+ */
+static void gribDateTimeNowUtc(long *dataDate, long *dataTime) {
+    time_t now = time(NULL);
+    struct tm t;
+    gmtime_r(&now, &t);               // UTC
+    int hour = t.tm_hour;             // 0..23
+    t.tm_hour = (hour / 6) * 6;   // floor to 00,06,12,18
+    t.tm_min  = 0; // HH = 00
+    t.tm_sec  = 0; // Sec = 0
+
+    // Recompose Grib dates
+    *dataDate = (long)((t.tm_year + 1900) * 10000 + (t.tm_mon + 1) * 100 + (t.tm_mday));
+    *dataTime = (long)(t.tm_hour * 100);   // minutes = 00
+}
+
+/*! reinit zone describing geographic meta data */
+void initZone (Zone *zone) {
+   char buffer [1000000];
+   const int tInterval = 3;
+   const int nbDays = 16;
+   gribToStr (zone, buffer, MAX_SIZE_BUFFER);
+   printf ("%s\n", buffer);
+   memset(zone, 0, sizeof(*zone));
+   zone->editionNumber = 2;
+   zone->centreId = 7;     // GFS NOAA
+   zone->stepUnits = 1;    // hours
+   zone->wellDefined = true;
+   zone->allTimeStepOK = true;
+   zone->latMin = -85.0;
+   zone->latMax = 85.0;
+   zone->lonRight = -179.0;
+   zone->lonLeft = 180.0;
+   zone->latStep = 1.00;
+   zone->lonStep = 1.0;
+   
+   zone->nbLat = zone->latMax - zone->latMin + 1;
+   zone->nbLon = zone->lonLeft - zone->lonRight + 1;
+   zone->nDataDate = 1;
+   zone->nDataTime = 1;
+   gribDateTimeNowUtc(&zone->dataDate[0], &zone->dataTime[0]);
+
+   zone->nShortName = 2;
+   strncpy(zone->shortName[0], "10u", 4);
+   strncpy(zone->shortName[1], "10v", 4);
+   zone->nTimeStamp = (int ) (24 * nbDays / tInterval);
+   zone->intervalBegin = tInterval;
+   zone->intervalEnd = tInterval;
+   for (size_t i = 0; i < zone->nTimeStamp; i += 1) {
+      zone->timeStamp [i] = tInterval * i;
+   }
+   zone->nMessage = zone->nShortName * zone->nTimeStamp;
+   zone->numberOfValues = zone->nbLat * zone->nbLon;
+   gribToStr (zone, buffer, MAX_SIZE_BUFFER);
+   printf ("%s\n", buffer);
+}
 
 /*! return the name of the sail */
 char *fSailName (int val, char *str, size_t maxLen) {
@@ -226,7 +288,6 @@ double getCoord (const char *str, double minLimit, double maxLimit) {
 }
 */
 /*! abolute path POSIX : begin with '/' */ 
-
 char *buildRootName(const char *fileName, char *rootName, size_t maxLen) {
    if (!fileName || !rootName || maxLen == 0) return NULL;
    const char *workingDir = (par.workingDir[0] != '\0') ? par.workingDir : WORKING_DIR;
@@ -1106,30 +1167,30 @@ double monotonic (void) {
 char *readTextFile (const char *fileName, char *errMessage, size_t maxLen) {
    FILE *f = fopen(fileName, "rb");
    if (!f) {
-      snprintf(errMessage, maxLen, "In readFile: Error Cannot open: %s\n", fileName);
+      snprintf(errMessage, maxLen, "In readFile: Error Cannot open: %s", fileName);
       return NULL;
    }
    struct stat st;
    if (fstat(fileno(f), &st) != 0) {
-      snprintf(errMessage, maxLen, "In readFile: cannot stat %s\n", fileName);
+      snprintf(errMessage, maxLen, "In readFile: cannot stat %s", fileName);
       fclose(f);
       return NULL;
    }
    if (st.st_size < 0) {
-      snprintf(errMessage, maxLen, "In readFile: negative file size?\n");
+      snprintf(errMessage, maxLen, "In readFile: negative file size?");
       fclose(f);
       return NULL;
    }
    size_t fileSize = (size_t)st.st_size;
    char *buffer = malloc(fileSize + 1);  // +1 pour '\0'
    if (!buffer) {
-      snprintf(errMessage, maxLen, "In readFile: Malloc failed: %zu\n", fileSize + 1);
+      snprintf(errMessage, maxLen, "In readFile: Malloc failed: %zu", fileSize + 1);
       fclose(f);
       return NULL;
    }
    size_t nread = fread(buffer, 1, fileSize, f);
    if (nread != fileSize && ferror(f)) {
-      snprintf(errMessage, maxLen, "In readFile: fread error\n");
+      snprintf(errMessage, maxLen, "In readFile: fread error");
       free(buffer);
       fclose(f);
       return NULL;

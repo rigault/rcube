@@ -6,10 +6,10 @@
 #include <math.h>
 #include <sys/stat.h>
 
-#include "../csources/glibwrapper.h"
-#include "../csources/r3types.h"
-#include "../csources/r3util.h"
-#include "../csources/inline.h"
+#include "glibwrapper.h"
+#include "r3types.h"
+#include "r3util.h"
+#include "inline.h"
 
 FlowP *tGribData [2] = {NULL, NULL};   // wind, current
 
@@ -787,6 +787,10 @@ bool readGribParameters(const char *fileName, Zone *zone){
    - waves: missing values forced to 0.0 (cosmetic)
 */
 bool readGribAll (const char *fileName, Zone *zone, int iFlow){
+   if ((iFlow == WIND && par.constWindTws > 0) || (iFlow == CURRENT && par.constCurrentS > 0)) { // constant wind or current. Dont read file
+      initZone (zone);
+      return true;
+   }
    if(!fileName || !zone) return false;
 
    zone->wellDefined = false;

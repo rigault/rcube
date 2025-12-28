@@ -877,9 +877,8 @@ static inline bool goalP (const Pp *pA, const Pp *pB, const Pp *pDest, double t,
 
    // 9) Time to go to best point in hours
    *timeTo = *distance / sog; // NM / (NM/h) = h
-
    // 10) Reachability test in dt interval time (hours)
-   return (sog * dt) > fmin (distToSegment, *distance); // distSegment should allays be lesser than distance
+   return (sog * dt) > fmin (distToSegment, *distance); // distSegment should allways be lesser than distance
    // return (sog * dt) > *distance;
 }
 
@@ -1065,8 +1064,8 @@ static int routing (Pp *pOr, Pp *pDest, int toIndexWp, double t, double dt, doub
       }
       t += dt;
       // printf ("nIsoc = %d\n", nIsoc);
-      if (simpleGoal (pDest, &isocArray [(nIsoc - 1) * MAX_SIZE_ISOC], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep, &motor, &amure)) {
-      // if (goal (pDest, &isocArray [(nIsoc - 1) * MAX_SIZE_ISOC], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep, &motor, &amure)) {
+      // if (simpleGoal (pDest, &isocArray [(nIsoc - 1) * MAX_SIZE_ISOC], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep, &motor, &amure)) {
+      if (goal (pDest, &isocArray [(nIsoc - 1) * MAX_SIZE_ISOC], isoDesc[nIsoc - 1].size, t, dt, &timeLastStep, &motor, &amure)) {
 
          isoDesc [nIsoc].size = optimize (pOr, pDest, nIsoc, par.opt, tempList, lTempList, &isocArray [nIsoc * MAX_SIZE_ISOC]);
          if (isoDesc [nIsoc].size == 0) { // no Wind ... we copy
@@ -1175,12 +1174,12 @@ static void checkArrival (SailRoute *route, Pp *pDest) {
 
    snprintf (route->lastPointInfo, sizeof route->lastPointInfo, 
       "{\n"
-      "  \"latDest\": %.6lf, \"lonDest\": %.6lf, \"latCurr\": %.6lf, \"lonCurr\": %.6lf,\n"
-      "  \"latPrev\": %.6lf, \"lonPrev\": %.6lf, \"latNext\": %.6lf, \"lonNext\": %.6lf,\n"
-      "  \"latFoot0\": %.6lf, \"lonFoot0\": %.6lf, \"latFoot1\": %.6lf, \"lonFoot1\": %.6lf,\n" 
-      "  \"dSeg0\": %.2lf, \"dSeg1\": %.2lf, \"dCurr\": %.2lf,\n"
-      "  \"dPrev\": %.2lf, \"dNext\": %.2lf, \"dFoot0\": %.2lf, \"dFoot1\": %.2lf\n"
-      "}", 
+      "    \"latDest\": %.6lf, \"lonDest\": %.6lf, \"latCurr\": %.6lf, \"lonCurr\": %.6lf,\n"
+      "    \"latPrev\": %.6lf, \"lonPrev\": %.6lf, \"latNext\": %.6lf, \"lonNext\": %.6lf,\n"
+      "    \"latFoot0\": %.6lf, \"lonFoot0\": %.6lf, \"latFoot1\": %.6lf, \"lonFoot1\": %.6lf,\n" 
+      "    \"dSeg0\": %.2lf, \"dSeg1\": %.2lf, \"dCurr\": %.2lf,\n"
+      "    \"dPrev\": %.2lf, \"dNext\": %.2lf, \"dFoot0\": %.2lf, \"dFoot1\": %.2lf\n"
+      "  }", 
       pDest->lat, pDest->lon, pCurr.lat, pCurr.lon, pPrev.lat, pPrev.lon, pNext.lat, pNext.lon, 
       foot0Lat, foot0Lon, foot1Lat, foot1Lon, 
       dSeg0, dSeg1, dCurr,
@@ -1190,17 +1189,13 @@ static void checkArrival (SailRoute *route, Pp *pDest) {
 
 /*! launch routing with parameters */
 void *routingLaunch () {
-   struct timeval t0, t1;
-   long ut0, ut1;
    double lastStepDuration;
    Pp pNext;
    initRouting ();
    route.competitorIndex = competitors.runIndex;
    fprintf (stdout, "In routingLaunch: competitor index: %d, name: %s\n", competitors.runIndex, competitors.t[competitors.runIndex].name);
    int ret = -1;
-
-   gettimeofday (&t0, NULL);
-   ut0 = t0.tv_sec * MILLION + t0.tv_usec;
+   const double start = monotonic (); 
    double wayPointStartTime = par.startTimeInHours;
 
    fprintf (stdout, "Before Routing, pDest ID: %d, Father: %d\n", par.pDest.id, par.pDest.father);
@@ -1251,9 +1246,7 @@ void *routingLaunch () {
    route.nWayPoints = wayPoints.n;
    fprintf (stdout, "Number of wayPoints: %d\n", wayPoints.n);
 
-   gettimeofday (&t1, NULL);
-   ut1 = t1.tv_sec * MILLION + t1.tv_usec;
-   route.calculationTime = (double) ((ut1-ut0)/ 1000000.0); // in seconds
+   route.calculationTime = monotonic () - start; 
    route.destinationReached = (ret > 0 && par.pDest.father != 0);
    if (storeRoute (&route, &par.pOr, (route.destinationReached) ? &par.pDest : &lastClosest))
       // if (storeRoute (&route, &par.pOr, &lastClosest))
