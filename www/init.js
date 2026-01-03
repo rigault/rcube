@@ -14,7 +14,7 @@
  *
  * @returns {void}
  */
-function additionalInit () {
+function additionalInit() {
    updateBoatSelect();
    competitors.forEach(addMarker); // show initial position of boats
    isochroneLayerGroup = L.layerGroup().addTo(map);
@@ -122,7 +122,7 @@ function additionalInit () {
  *
  * @param {string} [geoFile="geo/Port_Maritime_FRA.geojson"]
  */
-function addPorts(geoFile = "geo/Port_Maritime_FRA.geojson") {
+function addPorts(map, geoFile = GEO_FILE) {
    fetch(geoFile)
       .then((response) => {
          if (!response.ok) {
@@ -144,15 +144,9 @@ function addPorts(geoFile = "geo/Port_Maritime_FRA.geojson") {
             if (!f.geometry || f.geometry.type !== "Point") return false;
             const coords = f.geometry.coordinates;
             if (!Array.isArray(coords) || coords.length < 2) return false;
-
             const lon = coords[0];
             const lat = coords[1];
-
-            // Rough bounding box for French Channel + Atlantic coasts
-            const inLonRange = lon >= -6 && lon <= 3;
-            const inLatRange = lat >= 43 && lat <= 52;
-
-            return inLonRange && inLatRange;
+            return inZone (lat, lon);
          });
 
          console.log(
@@ -200,7 +194,7 @@ function addPorts(geoFile = "geo/Port_Maritime_FRA.geojson") {
             }
          });
 
-         portsLayer.addTo(map);
+         // portsLayer.addTo(map); // not visible at start
 
          if (layersControl) {
             layersControl.addOverlay(portsLayer, "Ports Manche/Atlantique");
@@ -358,7 +352,8 @@ function initMapGeoJson(containerId) {
          }
 
          // 🔹 Une fois la carte calée sur la terre, on ajoute les ports
-         addPorts();
+         initPorts (map, ports);
+         addPorts(map);
       })
       .catch(function (err) {
          console.error("Error loading GeoJSON '" + geoFile + "':", err);
@@ -458,7 +453,7 @@ function initMapAccordingToMode() {
  * @returns {Promise<number>} A promise resolving to the selected map mode.
  */
 async function chooseMapMode(formerVal) {
-   // Normaliser en string pour comparer
+   // Normalize into string to compare
    const formerStr = String(formerVal);
    const allowed = ['0', '1', '2'];
    const defaultValStr = allowed.includes(formerStr) ? formerStr : '0';
@@ -478,8 +473,7 @@ async function chooseMapMode(formerVal) {
       allowEscapeKey: false
    });
 
-   // mode sera une string '0' | '1' | '2' ou undefined si bizarre
+   // mode is string '0' | '1' | '2' or undefined if weird
    const finalStr = mode !== undefined ? mode : defaultValStr;
-   return parseInt(finalStr, 10);
+   return parseInt(finalStr);
 }
-

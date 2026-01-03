@@ -1,5 +1,7 @@
-const MS_TO_KN = (3600.0/1852.0);   // conversion meter/second to knots
-
+const EARTH_RADIUS_NM = 3440.065; // Earth average radius in Nautical Miles
+const DEG_TO_RAD = Math.PI / 180;
+const RAD_TO_DEG = 180 / Math.PI;
+const MS_TO_KN = (3600.0/1852.0); // conversion meter/second to knots
 const DMS_DISPLAY = {BASIC: 0, DD: 1, DM: 2, DMS: 3};
 
 const sailLegend = {
@@ -22,10 +24,9 @@ const sailLegend = {
   LIGHT_GNK: { bg: "blue",   luminance: 29 },
 };
 
-/** Escape to HTML 
- */
-function esc (s) {
-   return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+function isMobile() {
+  return window.matchMedia("(pointer: coarse)").matches ||
+      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 }
 
 /**
@@ -37,6 +38,56 @@ function esc (s) {
  */
 function getTextColorFromLuminance(luminance) {
   return luminance < 128 ? 'white' : 'black';
+}
+
+/**
+ * return sage HTML string
+ * @param {string} the string to consider 
+ * @returns {string} the string after replacements
+ */
+function esc(s) {
+   return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+/**
+ * Extracts a short display name from a polar path:
+ * - keeps only what follows the first "/"
+ * - removes file extension
+ * - limits length to maxLen characters
+ *
+ * @param {string} polarPath
+ * @param {number} maxLen
+ * @returns {string}
+ */
+function formatPolarName(polarPath, maxLen = 15) {
+  if (!polarPath) return "";
+
+  // Keep what follows the first "/"
+  const i = polarPath.indexOf("/");
+  let name = (i >= 0) ? polarPath.slice(i + 1) : polarPath;
+
+  // Remove extension (last ".xxx")
+  name = name.replace(/\.[^.]+$/, "");
+
+  // Limit length
+  if (name.length > maxLen) {
+    name = name.slice(0, maxLen - 1) + "…";
+  }
+
+  return name;
+}
+
+/**
+ * Returns DMS type (integer) based on string stored in coordFormat
+ * @returns {number}
+ */
+function getDMSType () {
+  const fmt = (appState && appState.coordFormat) ? appState.coordFormat : "DMS";
+  return (fmt == "DMS") ? DMS_DISPLAY.DMS
+         : (fmt == "DM") ? DMS_DISPLAY.DM 
+         : (fmt == "DD") ? DMS_DISPLAY.DD 
+         : (fmt == "BASIC") ? DMS_DISPLAY.BASIC 
+         : DMS_DISPLAY.DMS; 
 }
 
 /**
@@ -185,7 +236,7 @@ function latLonToStr(lat, lon, type=DMS_DISPLAY.DMS) {
          degStr = String(d).padStart(3, '0');
          minStr = String(m).padStart(2, '0');
          secStr = s.toFixed(0).padStart(2, '0');
-         return `${degStr}°${minStr}'${secStr}"${dir}`;
+         return `${degStr}°${minStr}'${secStr}″${dir}`;
       default: return 0;
       }
    }
@@ -202,7 +253,7 @@ function latLonToStr(lat, lon, type=DMS_DISPLAY.DMS) {
  * @param {number} lon - Longitude in decimal degrees.
  * @returns {{idPort: number, idName: string}} An object containing the ID and name of the nearest port.
  */
-function findNearestPort(lat, lon) {
+function findNearestPort(lat, lon, ports4tide) {
    const LAT_MIN = 42, LAT_MAX = 52, LON_MIN = -6, LON_MAX = 4;
 
    if (lat < LAT_MIN || lat > LAT_MAX || lon < LON_MIN || lon > LON_MAX) {
@@ -210,7 +261,7 @@ function findNearestPort(lat, lon) {
    }
    let minDistance =Infinity;
    let nearest = null;
-   for (let p of ports) {
+   for (let p of ports4tide) {
       const dist = orthoDist(lat, lon, p.lat, p.lon);
       if (dist < minDistance) {
          minDistance = dist;
@@ -292,5 +343,157 @@ function downloadTextFile(filename, content) {
    document.body.removeChild(a);
 
    URL.revokeObjectURL(url); // cleaning
+}
+
+/**
+ * Computes the initial orthodromic (great-circle) bearing from one point to another.
+ *
+ * This function calculates the initial heading (bearing) in degrees required 
+ * to travel from the first point (lat0, lon0) to the second (lat1, lon1) along a great-circle route.
+ * 
+ * @param {number} lat0 - The latitude starting point
+ * @param {number} lon0 - The longitude starting point
+ * @param {number} lat1 - The latitude destination point
+ * @param {number} lon1 - The longitude destination point
+ * @returns {number} The initial bearing in degrees, ranging from 0 to 360°.
+ */
+function orthoCap (lat0, lon0, lat1, lon1) {
+   lat0 *= DEG_TO_RAD;
+   lon0 *= DEG_TO_RAD;
+   lat1 *= DEG_TO_RAD;
+   lon1 *= DEG_TO_RAD;
+   
+   const dLon = lon1 - lon0;
+   const y = Math.sin(dLon) * Math.cos(lat1);
+   const x = Math.cos(lat0) * Math.sin(lat1) - Math.sin(lat0) * Math.cos(lat1) * Math.cos(dLon);
+   const heading = Math.atan2(y, x);
+
+   return ((RAD_TO_DEG * heading) + 360) % 360;
+}
+
+/**
+ * Calculates the orthodromic (great-circle) distance between two points.
+ *
+ * @param {number} lat0 - The latitude starting point
+ * @param {number} lon0 - The longitude starting point
+ * @param {number} lat1 - The latitude destination point
+ * @param {number} lon1 - The longitude destination point
+ * @returns {number} Distance in nautical miles.
+ */
+function orthoDist (lat0, lon0, lat1, lon1) {
+   lat0 *= DEG_TO_RAD;
+   lon0 *= DEG_TO_RAD;
+   lat1 *= DEG_TO_RAD;
+   lon1 *= DEG_TO_RAD;
+   
+   const deltaSigma = Math.acos(
+      Math.sin(lat0) * Math.sin(lat1) +
+      Math.cos(lat0) * Math.cos(lat1) * Math.cos(lon1 - lon0)
+   );
+
+   return EARTH_RADIUS_NM * deltaSigma;
+}
+
+/**
+ * Computes the initial loxodromic (rhumb line) bearing from one point to another.
+ *
+ * @param {number} lat0 - The latitude starting point
+ * @param {number} lon0 - The longitude starting point
+ * @param {number} lat1 - The latitude destination point
+ * @param {number} lon1 - The longitude destination point
+ * @returns {number} Initial bearing in degrees from 0 to 360.
+ */
+function loxoCap (lat0, lon0, lat1, lon1) {
+   lat0 *= DEG_TO_RAD;
+   lon0 *= DEG_TO_RAD;
+   lat1 *= DEG_TO_RAD;
+   lon1 *= DEG_TO_RAD;
+   let dLon = lon1 - lon0;
+
+   const dPhi = Math.log(Math.tan(Math.PI / 4 + lat1 / 2) / Math.tan(Math.PI / 4 + lat0 / 2));
+
+   // Correct dLon for antimeridian cross
+   if (Math.abs(dLon) > Math.PI) {
+      dLon = dLon > 0 ? -(2 * Math.PI - dLon) : (2 * Math.PI + dLon);
+   }
+
+   let bearing = Math.atan2(dLon, dPhi) * RAD_TO_DEG;
+   return (bearing + 360) % 360;
+}
+
+/**
+ * Calculates the loxodromic (rhumb line) distance between two points.
+ *
+ * @param {number} lat0 - The latitude starting point
+ * @param {number} lon0 - The longitude starting point
+ * @param {number} lat1 - The latitude destination point
+ * @param {number} lon1 - The longitude destination point
+ * @returns {number} Distance in nautical miles.
+ */
+function loxoDist (lat0, lon0, lat1, lon1) {
+   lat0 *= DEG_TO_RAD;
+   lon0 *= DEG_TO_RAD;
+   lat1 *= DEG_TO_RAD;
+   lon1 *= DEG_TO_RAD;
+   let dLon = Math.abs(lon1 - lon0);
+   const dLat = lat1 - lat0;
+
+   const dPhi = Math.log(Math.tan(Math.PI / 4 + lat1 / 2) / Math.tan(Math.PI / 4 + lat0 / 2));
+
+   const q = Math.abs(dPhi) > 1e-12 ? dLat / dPhi : Math.cos(lat0);
+
+   // Correct dLon for antimeridian cross
+   if (dLon > Math.PI) {
+      dLon = 2 * Math.PI - dLon;
+   }
+
+   const distance = Math.sqrt(dLat * dLat + q * q * dLon * dLon);
+   return EARTH_RADIUS_NM * distance;
+}
+
+/**
+ * Computes the great-circle path (orthodromic route) between two geographical points.
+ *
+ * @param {number} lat0
+ * @param {number} lon0
+ * @param {number} lat1
+ * @param {number} lon1
+ * @param {number} [n=100]
+ * @returns {Array<[number, number]>} array of [lat, lon]
+ */
+function getGreatCirclePath(lat0, lon0, lat1, lon1, n = 100) {
+  const epsilon = 0.001;
+  const path = [];
+
+  lat0 *= DEG_TO_RAD; lon0 *= DEG_TO_RAD;
+  lat1 *= DEG_TO_RAD; lon1 *= DEG_TO_RAD;
+
+  // central angle distance
+  const cosd = Math.sin(lat0) * Math.sin(lat1) +
+               Math.cos(lat0) * Math.cos(lat1) * Math.cos(lon1 - lon0);
+  const d = Math.acos(Math.max(-1, Math.min(1, cosd)));
+
+  // almost identical points
+  if ((Math.abs(lat1 - lat0) < epsilon) && (Math.abs(lon1 - lon0) < epsilon)) {
+    return [[lat0 * RAD_TO_DEG, lon0 * RAD_TO_DEG], [lat1 * RAD_TO_DEG, lon1 * RAD_TO_DEG]];
+  }
+
+  for (let i = 0; i <= n; i++) {
+    const f = i / n;
+
+    const A = Math.sin((1 - f) * d) / Math.sin(d);
+    const B = Math.sin(f * d) / Math.sin(d);
+
+    const x = A * Math.cos(lat0) * Math.cos(lon0) + B * Math.cos(lat1) * Math.cos(lon1);
+    const y = A * Math.cos(lat0) * Math.sin(lon0) + B * Math.cos(lat1) * Math.sin(lon1);
+    const z = A * Math.sin(lat0) + B * Math.sin(lat1);
+
+    const lat = Math.atan2(z, Math.sqrt(x * x + y * y));
+    const lon = Math.atan2(y, x);
+
+    path.push([lat * RAD_TO_DEG, lon * RAD_TO_DEG]);
+  }
+
+  return path;
 }
 

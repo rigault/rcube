@@ -1,16 +1,15 @@
-export default [
-   {
-      files: ["**/*.js"],
-      languageOptions: {
-         ecmaVersion: 2022,
-         sourceType: "module",
-      },
-      rules: {
-         "no-var": "warn",         // déconseille var, préfère let/const
-         "eqeqeq": "warn",          // déconseille ==, préfère ===
-         //"no-unused-vars": "warn",  // avertit si des variables ne sont pas utilisées
-         "semi": ["warn", "always"], // préfère toujours mettre un ;
-      },
-   },
-];
+import js from "@eslint/js";
+import globals from "globals";
+import { defineConfig } from "eslint/config";
+
+export default defineConfig([
+  js.configs.recommended, // ← au lieu de "extends: ['js/recommended']"
+  {
+    languageOptions: { globals: globals.browser },
+    rules: {
+      "no-undef": "off",
+      "no-unused-vars": "off"
+    }
+  }
+]);
 

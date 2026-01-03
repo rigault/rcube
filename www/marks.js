@@ -50,10 +50,9 @@ async function getMarks (map) {
 /**
  * Render marks as a simple HTML table.
  * @param {MarkVR[]} marksArray
- * @param {number} decimals
  * @returns {string}
  */
-function renderMarksTable(marksArray, decimals) {
+function renderMarksTable(marksArray) {
    if (!Array.isArray(marksArray) || marksArray.length === 0) {
       return `<div style="padding:.5rem">No data.</div>`;
    }
@@ -94,17 +93,17 @@ function renderMarksTable(marksArray, decimals) {
  */
 function showMarks(marks) {
    const title = 'VR marks';
-   const decimals = 6;
 
    if (! Array.isArray(marks) || marks.length === 0) return;
 
    Swal.fire({
       title,
-      html: renderMarksTable(marks, decimals),
+      html: renderMarksTable(marks),
       width: Math.min(window.innerWidth * 0.95, 1000),
       showCloseButton: true,
-      confirmButtonText: 'Close',
-      customClass: { htmlContainer: 'swal2-overflow' }
+      showConfirmButton: false,
+      customClass: { htmlContainer: 'swal2-overflow' },
+      footer: `Number of marks: ${marks.length}`
    });
 }
 

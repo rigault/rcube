@@ -1,6 +1,7 @@
 /* jshint esversion: 6 */
 const MAP_MODE = {WINDY:0, OSM:1, LOCAL:2};
 let mapMode = MAP_MODE.WINDY;
+let debugIsocIndex = -1; // -1 no debug
 
 let animation = false;
 let barbDisp = true;    // diplay barbs in OSM mode
@@ -14,6 +15,7 @@ let gribLimits = {
    name : "",      // wind grib name
    currentName: "" // current grib name
 }; 
+
 let moduloIsoc = 1;
 let gribRectangle = null;
 let polarName = "Ultim.csv";
@@ -527,13 +529,16 @@ function drawPoints(coords, color) {
 }
 
 function showTrace (map, trace) {
-   if (! trace && trace.length <= 0) return;
+   if (! trace || trace === null || trace.length <= 0) {
+      Swal.fire ("No trace", "Check trace.js file", "warning");
+      return;
+   }
    L.polyline(trace, {
       color: "orange",
       weight: 1,
       opacity: 0.8
    }).addTo(map);
-   Swal.fire ("Trace done", `Lenght: ${trace.length}`, "success"); 
+   Swal.fire ("Trace done", `Lenght: ${trace.length}`, "success");
 }
 
 /** 
@@ -594,7 +599,9 @@ function updateWindyMap (route) {
       for (let i = 0; i < len; i += 1) 
          if ((i % moduloIsoc) === 0) {
             const coords = isocArray[i].map(entry => [entry[0], entry[1]]);
-            drawPolyline (coords, "blue", i >= len - 1);
+            let color = "blue";
+            if (i == debugIsocIndex) color = "red";
+            drawPolyline (coords, color, i >= len - 1 || i == debugIsocIndex);
          }
 
    let isoDescArray = [];
@@ -812,6 +819,7 @@ function consistentDataGrib (gribLimits, dataGrib) {
  * @param {String} - boatName - the name of boat or competitor.
  */
 async function finalUpdate (boatName) {
+   if (debugIsocIndex >= 0) debugIsocIndex = await parseInt (prompt ("Debug Isoc Index:"));
    const iComp = competitors.findIndex (c => c.name === boatName); // index of current boat
    goBegin ();
    updateWindyMap (route);
@@ -1197,14 +1205,17 @@ async function replay () {
       };
 
       const toBool = v => String(v).toLowerCase() === "true"; // "true" -> true, all rest -> false
+      
+      const nowEpochSeconds = Math.floor(Date.now() / 1000);
+      const epochStart = Number.isFinite(Number(raw.epochStart)) ? Number(raw.epochStart) : nowEpochSeconds;
 
       routeParam = {
          iBoat: Number(raw.type) || 1,                           // "type"
          isoStep: Number(raw.timeStep) || 900,                   // "timeStep"
          nTry: 0,
          timeInterval: 0,                                        // useless for server
-         epochStart: Number(raw.epochStart) || 0,
-         startTime: new Date(Number(raw.epochStart) * 1000),
+         epochStart,
+         startTime: new Date(epochStart * 1000),
          polar: raw.polar || "",                                 // ex: "pol/first260.pol"
          wavePolar: raw.wavePolar || "",                                 // ex: "pol/first260.pol"
          forbid: toBool(raw.forbid),
@@ -1259,56 +1270,6 @@ async function replay () {
       console.error('Replay failed:', error);
       Swal.fire('Error', 'Unable to parse the input or start the route.', 'error');
    }
-}
-
-/**
- * Computes the great-circle path (orthodromic route) between two geographical points.
- *
- * This function calculates a series of intermediate points along the shortest path
- * between two locations on the Earth's surface, using spherical interpolation.
- *
- * @param {number} lat0 - Latitude of the starting point, in degrees.
- * @param {number} lon0 - Longitude of the starting point, in degrees.
- * @param {number} lat1 - Latitude of the destination point, in degrees.
- * @param {number} lon1 - Longitude of the destination point, in degrees.
- * @param {number} [n=100] - Number of intermediate points to compute along the path.
- * @returns {Array<Array<number>>}  The great-circle path as an array of coordinate pairs [latitude, longitude].
- */
-function getGreatCirclePath(lat0, lon0, lat1, lon1, n = 100) {
-   const epsilon = 0.001;
-   const path = [];
-
-   lat0 *= DEG_TO_RAD, lon0 *= DEG_TO_RAD, lat1 *= DEG_TO_RAD, lon1 *= DEG_TO_RAD; // deg to radius conversion
-
-   // distance angulaire centrale
-   const d = Math.acos(
-      Math.sin(lat0) * Math.sin(lat1) +
-      Math.cos(lat0) * Math.cos(lat1) * Math.cos(lon1 - lon0)
-   );
-
-   // si les deux points sont (presque) identiques
-   if ((Math.abs(lat1 - lat0) < epsilon) && (Math.abs(lon1 - lon0) < epsilon)) {
-      return [[lat0 * RAD_TO_DEG, lon0 * RAD_TO_DEG], [lat1 * RAD_TO_DEG, lon1 * RAD_TO_DEG]];
-   }
-
-   for (let i = 0; i <= n; i++) {
-      const f = i / n;
-
-      // slerp le long du grand cercle
-      const A = Math.sin((1 - f) * d) / Math.sin(d);
-      const B = Math.sin(f * d) / Math.sin(d);
-
-      const x = A * Math.cos(lat0) * Math.cos(lon0) + B * Math.cos(lat1) * Math.cos(lon1);
-      const y = A * Math.cos(lat0) * Math.sin(lon0) + B * Math.cos(lat1) * Math.sin(lon1);
-      const z = A * Math.sin(lat0) + B * Math.sin(lat1);
-
-      const lat = Math.atan2(z, Math.sqrt(x * x + y * y));
-      const lon = Math.atan2(y, x);
-
-      path.push([lat * RAD_TO_DEG, lon * RAD_TO_DEG]); // rad -> deg
-   }
-
-   return path;
 }
 
 /**

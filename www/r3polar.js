@@ -8,7 +8,13 @@ const POL_TYPE = {WIND_POLAR: 0, WAVE_POLAR: 1};
  */
 function polarInfo (polType, polarName) {
    const dir = (polType === POL_TYPE.WIND_POLAR) ? "pol" : "wavepol";
-   const formData = `type=${REQ.POLAR}&polar=${dir}/${polarName}`;
+   let formData = "";
+   if (polarName.startsWith("pol/") || polarName.startsWith("wavepol/")) {
+      formData = `type=${REQ.POLAR}&polar=${polarName}`;
+   }
+   else {
+      formData = `type=${REQ.POLAR}&polar=${dir}/${polarName}`;
+   }
    console.log ("In polarInfo:" + formData);
 
    fetch (apiUrl, {
@@ -41,6 +47,10 @@ function polarInfo (polType, polarName) {
  * @param {Object} data - polar information
  */
 function showPolarTable (polType, polarName, data) {
+   /*if (! window.matchMedia('(orientation: landscape)').matches) {
+      Swal.fire('dump Warning', 'Use landscape mode', 'warning');
+      return;
+   }*/
    let windSpeeds = data.array[0].slice(1).map(v => parseFloat(v)).filter(v => !isNaN(v));
    console.log("data: " + JSON.stringify(data));
 
@@ -172,11 +182,6 @@ function symmetrizeData(twaValues, speeds) {
    return { fullTwa, fullSpeeds };
 }
 
-/** calculate max and VMG values */ 
-function oldFindMaxSpeed(speeds) {
-   return Math.max(...speeds);
-}
-
 /** calculate max and twa at max values */ 
 function findMaxSpeed(twaValues, speeds) {
    let bestSpeed = -1, bestAngle = -1;
@@ -287,17 +292,21 @@ function generatePolarPlotly (polType, polarName, data) {
           <p><strong>Back VMG:</strong> <span id="bestVmgBack">-</span> kn at <span id="bestVmgBackAngle">-</span>°</p>
        `;
     }
+   
    let moreButton = data.fromJson && data.arraySail && Array.isArray(data.arraySail) && data.arraySail.length > 0;
+   const mobile = isMobile();
    Swal.fire({
       title: `${polarName} Max: ${data.max}`,
       html: chartContainer,
       width: '50%', // valeur fallback
-      customClass: { popup: 'polar-popup' },
       showConfirmButton: true,
       showDenyButton: moreButton, // button appear only if different sails
       showCancelButton: true,
       confirmButtonText: 'Dump Table',
       denyButtonText: 'More',
+      // customClass: { popup: 'polar-popup' },
+      customClass: { popup: "swal-fullscreen-plot", title: mobile ? "swal-title-mobile" : "" },
+
       // denyButtonColor: '#6b7280',
    }).then((result) => {
       if (result.isConfirmed) {
@@ -399,8 +408,16 @@ function generatePolarPlotly (polType, polarName, data) {
          paper_bgcolor: "white",
          showlegend: false
       };
+      const staticPlot = isMobile();
+      const plotlyConf = {
+         displaylogo:false,
+         responsive: true,
+         displayModeBar: false,
+         staticPlot: staticPlot
+         //scrollZoom: true
+      }
 
-      Plotly.newPlot ("polarPlotly", [trace], layout);
+      Plotly.newPlot ("polarPlotly", [trace], layout, plotlyConf);
    }
 
    document.getElementById ("windSpeedSlider").addEventListener("input", function() {

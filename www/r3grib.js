@@ -260,6 +260,7 @@ async function gribMetaAndLoad(dir, model, gribName, load) {
       } else {
          gribLimits.currentName = gribName;
       }
+      console.log ("end gribMetaAndLoad");
       return data; // To use metadata
 
    } catch (error) {
@@ -286,22 +287,25 @@ async function gribInfo(dir, model, gribName) {
       showConfirmButton: false
    });
 
+   console.log ("before gribMetaAndLoad");
    const meta = await gribMetaAndLoad(dir, model, gribName, false);
-   if (!meta || !gribLimits || gribLimits.centreName === undefined) return;
-   const shortNames = Array.isArray(gribLimits.shortNames) ? gribLimits.shortNames.join(", ") : "NA";
+   if (!meta || meta.centreName === undefined) return;
+   const shortNames = Array.isArray(meta.shortNames) ? meta.shortNames.join(", ") : "NA";
    updateStatusBar();
+   const centreName = (meta.centreName && meta.centreName.length > 0) ? `${meta.centreName}, ` : "";
+   // console.log ("Meta", JSON.stringify (meta));
 
    let rows = [
-      ["Centre", `${gribLimits.centreName}, ID: ${gribLimits.centreID}, Ed: ${gribLimits.edNumber ?? "NA"}`],
-      ["Time Run", `${gribLimits.runStart.slice(11, 13)}Z`],
-      ["From To UTC", `${gribLimits.runStart} - ${gribLimits.runEnd}`],
-      ["File", `${gribLimits.name} (${gribLimits.fileSize.toLocaleString("fr-FR")} bytes, ${gribLimits.fileTime})`],
-      ["latStep lonStep", `${gribLimits.latStep}° / ${gribLimits.lonStep}°`],
-      ["Zone", `${gribLimits.nLat} x ${gribLimits.nLon} values: lat: ${formatLat (gribLimits.topLat)} to ${formatLat (gribLimits.bottomLat)}, lon: ${formatLon (gribLimits.leftLon)} to ${formatLon (gribLimits.rightLon)}`],
+      ["Centre", `${centreName}ID: ${meta.centreID}, Ed: ${meta.edNumber ?? "NA"}`],
+      ["Time Run", `${meta.runStart.slice(11, 13)}Z`],
+      ["From To UTC", `${meta.runStart} - ${meta.runEnd}`],
+      ["File", `${meta.name} (${meta.fileSize.toLocaleString("fr-FR")} bytes, ${meta.fileTime})`],
+      ["latStep lonStep", `${meta.latStep}° / ${meta.lonStep}°`],
+      ["Zone", `${meta.nLat} x ${meta.nLon} values: lat: ${formatLat (meta.topLat)} to ${formatLat (meta.bottomLat)}, lon: ${formatLon (meta.leftLon)} to ${formatLon (meta.rightLon)}`],
       ["Short Names", shortNames],
-      ["Time Stamps", `${gribLimits.nTimeStamp} values: ${condenseTimeStamps(gribLimits.timeStamps)}`]
+      ["Time Stamps", `${meta.nTimeStamp} values: ${condenseTimeStamps(meta.timeStamps)}`]
    ];
-  if (gribLimits.info && gribLimits.info.length >= 2) rows.push (["Info", `${gribLimits.info}`]);
+  if (meta.info && meta.info.length >= 1) rows.push (["Info", `${meta.info}`]);
 
    const content = `
    <div style="padding: 16px; font-family: Arial, sans-serif;">
