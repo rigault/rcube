@@ -421,7 +421,8 @@ typedef struct {
    char logFileName [MAX_SIZE_FILE_NAME];    // log the runs
    char wpGpxFileName [MAX_SIZE_FILE_NAME];  // To tpre Way Points in GPX format
    char dashboardVR [MAX_SIZE_FILE_NAME];    // Virtual Regatta dashboard thanks to plugin 
-   char marksFileName [MAX_SIZE_FILE_NAME];  // Virtual Regatta marks
+   char marksFileName [MAX_SIZE_FILE_NAME];  // Virtual Regatta marks   
+   char forbidFileName [MAX_SIZE_FILE_NAME]; // Virtual Regatta restricted areas
    double staminaVR;                         // Init stamina
    int nShpFiles;                            // number of Shp files
    double startTimeInHours;                  // time of beginning of routing after time0Grib

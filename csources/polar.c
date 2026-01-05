@@ -200,13 +200,12 @@ char *polToStr (const PolMat *mat, char *str, size_t maxLen) {
       }
       g_strlcat (str, "\n", maxLen);
    }
-   snprintf (line, MAX_SIZE_LINE, "Number of rows in polar : %d\n", mat->nCol);
-   g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, "Number of lines in polar: %d\n", mat->nLine);
-   g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, "Max                     : %.2lf\n", mat->maxAll);
-   g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, "nSail                   : %.zu\n", mat->nSail);
+   snprintf (line, sizeof line, 
+             "Number of rows in polar : %d\n"
+             "Number of lines in polar: %d\n"
+             "Max                     : %.2lf\n"
+             "nSail                   : %.zu\n",
+             mat->nCol, mat->nLine, mat->maxAll, mat->nSail);
    g_strlcat (str, line, maxLen);
    return str;
 }
@@ -222,16 +221,6 @@ static bool addSail (PolMat *polMat, int id, char *name, double max) {
    polMat->maxAll = fmax (max, polMat->maxAll);
    return true;
 } 
-
-/*! wipe all spaces within str */
-void wipeSpace(char *str) {
-   char *src = str, *dst = str;
-   while (*src) {
-      if (!isspace((unsigned char)*src)) *dst++ = *src;
-      src++;
-   }
-   *dst = '\0';
-}
 
 /*! update polMat and sailPolMat with new sail found in Json str */
 static char *findSailPol (char *str, PolMat *polMat, PolMat *sailPolMat, char *message, size_t maxLen) {

@@ -31,7 +31,7 @@ typedef struct {
 } FileInfo;
 
 /*! date for logging */
-const char* getCurrentDate () {
+const char* getCurrentDate (void) {
    static char dateBuffer [100];
    const time_t now = time (NULL);
    struct tm *tm_info = gmtime(&now);
@@ -98,7 +98,15 @@ bool initContext (const char *parameterFileName, const char *pattern) {
    else {
       fprintf (stderr, "In initContext, Error readPolar: %s\n", errMessage);
    }
-   printf ("par.web        : %s\n", par.web);
+
+   if (par.forbidFileName [0] != '\0') {
+      if (readGeoJson(par.forbidFileName, forbidZones, MAX_N_FORBID_ZONE, &par.nForbidZone)) {
+         printf ("Loaded         : %d forbid zones from: %s\n", par.nForbidZone, par.forbidFileName);
+      }
+      else {
+         fprintf(stderr, "In initContext, Error reading geojson %s\n", par.forbidFileName);
+      }
+   }
    nIsoc = 0;
    route.n = 0;
    route.destinationReached = false;
@@ -370,7 +378,7 @@ bool decodeFormReq (const char *req, ClientRequest *clientReq) {
       else if (sscanf (parts[i], "file=%255s",  clientReq->fileName) == 1);                     // file name
       else if (sscanf (parts[i], "model=%255s", clientReq->model) == 1);                        // grib model
       else if (sscanf (parts[i], "grib=%255s", clientReq->gribName) == 1);                      // grib name
-      else if (sscanf (parts[i], "currentGrib=%255s", clientReq->currentGribName) == 1);        // current grib name
+      else if (sscanf (parts[i], "currentGrib=%255s", clientReq->currentGribName) == 1);        // current grib name may be empty
       else if (sscanf (parts[i], "dir=%255s",   clientReq->dirName) == 1);                      // directory name
       else if (g_str_has_prefix (parts[i], "dir=")) 
          g_strlcpy (clientReq->dirName, parts [i] + strlen ("dir="), sizeof clientReq->dirName); // defaulr empty works
@@ -886,6 +894,7 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
       snprintf (str, sizeof str, "%.4lf, ", route->lastStepWpDuration [i] * 3600.0);
       g_strlcat (res, str, maxLen);
    }
+   const bool waves = isPresentGrib(&zone,"swh") && par.withWaves;
    snprintf (str, sizeof str,
       "%.4f],\n"
       "  \"motorDist\": %.2lf, \"starboardDist\": %.2lf, \"portDist\": %.2lf,\n"
@@ -901,7 +910,7 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
       route->nSailChange, route->nAmureChange,
       zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight,
       polarBaseName, 
-      (par.withWaves) ? wavePolarBaseName : "",  
+      (waves) ? wavePolarBaseName : "",  
       gribBaseName, 
       (par.withCurrent) ? gribCurrentBaseName : ""
    );

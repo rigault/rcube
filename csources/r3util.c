@@ -1,6 +1,5 @@
 /*! compilation: gcc -c r3util.c */
 #define MAX_N_SHIP_TYPE 2       // for Virtual Regatta Stamina calculation
-
 #include <float.h>   
 #include <ctype.h>
 #include <stdio.h>
@@ -13,6 +12,7 @@
 #include <time.h>
 #include <math.h>
 #include <locale.h>
+#include <errno.h>
 #include "glibwrapper.h"
 #include "r3types.h"
 #include "grib.h"
@@ -67,6 +67,37 @@ Zone currentZone;                      // current
 
 #include <time.h>
 #include <stdio.h>
+
+/*! wipe all spaces within str */
+void wipeSpace(char *str) {
+   char *src = str, *dst = str;
+   while (*src) {
+      if (!isspace((unsigned char)*src)) *dst++ = *src;
+      src++;
+   }
+   *dst = '\0';
+}
+
+/*! replace multiple spaces by just one */
+void normalizeSpaces(char *s) {
+    char *src = s;
+    char *dst = s;
+    bool inSpace = false;
+
+    while (*src) {
+        if (*src == ' ') {
+            if (!inSpace) {
+                *dst++ = ' ';
+                inSpace = true;
+            }
+        } else {
+            *dst++ = *src;
+            inSpace = false;
+        }
+        src++;
+    }
+    *dst = '\0';
+}
 
 /*! translate time nnox in dataDate, datatime grib 
  *  Minutes are allways 00. Hours are 00, 06, 12 or 18
@@ -797,6 +828,8 @@ bool readParam (const char *fileName, bool initDisp) {
       else if (sscanf (pLine, "CONST_CURRENT_D:%lf", &par.constCurrentD) > 0);
       else if (sscanf (pLine, "WP_GPX_FILE:%255s", str) > 0)
          buildRootName (str, par.wpGpxFileName, sizeof (par.wpGpxFileName));
+      else if (sscanf (pLine, "FORBID_ZONE_FILE:%255s", str) > 0)
+         buildRootName (str, par.forbidFileName, sizeof (par.forbidFileName)); 
       else if (sscanf (pLine, "DUMPI:%255s", str) > 0)
          buildRootName (str, par.dumpIFileName, sizeof (par.dumpIFileName));
       else if (sscanf (pLine, "DUMPR:%255s", str) > 0)
@@ -938,6 +971,7 @@ bool writeParam (const char *fileName, bool header, bool password, bool yaml) {
    fprintfNoNull (f, "CLI_HELP:         %s\n", par.cliHelpFileName);
    fprintfNoNull (f, "VR_DASHBOARD:     %s\n", par.dashboardVR);
    fprintfNoNull (f, "WP_GPX_FILE:      %s\n", par.wpGpxFileName);
+   fprintfNoNull (f, "FORBID_ZONE_FILE: %s\n", par.forbidFileName);
    fprintfNoNull (f, "DUMPI:            %s\n", par.dumpIFileName);
    fprintfNoNull (f, "DUMPR:            %s\n", par.dumpRFileName);
    fprintfNoNull (f, "PAR_INFO:         %s\n", par.parInfoFileName);
@@ -1167,30 +1201,30 @@ double monotonic (void) {
 char *readTextFile (const char *fileName, char *errMessage, size_t maxLen) {
    FILE *f = fopen(fileName, "rb");
    if (!f) {
-      snprintf(errMessage, maxLen, "In readFile: Error Cannot open: %s", fileName);
+      snprintf(errMessage, maxLen, "In readTextFile: Error Cannot open: %s", fileName);
       return NULL;
    }
    struct stat st;
    if (fstat(fileno(f), &st) != 0) {
-      snprintf(errMessage, maxLen, "In readFile: cannot stat %s", fileName);
+      snprintf(errMessage, maxLen, "In readTextFile: cannot stat %s", fileName);
       fclose(f);
       return NULL;
    }
    if (st.st_size < 0) {
-      snprintf(errMessage, maxLen, "In readFile: negative file size?");
+      snprintf(errMessage, maxLen, "In readTextFile: negative file size?");
       fclose(f);
       return NULL;
    }
    size_t fileSize = (size_t)st.st_size;
    char *buffer = malloc(fileSize + 1);  // +1 pour '\0'
    if (!buffer) {
-      snprintf(errMessage, maxLen, "In readFile: Malloc failed: %zu", fileSize + 1);
+      snprintf(errMessage, maxLen, "In readTextFile: Malloc failed: %zu", fileSize + 1);
       fclose(f);
       return NULL;
    }
    size_t nread = fread(buffer, 1, fileSize, f);
    if (nread != fileSize && ferror(f)) {
-      snprintf(errMessage, maxLen, "In readFile: fread error");
+      snprintf(errMessage, maxLen, "In readTextFile: fread error");
       free(buffer);
       fclose(f);
       return NULL;
@@ -1253,24 +1287,131 @@ bool readMarkCSVToJson (const char *fileName, char *out, size_t maxLen) {
    return true;
 }
 
-/*! replace multiple spaces by just one */
-void normalizeSpaces(char *s) {
-    char *src = s;
-    char *dst = s;
-    bool inSpace = false;
+/**
+ * @brief Reads a GeoJSON file and extracts forbidden zones as polygons.
+ *
+ * The function parses a GeoJSON FeatureCollection and reads all geometries
+ * of type "Polygon". Only the first ring of each polygon is used (no holes).
+ * GeoJSON coordinates are [lon, lat] but are stored as Point {lat, lon}.
+ *
+ * Memory for each polygon is dynamically allocated using realloc().
+ *
+ * @param fileName     Path to the GeoJSON file.
+ * @param forbidZones  Array of polygons to fill.
+ * @param maxZones     Maximum number of polygons that can be stored.
+ * @param n            Output: number of polygons successfully read.
+ *
+ * @return true on success, false on error (file, format, or memory).
+ */
+bool readGeoJson(const char *fileName, MyPolygon forbidZones[], int maxZones, int *n) {
+   char errMessage [MAX_SIZE_TEXT] = "";   
+   if (!fileName || !forbidZones || !n || maxZones <= 0) return false;
+   *n = 0;
 
-    while (*src) {
-        if (*src == ' ') {
-            if (!inSpace) {
-                *dst++ = ' ';
-                inSpace = true;
+   char *txt = readTextFile(fileName, errMessage, sizeof(errMessage));
+   wipeSpace(txt); // txt  contain all JSON specification without spaces
+   if (txt[0] == '\0') { free (txt); return false; }
+
+   // init output
+   for (int i = 0; i < maxZones; i++) {
+      forbidZones[i].n = 0;
+      forbidZones[i].points = NULL;
+   }
+
+   const char *p = txt;
+
+   while (true) {
+      const char *cpos = strstr(p, "\"coordinates\"");
+      if (!cpos) break;
+
+      // Rough check that we're inside a Polygon feature (optional but helps)
+      bool isPolygon = false;
+      {
+          const char *back = cpos;
+          for (int k = 0; k < 5000 && back > txt; k++, back--) {
+             if (back[0] == '{') break;
+          }
+          if (strstr(back, "\"type\"") && strstr(back, "Polygon")) isPolygon = true;
+      }
+
+      p = cpos + strlen("\"coordinates\"");
+
+      const char *b = strchr(p, '[');
+      if (!b) { free(txt); return false; }
+      p = b;
+
+      if (!isPolygon) { p++; continue; }
+
+      if (*n >= maxZones) { free(txt); return false; }
+
+      // Expect: coordinates: [[[lon,lat],[lon,lat], ... ], ...]
+      p = strstr (p, "[[["); //list of rings, ring0, first point in ring0
+      p += 3;
+      MyPolygon *poly = &forbidZones[*n];
+      poly->n = 0;
+      poly->points = NULL;
+
+      int cap = 0;
+
+      while (true) {
+         double lon = 0.0, lat = 0.0;
+         int consumed;
+         if (sscanf(p, "%lf,%lf] %n", &lon, &lat, &consumed) != 2) return false;
+         p += consumed;
+         // GeoJSON point order: [lon, lat]
+         if (poly->n >= MAX_SIZE_FORBID_ZONE) { free(txt); return false; }
+
+         if (poly->n >= cap) {
+            int newCap = (cap == 0) ? 64 : cap * 2;
+            if (newCap > MAX_SIZE_FORBID_ZONE) newCap = MAX_SIZE_FORBID_ZONE;
+
+            Point *temp = (Point *)realloc(poly->points, (size_t)newCap * sizeof(Point));
+            if (!temp) {
+               fprintf(stderr, "readGeoJson: realloc failed for zone %d\n", *n);
+               free(txt);
+               return false;
             }
-        } else {
-            *dst++ = *src;
-            inSpace = false;
-        }
-        src++;
-    }
-    *dst = '\0';
+            poly->points = temp;
+            cap = newCap;
+         }
+
+         poly->points[poly->n].lat = lat;
+         poly->points[poly->n].lon = lon;
+         poly->n++;
+
+         if (*p == ',') { // next point
+            p++;
+            if (*p++ != '[') { free (txt); return false; } 
+            continue;
+         }
+
+         if (*p == ']') { // end ring0
+            p++;
+            break;
+         }
+
+         free(txt);
+         return false;
+      }
+
+      // Skip remaining rings (holes) until end of rings list ']'
+      if (*p == ',') {
+         int depth = 0;
+         while (*p) {
+            if (*p == '[') depth++;
+            else if (*p == ']') {
+               if (depth == 0) { p++; break; }
+               depth--;
+            }
+            p++;
+         }
+      } else {
+          if (*p == ']') p++;
+      }
+      (*n)++;
+   }
+   free(txt);
+   return true;
 }
+
 

@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 #include <unistd.h>
 #include <limits.h>
 #include <locale.h>
@@ -17,7 +16,7 @@
 #include "common.h"
 #include "readgriball.h"
 
-#define SYNOPSYS               "-[<option>] [<parameter file>]"
+#define SYNOPSYS               "[form] [<parameter file>]"
 #define BIG_BUFFER_SIZE        (300*MILLION)
 #define PATTERN                "GFS"
 
@@ -140,14 +139,12 @@ static bool gribDump (ClientRequest *req, char *outBuffer, size_t maxLen) {
    return true;
 }
 
-/*! send over network binary data */
-/*
+/*!
  * Compute routing JSON from a form-urlencoded request body:
  * "type=1&boat=...&waypoints=...&model=GFS&..."
  * Returns true if a JSON response (success or error) is written to outBuffer.
  */
 bool computeRoutingJsonFromForm(const char *formReq, char *outBuffer, size_t maxLen) {
-   //char checkMessage [MAX_SIZE_TEXT];
    const char *date = getCurrentDate ();
    char errMessage [MAX_SIZE_TEXT] = "";
    bool resp = true;
@@ -309,7 +306,7 @@ int main (int argc, char *argv[]) {
    const double elapsed = monotonic () - start; 
    printf ("✅ Loaded in...: %.2lf seconds.\n\n", elapsed);
    
-   const char *reqStr = "type=1&boat=banane,41.244772222222224,-16.787108333333336;&initialAmure=1&waypoints=41.068888,-17;41.707594,-17.953125&model=GFS&timeStep=7200&polar=pol/class40VR.csv&wavePolar=wavepol/polwave.csv&forbid=false&isoc=false&isodesc=false&withWaves=false&withCurrent=false&xWind=1&maxWind=100&penalty0=180&penalty1=180&penalty2=180&motorSpeed=0&threshold=0&dayEfficiency=1&nightEfficiency=1&cogStep=5&cogRange=90&jFactor=0&kFactor=1&nSectors=720&constWindTws=0&constWindTwd=0&constWave=0&constCurrentS=0&constCurrentD=0";
+   const char *reqStr = "type=1&boat=banane,41.244772222222224,-16.787108333333336;&initialAmure=1&waypoints=41.068888,-17;41.707594,-17.953125&model=GFS&timeStep=7200&polar=pol/class40-2021.json&wavePolar=wavepol/polwave.csv&forbid=false&isoc=false&isodesc=false&withWaves=false&withCurrent=false&xWind=1&maxWind=100&penalty0=180&penalty1=180&penalty2=180&motorSpeed=0&threshold=0&dayEfficiency=1&nightEfficiency=1&cogStep=5&cogRange=90&jFactor=0&kFactor=1&nSectors=720&constWindTws=0&constWindTwd=0&constWave=0&constCurrentS=0&constCurrentD=0";
 
    if (argv[1][0] == '-') {
       if (computeRoutingJsonFromForm(reqStr, bigBuffer, BIG_BUFFER_SIZE)) {

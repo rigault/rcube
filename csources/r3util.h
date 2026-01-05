@@ -35,7 +35,8 @@ extern char *tIsSea;                   // array of byte. 0 if earth, 1 if sea
 extern CompetitorsList competitors;
 
 /*! functions defined in r3util.c */
-/*! reinit zone describing geographic meta data */
+extern void   wipeSpace(char *str); 
+extern void   normalizeSpaces (char *s);
 extern void   initZone (Zone *zone);
 extern char   *epochToStr (time_t t, bool seconds, char *str, size_t len);
 extern struct tm gribDateToTm (long intDate, double nHours);
@@ -70,5 +71,6 @@ extern int    nearestPort (double lat, double lon, const char *fileName, char *s
 extern double monotonic (void);
 extern char   *readTextFile (const char *fileName, char *errMessage, size_t maxLen);
 extern bool   readMarkCSVToJson (const char *fileName, char *out, size_t maxLen);
-extern void   normalizeSpaces (char *s);
+extern bool   readGeoJson(const char *fileName, MyPolygon forbidZones[], int maxZones, int *n);
+
 
