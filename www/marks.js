@@ -119,7 +119,7 @@ function symbolFromWhat(what) {
    if (lower.includes('buoy')) return '🚩';
    if (lower.includes('end')) return '🏁';
    if (lower.includes('invisible')) return 'x';
-   if (lower.includes('gate')) return 'G';
+   if (lower.includes('gate')) return 'g';
    return 'x';
 }
 
@@ -144,42 +144,63 @@ function hasName(name) {
  * @param {array} marks
  */
 function displayMarks(map, marks) {
-   if (map._marksLayer) {
-      map.removeLayer(map._marksLayer);
-      map._marksLayer = undefined;
-   }
-   if (!marks || marks.length === 0) {
-      console.warn('displayMarks: no data to display');
-      return;
-   }
+  if (map._marksLayer) {
+    map.removeLayer(map._marksLayer);
+    map._marksLayer = undefined;
+  }
+  if (!marks || marks.length === 0) {
+    console.warn('displayMarks: no data to display');
+    return;
+  }
 
-   const group = L.layerGroup();
-   map._marksLayer = group;
-   group.addTo(map);
-   
-   for (const m of marks) {
-      const lat = (typeof m.lat0 === 'number') ? m.lat0 : null;
-      const lon = (typeof m.lon0 === 'number') ? m.lon0 : null;
-      if (lat === null || lon === null || Number.isNaN(lat) || Number.isNaN(lon)) {
-         continue;
-      }
-      const sym = symbolFromWhat(m.what);
-      const icon = L.divIcon({
-         className: 'mark-emoji',
-         html: sym,
-         iconSize: [22, 22],
-         iconAnchor: [11, 11]
+  const group = L.layerGroup();
+  map._marksLayer = group;
+  group.addTo(map);
+
+  for (const m of marks) {
+    const lat0 = (typeof m.lat0 === 'number') ? m.lat0 : null;
+    const lon0 = (typeof m.lon0 === 'number') ? m.lon0 : null;
+    if (lat0 === null || lon0 === null || Number.isNaN(lat0) || Number.isNaN(lon0)) {
+      continue;
+    }
+
+    const sym = symbolFromWhat(m.what);
+    const icon = L.divIcon({
+      className: 'mark-emoji',
+      html: sym,
+      iconSize: [22, 22],
+      iconAnchor: [11, 11]
+    });
+
+    const marker = L.marker([lat0, lon0], { icon });
+    marker.addTo(group);
+
+    // ---- Segment pointillé jaune entre (lat0,lon0) et (lat1,lon1)
+    const lat1ok = (typeof m.lat1 === 'number') && m.lat1 !== 0 && !Number.isNaN(m.lat1);
+    const lon1ok = (typeof m.lon1 === 'number') && m.lon1 !== 0 && !Number.isNaN(m.lon1);
+
+    if (sym !== 'x' && lat1ok && lon1ok) {
+      const seg = L.polyline(
+        [[lat0, lon0], [m.lat1, m.lon1]],
+        {
+          color: 'yellow',
+          weight: 2,
+          opacity: 1.0,
+          dashArray: '6 6',   // pointillés
+          lineCap: 'butt'
+        }
+      );
+      seg.addTo(group);
+    }
+    // ----
+
+    if (hasName(m.name)) {
+      marker.bindPopup(`<strong>${esc(m.name.trim())}</strong>`, {
+        closeButton: true,
+        autoClose: true
       });
-      const marker = L.marker([lat, lon], { icon });
-      marker.addTo(group);
-
-      if (hasName(m.name)) {
-         marker.bindPopup(`<strong>${esc (m.name.trim())}</strong>`, {
-            closeButton: true,
-            autoClose: true
-         });
-      }
-   }
+    }
+  }
 }
 
 

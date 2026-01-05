@@ -1691,7 +1691,7 @@ function updateStatusBar (route = null, warning = null) {
    document.getElementById("infoRoute").innerHTML = "";
    if (time.length > 0) document.getElementById("infoTime").innerHTML = time; 
    if (polar.length > 0) document.getElementById("infoRoute").innerHTML += "    ⛵ polar: " + polar; 
-   if (wavePolar.length > 0) document.getElementById("infoRoute").innerHTML += "    🌊 wavePolar: " + wavePolar;
+   if (routeParam.withWaves && wavePolar.length > 0) document.getElementById("infoRoute").innerHTML += "    🌊 wavePolar: " + wavePolar;
    if (grib.length > 0) document.getElementById("infoRoute").innerHTML += "    💨 Grib: " + grib;
    if (currentGrib.length > 0) document.getElementById("infoRoute").innerHTML += "    🔄 currentGrib: " + currentGrib;
    if (warning) document.getElementById("infoRoute").innerHTML +=` <span class="warning-blink"> ⚠️ ${warning}</span>`;
