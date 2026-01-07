@@ -385,9 +385,10 @@ function showRouteReport(routeData) {
   container.appendChild(graphContainer);
   if (!mobile) container.appendChild(metaDataContainer);
 
+
   let reachable = boat.destinationReached
     ? `🎯 Destination Reached after ${durationFormatted}`
-    : "😩Destination unreached";
+    : `😩 Ureached: ${boat.distToDest} NM to destination.`;
   reachable += ` <br><i><small>Start Time: ${dateToStr(startDate)}, &nbsp; ETA: ${dateToStr(lastDate)}</small></i>`;
 
   Swal.fire({
@@ -568,7 +569,9 @@ function dumpRoute (routeData, locDMSType = DMSType) {
 
    tableHTML += '</tbody></table></div>';
    tableContainer.innerHTML = tableHTML;
-   let reachable = (boat.destinationReached) ? `🎯 Destination Reached after ${durationFormatted}` : '😩Destination unreached';  
+   let reachable = (boat.destinationReached) 
+      ? `🎯 Destination Reached after ${durationFormatted}` 
+      : `😩 Unreached: ${boat.distToDest} NM to destination.`;
    reachable += ` <br><i><small>Start Time: ${formattedStartDate}, &nbsp; ETA: ${formattedLastDate}</small></i>`;
 
    if (boat.routingRet === -1) reachable += " ERROR in route"; 
