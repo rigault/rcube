@@ -1082,27 +1082,27 @@ double fPenalty (int shipIndex, int type, double tws, double energy, double *cSt
       return -1;
    };
    const double kPenalty = 0.015;
-   const double cShip = shipParam [shipIndex].cShip;
    *cStamina = 2.0 - fmin (energy, 100.0) * kPenalty;
    const double tMin = shipParam [shipIndex].tMin [type];
    const double tMax = shipParam [shipIndex].tMax [type];
-   const double fTws = 50.0 - 50.0 * cos (G_PI * ((fmax (10.0, fmin (tws, 30.0))-10.0)/(30.0 - 10.0)));
+   tws = CLAMP(tws, 10.0, 30.0);
+   const double fTws = 50.0 - 50.0 * cos (G_PI * ((tws - 10.0)/(30.0 - 10.0)));
    //printf ("cShip: %.2lf, cStamina: %.2lf, tMin: %.2lf, tMax: %.2lf, fTws: %.2lf\n", cShip, cStamina, tMin, tMax, fTws);
    double t = tMin + fTws * (tMax - tMin) / 100.0;
+   t *= *cStamina;
    if (fullPack) t *= 0.8;
-   return t * cShip * (*cStamina);
+   return fmax(tMin, t);
 }
 
 /*! for virtual Regatta. return point loss with manoeuvre types. Depends on tws and fullPack */
-double fPointLoss (int shipIndex, int type, double tws, bool fullPack) {
-   const double fPCoeff = fullPack ? 0.8 : 1.0;
+double fPointLoss (int shipIndex, int type, double tws) {
    const double loss = (type == 2) ? 0.2 : 0.1;
    const double cShip = shipParam [shipIndex].cShip;
    const double fTws = (tws <= 10.0) ? 0.02 * tws + 1.0 : 
                  (tws <= 20.0) ? 0.03 * tws + 0.9 : 
                  (tws <= 30) ? 0.05 * tws + 0.5 :  
                  2.0;
-   return fPCoeff * loss * cShip * fTws;
+   return loss * fTws * cShip;
 }
 
 /*! for virtual Regatta. return type in second to get back one energy point */
@@ -1234,8 +1234,7 @@ char *readTextFile (const char *fileName, char *errMessage, size_t maxLen) {
    return buffer;
 }
 
-/*! read CSV file marks (Virtual Regatta)
-   if check then polarCheck */
+/*! read CSV file marks (Virtual Regatta) */
 bool readMarkCSVToJson (const char *fileName, char *out, size_t maxLen) {
    FILE *f = NULL;
    char buffer [MAX_SIZE_TEXT_FILE];

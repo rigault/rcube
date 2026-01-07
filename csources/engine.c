@@ -5,7 +5,7 @@
 * sog = Speed over Ground of the boat
 * cog = Course over Ground  of the boat
 * */
-/*! compilation: gcc -c engine.c `pkg-config --cflags glib-2.0` */
+/*! compilation: gcc -c engine.c */
 #include <float.h>   
 #include <stdio.h>
 #include <stdlib.h>
@@ -402,7 +402,7 @@ void saveRoute (SailRoute *route) {
 }
 
 /*! free space for history route */
-void freeHistoryRoute () {
+void freeHistoryRoute (void) {
    free (historyRoute.r);
    historyRoute.r = NULL;
    historyRoute.n = 0;
@@ -630,7 +630,6 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
    char shortStr [SMALL_SIZE], strDur [MAX_SIZE_LINE];
    double awa, aws;
    double maxAws = 0.0;
-   double sumAws = 0.0;
    double twa = fTwa (route->t[0].lCap, route->t[0].twd);
    fAwaAws (twa, route->t[0].tws, route->t[0].sog, &awa, &aws);
    if (maxLen < MAX_SIZE_LINE) {
@@ -642,12 +641,12 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
 
    g_strlcpy (str, "  No;  WP; Lat;        Lon;         Date-Time;            Sail;  M/T/B;   HDG;\
     Dist;     SOG;   Twd;   Twa;     Tws;    Gust;   Awa;     Aws;   Waves; Stamina\n", MAX_SIZE_LINE);
-   snprintf (line, MAX_SIZE_LINE, \
+   snprintf (line, sizeof line, \
       " pOr; %3d; %-12s;%-12s; %s; %-8s; %6s; %4d°; %7.2lf; %7.2lf; %4d°; %4.0lf°; %7.2lf; %7.2lf; %4.0lf°; %7.2lf; %7.2lf; %7.2lf\n",\
       route->t[0].toIndexWp,\
       latToStr (route->t[0].lat, par.dispDms, strLat, sizeof (strLat)),\
       lonToStr (route->t[0].lon, par.dispDms, strLon, sizeof (strLon)),\
-      newDate (route->dataDate, route->dataTime/100 + par.startTimeInHours + route->t[0].time, strDate, sizeof (strDate)),\
+      newDate (route->dataDate, route->dataTime/100.0 + par.startTimeInHours + route->t[0].time, strDate, sizeof (strDate)),\
       strSail, \
       motorTribordBabord (route->t[0].motor, route->t[0].amure, shortStr, SMALL_SIZE),\
       ((int) (route->t[0].oCap + 360) % 360), route->t[0].od, route->t[0].sog,\
@@ -660,17 +659,16 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
       twa = fTwa (route->t[i].lCap, route->t[i].twd);
       fAwaAws (twa, route->t[i].tws, route->t[i].sog, &awa, &aws);
       if (aws > maxAws) maxAws = aws;
-      sumAws += aws;
       if ((fabs(route->t[i].lon) > 180.0) || (fabs (route->t[i].lat) > 90.0))
-         snprintf (line, MAX_SIZE_LINE, " Isoc %3d: Error on latitude or longitude\n", i-1);   
+         snprintf (line, sizeof line, " Isoc %3d: Error on latitude or longitude\n", i-1);   
       else
-         snprintf (line, MAX_SIZE_LINE, \
+         snprintf (line, sizeof line, \
            "%4d; %3d; %-12s;%-12s; %s; %-8s; %6s; %4d°; %7.2f; %7.2lf; %4d°; %4.0lf°; %7.2lf; %7.2lf; %4.0lf°; %7.2lf; %7.2lf; %7.2lf\n",\
             i-1,\
             route->t[i].toIndexWp,\
             latToStr (route->t[i].lat, par.dispDms, strLat, sizeof (strLat)),\
             lonToStr (route->t[i].lon, par.dispDms, strLon, sizeof (strLon)),\
-            newDate (route->dataDate, route->dataTime/100 + par.startTimeInHours + route->t[i].time, strDate, sizeof (strDate)), \
+            newDate (route->dataDate, route->dataTime/100.0 + par.startTimeInHours + route->t[i].time, strDate, sizeof (strDate)), \
             fSailName (route->t[i].sail, strSail, sizeof (strSail)), \
             motorTribordBabord (route->t[i].motor, route->t[i].amure, shortStr, SMALL_SIZE), \
             ((int) (route->t[i].oCap  + 360) % 360), route->t[i].od, route->t[i].sog,\
@@ -681,23 +679,22 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
    }
   
    g_strlcat (str, "\n \n", maxLen); 
-   snprintf (line, MAX_SIZE_LINE, " Avr/Max Tws      : %.2lf/%.2lf Kn\n", route->avrTws, route->maxTws); 
-   g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, " Total/Motor Dist.: %.2lf/%.2lf NM\n", route->totDist, route->motorDist);
-   g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, " Total duration   : %sHours\n", \
-      durationToStr (route->duration, strDur, sizeof (strDur)));
-   g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, " Sail Changes     : %d\n", route->nSailChange);
-   g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, " Amures Changes   : %d\n", route->nAmureChange);
-   g_strlcat (str, line, maxLen);
-   snprintf (line, MAX_SIZE_LINE, " Polar file       : %s\n", route->polarFileName);
+   snprintf (line, sizeof line, 
+       " Avr/Max Tws      : %.2lf/%.2lf Kn\n"
+       " Total/Motor Dist.: %.2lf/%.2lf NM\n"
+       " Total duration   : %sHours\n"
+       " Sail Changes     : %d\n"
+       " Amures Changes   : %d\n"
+       " Polar file       : %s\n",
+       route->avrTws, route->maxTws, route->totDist, route->motorDist, 
+       durationToStr (route->duration, strDur, sizeof (strDur)),
+       route->nSailChange, route->nAmureChange, route->polarFileName);
+
    g_strlcat (str, line, maxLen);
 
    snprintf (footer, maxLenFooter, "%s Arrival: %s     Route length: %d,   Isoc time Step: %.2lf", 
       competitors.t [route->competitorIndex].name,\
-      newDate (route->dataDate, route->dataTime/100 + route->t[0].time + route->duration, strDate, sizeof (strDate)),\
+      newDate (route->dataDate, route->dataTime/100.0 + route->t[0].time + route->duration, strDate, sizeof (strDate)),\
       route->n,
       route->isocTimeStep);
    return true;
@@ -1188,7 +1185,7 @@ static void checkArrival (SailRoute *route, Pp *pDest) {
 }
 
 /*! launch routing with parameters */
-void *routingLaunch () {
+void *routingLaunch (void) {
    double lastStepDuration;
    Pp pNext;
    initRouting ();
@@ -1259,7 +1256,7 @@ void *routingLaunch () {
 }
 
 /*! choose best time to reach pDest in minimum time */
-void *bestTimeDeparture () {
+void *bestTimeDeparture (void) {
    double minDuration = DBL_MAX, maxDuration = 0;
    int localRet, nUnreachable = 0;
 
@@ -1321,7 +1318,7 @@ void *bestTimeDeparture () {
 }
 
 /*! launch all competitors */
-void *allCompetitors () {
+void *allCompetitors (void) {
    bool existSolution = false;
    int localRet;
 
@@ -1349,7 +1346,7 @@ void *allCompetitors () {
          competitors.t [i].dist = 0;
          continue;
       }
-      newDate (zone.dataDate [0], zone.dataTime [0] / 100 + par.startTimeInHours + route.duration, 
+      newDate (zone.dataDate [0], zone.dataTime [0] / 100.0 + par.startTimeInHours + route.duration, 
          competitors.t [i].strETA, MAX_SIZE_DATE); 
       competitors.t [i].duration = route.duration; // hours
       competitors.t [i].dist = orthoDist (competitors.t [i].lat, competitors.t [i].lon, par.pDest.lat, par.pDest.lon);
@@ -1379,10 +1376,10 @@ void logReport (int n) {
    if (! existFile)
       fprintf (f, "logDate; isocStep; nOcc; Reach; nWP; pOr lat; pOr lon; pDest lat; pDest lon; Start; Arrival; toDest; HDG; polar; grib\n");
    
-   newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours, 
+   newDate (zone.dataDate [0], zone.dataTime [0]/100.0 + par.startTimeInHours, 
       startDate, sizeof (startDate));
 
-   newDate (zone.dataDate [0], zone.dataTime [0]/100 + par.startTimeInHours + route.duration, 
+   newDate (zone.dataDate [0], zone.dataTime [0]/100.0 + par.startTimeInHours + route.duration, 
       arrivalDate, sizeof (arrivalDate));
 
    char *polarFileName = g_path_get_basename (par.polarFileName);
@@ -1429,7 +1426,7 @@ bool exportRouteToGpx (const SailRoute *route, const char *fileName) {
    for (int i = 0; i < route->n; i++) {
       SailPoint *p = &route->t[i];
       
-      newDate (route->dataDate, route->dataTime/100 + par.startTimeInHours + p->time, strTime, sizeof (strTime));
+      newDate (route->dataDate, route->dataTime/100.0 + par.startTimeInHours + p->time, strTime, sizeof (strTime));
 
       fprintf (f, "    <rtept lat=\"%.6f\" lon=\"%.6f\">\n", p->lat, p->lon);
       fprintf (f, "      <name>%d</name>\n", i);

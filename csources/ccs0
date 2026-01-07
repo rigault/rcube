@@ -4,12 +4,13 @@ CFLAGS="-Wall -Wextra -Wpedantic -Wformat=2 -Wwrite-strings -Wredundant-decls -W
 gcc $CFLAGS -c -march=native -ffast-math -fno-math-errno -fno-trapping-math engine.c
 gcc $CFLAGS -c r3grib.c
 gcc $CFLAGS -c polar.c
+gcc $CFLAGS -c common.c
 gcc $CFLAGS -Wno-format-nonliteral -c r3util.c
 gcc $CFLAGS -c readgriballwithouteccodes.c
 gcc $CFLAGS -c option.c
 gcc $CFLAGS -c r3server.c
 
-gcc $CFLAGS r3server.o r3util.o r3grib.o readgriballwithouteccodes.o polar.o engine.o option.o -o r3server -lm
+gcc $CFLAGS r3server.o r3util.o r3grib.o readgriballwithouteccodes.o polar.o engine.o option.o common.o -o r3server -lm
 rm -f *.o
 mv r3server ../.
 

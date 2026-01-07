@@ -1,4 +1,3 @@
-/*! compilation: gcc -c grib.c `pkg-config --cflags glib-2.0` */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

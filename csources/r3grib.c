@@ -1,4 +1,3 @@
-/*! compilation: gcc -c grib.c `pkg-config --cflags glib-2.0` */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,7 +77,7 @@ void printGrib (const Zone *zone, const FlowP *gribData) {
 	         iGrib = (k * zone->nbLat * zone->nbLon) + (i * zone->nbLon) + j;
             printf (" %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f\n", \
                gribData [iGrib].lon, \
-	            gribData [iGrib].lat, \
+	             gribData [iGrib].lat, \
                gribData [iGrib].u, \
                gribData [iGrib].v, \
                gribData [iGrib].g, \
@@ -95,17 +94,17 @@ static bool checkGrib (const Zone *zone, int iFlow, CheckGrib *check) {
    const int maxW = 20;
    memset (check, 0, sizeof (CheckGrib));
    for (size_t iGrib = 0; iGrib < zone->nTimeStamp * zone->nbLat * zone->nbLon; iGrib += 1) {
-      if (tGribData [iFlow] [iGrib].u == MISSING) check->uMissing += 1;
-	   else if (fabs (tGribData [iFlow] [iGrib].u) > maxUV) check->uStrange += 1;
+      if ((fabs(tGribData [iFlow] [iGrib].u - MISSING) < EPSILON)) check->uMissing += 1;
+      else if (fabs (tGribData [iFlow] [iGrib].u) > maxUV) check->uStrange += 1;
    
-      if (tGribData [iFlow] [iGrib].v == MISSING) check->vMissing += 1;
-	   else if (fabs (tGribData [iFlow] [iGrib].v) > maxUV) check->vStrange += 1;
+      if (fabs(tGribData [iFlow] [iGrib].v - MISSING) < EPSILON) check->vMissing += 1;
+      else if (fabs (tGribData [iFlow] [iGrib].v) > maxUV) check->vStrange += 1;
 
-      if (tGribData [iFlow] [iGrib].w == MISSING) check->wMissing += 1;
-	   else if ((tGribData [iFlow] [iGrib].w > maxW) ||  (tGribData [iFlow] [iGrib].w < 0)) check->wStrange += 1;
+      if (fabs(tGribData [iFlow] [iGrib].w - MISSING) < EPSILON) check->wMissing += 1;
+      else if ((tGribData [iFlow] [iGrib].w > maxW) ||  (tGribData [iFlow] [iGrib].w < 0)) check->wStrange += 1;
 
-      if (tGribData [iFlow] [iGrib].g == MISSING) check->gMissing += 1;
-	   else if ((tGribData [iFlow] [iGrib].g > maxUV) || (tGribData [iFlow] [iGrib].g < 0)) check->gStrange += 1;
+      if (fabs (tGribData [iFlow] [iGrib].g - MISSING) < EPSILON) check->gMissing += 1;
+      else if ((tGribData [iFlow] [iGrib].g > maxUV) || (tGribData [iFlow] [iGrib].g < 0)) check->gStrange += 1;
 
       if ((tGribData [iFlow] [iGrib].lat > zone->latMax) || (tGribData [iFlow] [iGrib].lat < zone->latMin) ||
          (tGribData [iFlow] [iGrib].lon > zone->lonRight) || (tGribData [iFlow] [iGrib].lon < zone->lonLeft))
@@ -538,7 +537,7 @@ char *gribToStr (const Zone *zone, char *str, size_t maxLen) {
      if (meteoTab [i].id == zone->centreId) 
         g_strlcpy (centreName, meteoTab [i].name, sizeof (centreName));
          
-   newDate (zone->dataDate [0], zone->dataTime [0]/100, strTmp, sizeof (strTmp));
+   newDate (zone->dataDate [0], zone->dataTime [0]/100.0, strTmp, sizeof (strTmp));
    snprintf (str, maxLen, "Centre ID: %ld %s   %s   Ed number: %ld\nnMessages: %d\nstepUnits: %ld\n# values : %ld\n",\
       zone->centreId, centreName, strTmp, zone->editionNumber, zone->nMessage, zone->stepUnits, zone->numberOfValues);
    snprintf (line, MAX_SIZE_LINE, "Zone From: %s, %s To: %s, %s\n",\
@@ -623,8 +622,8 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
          break;
       }
    }
-   newDate (gZone.dataDate [0], gZone.dataTime [0]/100, str0, sizeof (str0));
-   newDate (gZone.dataDate [0], gZone.dataTime [0]/100 + gZone.timeStamp [gZone.nTimeStamp -1], str1, sizeof (str1));
+   newDate (gZone.dataDate [0], gZone.dataTime [0]/100.0, str0, sizeof (str0));
+   newDate (gZone.dataDate [0], gZone.dataTime [0]/100.0 + gZone.timeStamp [gZone.nTimeStamp -1], str1, sizeof (str1));
 
    snprintf (out, maxLen, 
       "{\n  \"centreID\": %ld, \"centreName\": \"%s\", \"edNumber\": %ld, \n"

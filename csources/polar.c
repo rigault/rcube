@@ -105,8 +105,7 @@ static bool polarCheck (PolMat *mat, char *report, size_t maxLen) {
    return (report [0] == '\0'); // True if no error found
 }
 
-/*! read polar file and fill poLMat matrix 
-   if check then polarCheck */
+/*! read polar file and fill poLMat matrix */
 static bool readPolarCsv (const char *fileName, PolMat *mat, char *errMessage, size_t maxLen) {
    FILE *f = NULL;
    char buffer [MAX_SIZE_TEXT];
@@ -181,6 +180,7 @@ void bestVmgBack (double tws, PolMat *mat, double *vmgAngle, double *vmgSpeed) {
    double vmg;
    for (int i = 1; i < mat->nLine; i++) {
       if (mat->t [i][0] < 90) continue; // useless under  90° for Vmg Back
+      if (mat->t [i][0] > 180) break;        
       vmg = fabs (findPolar (mat->t [i][0], tws, mat, NULL, &bidon) * cos (DEG_TO_RAD * mat->t [i][0]));
       if (vmg > *vmgSpeed) {
          *vmgSpeed = vmg;

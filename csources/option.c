@@ -4,7 +4,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>   // uint64_t
+#include <stdint.h>  // uint64_t
 #include "r3types.h"
 #include "grib.h"
 #include "readgriball.h"

@@ -1,7 +1,7 @@
 /*! RCube is a routing software for sailing. 
  * It computes the optimal route from a starting point (pOr) to a destination point (pDest) 
  * at a given START_TIME, using GRIB weather data and a boat polar diagram.
- * to launch : r3server <port number> [parameter file]
+ * to launch : ./r3server <port number> [parameter file]
  */
   
 #include <stdbool.h>
@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -32,6 +31,7 @@
 #include <fcntl.h>
 #include <signal.h> // for signal(SIGPIPE, SIG_IGN)
 
+#define MAX_PRINT              10000       // Max characters printed fir bifBuffer print 
 #define SYNOPSYS               "<port> | -<option> [<parameter file>]"
 #define MAX_SIZE_REQUEST       2048        // Max size from request client
 #define MAX_SIZE_RESOURCE_NAME 256         // Max size polar or grib name
@@ -582,6 +582,10 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
       if (sendAll (clientFd, header, (size_t) headerLen) < 0) return false;
       if (sendAll (clientFd, bigBuffer, bigBufferLen) < 0) return false;
       printf ("✅ Response sent to client. Size: %zu\n\n", headerLen + bigBufferLen);
+      if (par.special) {
+         printf ("%.*s\n", MAX_PRINT, bigBuffer);
+         if (bigBufferLen >= MAX_PRINT) printf ("...\nTruncated to: %d characters.\n", MAX_PRINT);
+      }
    }
 
    const double duration = monotonic () - start; 
@@ -693,6 +697,12 @@ int main (int argc, char *argv[]) {
    free (tGribData [WIND]); 
    free (tGribData [CURRENT]); 
    free (bigBuffer);
+   for (int i = 0; i < par.nForbidZone; i++) {
+      free(forbidZones[i].points);
+      forbidZones[i].points = NULL;
+      forbidZones[i].n = 0;
+   }
+   
    return EXIT_SUCCESS;
 }
 

@@ -411,7 +411,7 @@ typedef struct {
    int haveS1, haveS3, haveS4, haveS5, haveS6, haveS7;
 } MsgParse;
 
-static int bmBitAt(const uint8_t *bm, size_t bmBytes, size_t k){
+static int bmBitAt(const uint8_t *bm, size_t bmBytes, size_t k) {
    if(!bm) return 1;               // no bitmap => all present
    size_t byte = k >> 3;
    if(byte >= bmBytes) return 1;   // safety

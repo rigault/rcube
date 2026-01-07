@@ -1,0 +1,155 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Wformat=2",
+      "-Wwrite-strings",
+      "-Wredundant-decls",
+      "-Wmissing-include-dirs",
+      "-Wnested-externs",
+      "-O3",
+      "-c",
+      "-march=native",
+      "-ffast-math",
+      "-fno-math-errno",
+      "-fno-trapping-math",
+      "engine.c"
+    ],
+    "directory": "/home/rr/rcube/csources",
+    "file": "/home/rr/rcube/csources/engine.c"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Wformat=2",
+      "-Wwrite-strings",
+      "-Wredundant-decls",
+      "-Wmissing-include-dirs",
+      "-Wnested-externs",
+      "-O3",
+      "-c",
+      "r3grib.c"
+    ],
+    "directory": "/home/rr/rcube/csources",
+    "file": "/home/rr/rcube/csources/r3grib.c"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Wformat=2",
+      "-Wwrite-strings",
+      "-Wredundant-decls",
+      "-Wmissing-include-dirs",
+      "-Wnested-externs",
+      "-O3",
+      "-c",
+      "polar.c"
+    ],
+    "directory": "/home/rr/rcube/csources",
+    "file": "/home/rr/rcube/csources/polar.c"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Wformat=2",
+      "-Wwrite-strings",
+      "-Wredundant-decls",
+      "-Wmissing-include-dirs",
+      "-Wnested-externs",
+      "-O3",
+      "-c",
+      "common.c"
+    ],
+    "directory": "/home/rr/rcube/csources",
+    "file": "/home/rr/rcube/csources/common.c"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Wformat=2",
+      "-Wwrite-strings",
+      "-Wredundant-decls",
+      "-Wmissing-include-dirs",
+      "-Wnested-externs",
+      "-O3",
+      "-c",
+      "-Wno-format-nonliteral",
+      "r3util.c"
+    ],
+    "directory": "/home/rr/rcube/csources",
+    "file": "/home/rr/rcube/csources/r3util.c"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Wformat=2",
+      "-Wwrite-strings",
+      "-Wredundant-decls",
+      "-Wmissing-include-dirs",
+      "-Wnested-externs",
+      "-O3",
+      "-c",
+      "readgriballeccodes.c"
+    ],
+    "directory": "/home/rr/rcube/csources",
+    "file": "/home/rr/rcube/csources/readgriballeccodes.c"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Wformat=2",
+      "-Wwrite-strings",
+      "-Wredundant-decls",
+      "-Wmissing-include-dirs",
+      "-Wnested-externs",
+      "-O3",
+      "-c",
+      "-march=native",
+      "-ffast-math",
+      "-fno-math-errno",
+      "-fno-trapping-math",
+      "option.c"
+    ],
+    "directory": "/home/rr/rcube/csources",
+    "file": "/home/rr/rcube/csources/option.c"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-Wformat=2",
+      "-Wwrite-strings",
+      "-Wredundant-decls",
+      "-Wmissing-include-dirs",
+      "-Wnested-externs",
+      "-O3",
+      "-c",
+      "r3server.c"
+    ],
+    "directory": "/home/rr/rcube/csources",
+    "file": "/home/rr/rcube/csources/r3server.c"
+  }
+]
