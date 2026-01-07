@@ -548,6 +548,8 @@ static void statRoute (SailRoute *route) {
       route->t [route->n-1].oCap = route->t [route->n-2].oCap;
       route->t [route->n-1].sail = route->t [route->n-2].sail; // convention. No need for sail
       route->t [route->n-1].stamina = route->t [route->n-2].stamina;
+      if (route->destinationReached) route->distToDest = 0.0;
+      else route->distToDest = orthoDist (route->t [route->n-1].lat, route->t[route->n-1].lon, par.pDest.lat, par.pDest.lon);
    }
    route->avrTws /= route->n;
    route->avrGust /= route->n;

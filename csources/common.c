@@ -877,7 +877,8 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
       "  \"routingRet\": %d,\n"
       "  \"isocTimeStep\": %.2lf,\n"
       "  \"calculationTime\": %.4lf,\n"
-      "  \"destinationReached\": %s,\n"
+      "  \"destinationReached\": %s,\n" 
+      "  \"distToDest\": %.2lf,\n"
       "  \"lastPointInfo\": %s,\n"
       "  \"lastStepDuration\": [",
       competitors.t[iComp].name, 
@@ -888,6 +889,7 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
       route->isocTimeStep * 3600,
       route->calculationTime,
       (route->destinationReached) ? "true" : "false",
+      route->distToDest,
       route->lastPointInfo
    );
    for (int i = 0; i < route->nWayPoints; i += 1) {

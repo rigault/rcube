@@ -353,7 +353,8 @@ typedef struct {
    double totDist;                              // total distance in NM
    double motorDist;                            // distance using motor in NM
    double tribordDist;                          // distance sail tribord in NM
-   double babordDist;                           // distance sail babord in NM
+   double babordDist;                           // distance sail babord in NM   
+   double distToDest;                           // distance to destination
    int    ret;                                  // return value of routing
    bool   destinationReached;                   // true if destination reaches
    double avrTws;                               // average wind speed of the route
