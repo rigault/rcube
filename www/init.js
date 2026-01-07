@@ -334,9 +334,7 @@ function initMapGeoJson(containerId) {
    // --- Load local GeoJSON and add it to the land layer ---
    fetch(geoFile)
       .then(function (response) {
-         if (!response.ok) {
-            throw new Error("Failed to load " + geoFile + " (" + response.status + ")");
-         }
+         if (!response.ok) throw new Error(`GeoJSON load failed:" ${response.status}`);
          return response.json();
       })
       .then(function (data) {

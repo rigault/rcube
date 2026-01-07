@@ -185,12 +185,12 @@ function formatDurationShort (seconds) {
 function dmsToDecimal (dms) {
    if (!dms) return 0;
    let decimal, m, s;
-   if ((dms.includes("°")) && (dms.includes("'")) && (dms.includes('"'))) {// X° Y' Z" 
+   if ((dms.includes("°")) && (dms.includes("'")) && ((dms.includes('"') || dms.includes('″')))) {// X° Y' Z" 
       decimal = parseFloat(dms);
       m = parseFloat(dms.split('°')[1]);
       s = parseFloat(dms.split("'")[1]);
-      if (m) decimal += parseFloat(m) / 60;
-      if (s) decimal += parseFloat(s) / 3600;
+      if (m) decimal += m / 60;
+      if (s) decimal += s / 3600;
       if (dms.includes('S') || dms.includes('W')) decimal *= -1;
       return decimal;
    }
@@ -221,7 +221,7 @@ function latLonToStr(lat, lon, type=DMS_DISPLAY.DMS) {
       const dir = isLat ? (val >= 0 ? 'N' : 'S') : (val >= 0 ? 'E' : 'W');
       const absVal = Math.abs (val);
       const d = Math.floor(absVal);
-      let m, degStr, minStr;
+      let m, s, degStr, minStr, secStr;
       switch (type) {
       case DMS_DISPLAY.BASIC: return val.toFixed (4);
       case DMS_DISPLAY.DD: return `${absVal.toFixed(4)}° ${dir}`;

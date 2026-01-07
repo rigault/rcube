@@ -206,7 +206,6 @@ function bestVmg(twaValues, speeds) {
          bestAngle = twaValues[i];
       }
    }
-   if (bestAngle > 180) bestAngle = 360 - bestAngle;
    return { angle: bestAngle, speed: bestSpeed };
 }
 
@@ -214,14 +213,15 @@ function bestVmg(twaValues, speeds) {
 function bestVmgBack(twaValues, speeds) {
    let bestSpeed = -1, bestAngle = -1;
    for (let i = 0; i < twaValues.length; i++) {
-      if (twaValues[i] < 90) continue;
-      let vmg = Math.abs(speeds[i] * Math.cos(twaValues[i] * Math.PI / 180));
+      let angle = twaValues [i];
+      if (angle < 90) continue;
+      if (angle > 180) break;
+      let vmg = Math.abs(speeds[i] * Math.cos(angle * Math.PI / 180));
       if (vmg > bestSpeed) {
          bestSpeed = vmg;
-         bestAngle = twaValues[i]; 
+         bestAngle = angle; 
       }
    }
-   if (bestAngle > 180) bestAngle = 360 - bestAngle;
    return { angle: bestAngle, speed: bestSpeed };
 }
 

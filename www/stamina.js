@@ -2,6 +2,12 @@ const extractStam = '{"recovery":{"points":1,"loWind":0,"hiWind":30,"loTime":5,"
 
 const shipParam = [
    {
+      name: "Normal",
+      cShip: 1.0,
+      tMin: [300, 300, 336],
+      tMax: [660, 660, 480]
+   },
+   {
       name: "Imoca",
       cShip: 1.2,
       tMin: [300, 300, 420],
@@ -14,10 +20,10 @@ const shipParam = [
       tMax: [660, 660, 600]
    },
    {
-      name: "Normal",
-      cShip: 1.0,
-      tMin: [300, 300, 336],
-      tMax: [660, 660, 480]
+      name: "Unknown",
+      cShip: 2.0,
+      tMin: [300, 300, 420],
+      tMax: [660, 660, 600]
    }
 ];
 
@@ -28,22 +34,22 @@ const shipParam = [
  * @param {number} shipIndex - Index of the ship in ship parameters.
  * @param {number} type - Type of manoeuvre (0, 1, or 2).
  * @param {number} tws - True wind speed in knots.
- * @param {number} energy - Current energy (0 to 100).
- * @param {object} staminaK - stamina coefficient.
+ * @param {object} CStamina - stamina coefficient.
  * @returns {number} Penalty time in seconds, or -1 if the type is invalid.
  */
-function fPenalty (shipIndex, type, tws, energy, staminaK, fullPack) {
+function fPenalty (shipIndex, type, tws, CStamina, fullPack) {
    if (type < 0 || type > 2) {
       console.error(`In fPenalty, type unknown: ${type}`);
       return -1;
    }
-   const cShip = shipParam[shipIndex].cShip;
    const tMin = shipParam[shipIndex].tMin[type];
    const tMax = shipParam[shipIndex].tMax[type];
-   const fTws = 50.0 - 50.0 * Math.cos(Math.PI * ((Math.max(10.0, Math.min(tws, 30.0)) - 10.0) / 20.0));
+   tws = Math.max (10.0, Math.min (tws, 30.0)); // Clamp
+   const fTws = 50.0 - 50.0 * Math.cos(Math.PI * ((tws - 10.0) / 20.0));
    let t = tMin + fTws * (tMax - tMin) / 100.0;
+   t *= CStamina;
    if (fullPack) t *= 0.8;
-   return t * cShip * staminaK;
+   return Math.max (tMin, t) ;
 }
 
 /**
@@ -56,9 +62,9 @@ function fPenalty (shipIndex, type, tws, energy, staminaK, fullPack) {
  * @param {boolean} fullPack - Whether the full pack option is active.
  * @returns {number} Point loss.
  */
-function fPointLoss (shipIndex, type, tws, fullPack) {
-   const fPCoeff = fullPack ? 0.8 : 1.0;
-   const loss = (type === 2) ? 0.2 : 0.1;
+function fPointLoss (shipIndex, type, tws /*fullPack*/) {
+   //const fPCoeff = fullPack ? 0.8 : 1.0;
+   const loss = (type === 2) ? 0.2 : 0.1; // see extractStam.consumption.points.tack gybe sail 
    const cShip = shipParam[shipIndex].cShip;
 
    const fTws = (tws < 10.0) ? 0.02 * tws + 1.0 :
@@ -66,7 +72,7 @@ function fPointLoss (shipIndex, type, tws, fullPack) {
                 (tws <= 30.0) ? 0.05 * tws + 0.5 :
                 2.0;
 
-  return fPCoeff * loss * cShip * fTws;
+  return /*fPCoeff*/ loss * fTws * cShip;
 }
 
 /**
@@ -196,7 +202,7 @@ function stamina() {
             recoverTime.textContent =  formatTimeSecToMnS (recup);
 
             for (let i = 0; i < 3; i++) {
-               const time = fPenalty (shipIndex, i, tws, energy, staminaOut, fullPack);
+               const time = fPenalty (shipIndex, i, tws, staminaOut, fullPack);
                const loss = fPointLoss (shipIndex, i, tws, fullPack);
                timeCells[i].textContent =  formatTimeSecToMnS(time);
                lossCells[i].textContent = (100 * loss).toFixed(2) + " %";

@@ -220,8 +220,8 @@ function showWayPoint (wayPoints, headingRequested = true) {
             updateIconStyle (boat.marker);
          }
       }
-      const lat = myWayPoints [myWayPoints.length - 1][0];
-      const lon = myWayPoints [myWayPoints.length - 1][1];
+      const lat = wayPoints [wayPoints.length - 1][0];
+      const lon = wayPoints [wayPoints.length - 1][1];
       showDestination (lat, lon);
    }
 }
@@ -418,6 +418,7 @@ function popup4Comp (competitor) {
    return `
       <span style="margin-right: 8px;"><strong>${competitor.name}</strong></span>
       <button onclick="deleteCompetitorByName('${competitor.name}')" class="poi-delete-button" title="Delete this Comp">🗑️</button>
+      <span style="margin-right: 8px;"><br>${latLonToStr(competitor.lat, competitor.lon, DMSType)}</span> 
    `;
 }
 
@@ -1514,7 +1515,8 @@ function updateBindPopup (competitor) {
    if (sog !== undefined) {
       const twdArrow = arrowEmojiFromAngle(twd);
       competitor.marker.bindPopup(`
-         ${popup4Comp(competitor)}<br>
+         <span style="margin-right: 8px;"><strong>${competitor.name}</strong></span>
+         <button onclick="deleteCompetitorByName('${competitor.name}')" class="poi-delete-button" title="Delete this Comp">🗑️</button><br> 
          ${dateToStr(theDate)}<br>
          ${latLonToStr(lat, lon, DMSType)}<br>
          Twd: ${twd.toFixed(0)}°  ${twdArrow} Tws: ${tws.toFixed(2)} kn<br>
