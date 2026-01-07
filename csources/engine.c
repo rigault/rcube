@@ -440,6 +440,7 @@ static void statRoute (SailRoute *route) {
    route->nSailChange = 0;
    route-> t[0].stamina = par.staminaVR;
    route -> t[0].time = 0;
+   route->distToDest = 0.0;
    double deltaTime = par.tStep;
    double sog = 0;
 
@@ -548,8 +549,9 @@ static void statRoute (SailRoute *route) {
       route->t [route->n-1].oCap = route->t [route->n-2].oCap;
       route->t [route->n-1].sail = route->t [route->n-2].sail; // convention. No need for sail
       route->t [route->n-1].stamina = route->t [route->n-2].stamina;
-      if (route->destinationReached) route->distToDest = 0.0;
-      else route->distToDest = orthoDist (route->t [route->n-1].lat, route->t[route->n-1].lon, par.pDest.lat, par.pDest.lon);
+      if (! route->destinationReached) {
+         route->distToDest = orthoDist (route->t [route->n-1].lat, route->t[route->n-1].lon, par.pDest.lat, par.pDest.lon);
+      }
    }
    route->avrTws /= route->n;
    route->avrGust /= route->n;
