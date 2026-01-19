@@ -132,7 +132,7 @@ header a:hover, .menu:hover {
    /*position: fixed;*/
    bottom: 0;
    width: 100%;
-   background-color: #333;
+   background-color: #666;
    color: white;
    padding: 10px 20px;
    text-align: left;
@@ -353,6 +353,13 @@ select:focus option:checked {
    background-color: orange !important;
    border-color: black !important;
 }
+
+/* twa plotly */
+#plotWrap {
+  width: 100% !important;
+  height: 500px;
+}
+
 
 /* for displayComp () Swal box */
 .comp-table {
