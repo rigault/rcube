@@ -489,8 +489,8 @@ void findWindGrib (double lat, double lon, double t, double *u, double *v, \
    if (par.constWindTws != 0) {
       *twd = par.constWindTwd;
       *tws = par.constWindTws;
-	   *u = - KN_TO_MS * par.constWindTws * sin (DEG_TO_RAD * par.constWindTwd);
-	   *v = - KN_TO_MS * par.constWindTws * cos (DEG_TO_RAD * par.constWindTwd);
+	    *u = - KN_TO_MS * par.constWindTws * sin (DEG_TO_RAD * par.constWindTwd);
+	    *v = - KN_TO_MS * par.constWindTws * cos (DEG_TO_RAD * par.constWindTwd);
       *w = 0;
       *gust = hypot (*u, *v); // m/s
       return;

@@ -1450,3 +1450,117 @@ bool exportRouteToGpx (const SailRoute *route, const char *fileName) {
    printf ("GPX file:%s generated\n", fileName);
    return true;
 }
+
+/*! calculate next pos (lat, lon) at TWA and provides wind current and route parameters */
+static bool nextPos(double *lat, double *lon, double twa, double t, double dt,
+   double *hdg, double *twd, double *tws, double *gust, double *w, double *uCurr, double *vCurr, int *sailChoice) {
+
+   static const double epsilon = 0.01;
+   int bidon;   
+   double efficiency, sog, dLat, dLon, u, v, currTwd, currTws;
+   double invDenominator = 1.0 / MAX (epsilon, cos (DEG_TO_RAD * *lat));
+
+   *sailChoice = 0;
+   if (!isInZone (*lat, *lon, &zone)) return false;
+   findWindGrib (*lat, *lon, t, &u, &v, gust, w, twd, tws);
+   if (par.withCurrent) findCurrentGrib (*lat, *lon, t - tDeltaCurrent, uCurr, vCurr, &currTwd, &currTws);
+
+   if (par.dayEfficiency == par.nightEfficiency) efficiency = par.dayEfficiency;
+   else efficiency = isDay(t, zone.dataDate[0], zone.dataTime[0], *lat, *lon) ? par.dayEfficiency : par.nightEfficiency;
+  
+   sog = efficiency * findPolar(twa, *tws * par.xWind, &polMat, &sailPolMat, sailChoice);
+   if (par.withWaves && *w > 0.0 ) {
+      const double waveCorrection = findPolar(twa, *w, &wavePolMat, NULL, &bidon);
+      if (waveCorrection > 0.0) sog *= waveCorrection * 0.01;
+   }
+   *hdg = *twd - twa;
+   if (*hdg < 0) *hdg += 360.0;
+   dLat = sog * dt * cos (DEG_TO_RAD * *hdg);                   // nautical miles in N S direction
+   dLon = sog * dt * sin (DEG_TO_RAD * *hdg) * invDenominator;  // nautical miles in E W direction
+
+   if (par.withCurrent) {                                      // correction for current
+      dLat += MS_TO_KN * *vCurr * dt;
+      dLon += MS_TO_KN * *uCurr * dt * invDenominator;
+   }
+   *lat += dLat / 60.0;
+   *lon += dLon / 60.0;
+   return true;
+}
+
+/*! Calculate TWA route and produce Json output */ 
+void routeAtTwa (double lat0, double lon0, double twa, time_t epochStart, double t, double dt, int max, char *out, size_t maxLen) {
+  if (max < 1) {
+    snprintf (out, maxLen, "{ \"_Error\": \"nStep should be >= 2\"}\n"); 
+    return;
+  }  
+  if (!isInZone (lat0, lon0, &zone)) {
+    snprintf (out, maxLen, "{ \"_Error\": \"Start position not in Grib Zone\" }\n"); 
+    return;
+  }
+  const bool waves = isPresentGrib(&zone,"swh") && par.withWaves;
+  const long duration = (par.tStep * 3600) * max;
+  char strSail [MAX_SIZE_NAME] = "";
+  double hdg, u, v, g, w, uCurr = 0.0, vCurr = 0.0, twd, tws, currTwd, currTws;
+  double dist = 0.0, totDist = 0.0;
+  double formerLat = lat0, formerLon = lon0;
+  double lat = lat0, lon = lon0;
+  int sail, formerSail = 0, nSailChange = 0;
+  char str [MAX_SIZE_LINE];
+  char *gribBaseName = g_path_get_basename (par.gribFileName);
+  char *gribCurrentBaseName = g_path_get_basename (par.currentGribFileName);
+  char *polarBaseName = g_path_get_basename (par.polarFileName);
+  char *wavePolarBaseName = g_path_get_basename (par.wavePolFileName);
+
+  tDeltaCurrent = zoneTimeDiff (&currentZone, &zone); // global variable/
+  findWindGrib (lat0, lon0, t, &u, &v, &g, &w, &twd, &tws);
+  if (par.withCurrent) findCurrentGrib (lat0, lon0, t - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
+  hdg = twd - twa;
+  if (hdg < 0) hdg += 360.0;
+
+  snprintf(out, maxLen, "{\n"
+    "  \"twa\": %.2lf,\n"    
+    "  \"nSteps\": %d,\n"
+    "  \"timeStep\": %.0lf,\n"
+    "  \"epochStart\": %ld,\n"    
+    "  \"duration\": %ld,\n"
+    "  \"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf,\n"
+    "  \"polar\": \"%s\",\n"
+    "  \"wavePolar\": \"%s\",\n"
+    "  \"grib\": \"%s\",\n"
+    "  \"currentGrib\": \"%s\",\n"
+    "  \"comment\": \"[lat, lon, t, dist, hdg, twd, tws, g, w, uCurr, vCurr, sail]\",\n"
+    "  \"array\": [\n    [%.4lf, %.4lf,    0, 0.0000, %.0lf, %.4lf, %.4lf, %.4lf, %.4lf, %.4lf, %.4lf, \"--\"],\n", 
+    twa, max, par.tStep * 3600, epochStart, duration, zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight,
+    polarBaseName, 
+    (waves) ? wavePolarBaseName : "",  
+    gribBaseName, 
+    (par.withCurrent) ? gribCurrentBaseName : "",
+    lat0, lon0, hdg, twd, tws, g, w, uCurr, vCurr);
+
+  free(polarBaseName);
+  free(wavePolarBaseName);
+  free (gribBaseName);
+  free (gribCurrentBaseName);
+
+  for (int i = 0; i < max; i += 1) {
+    if (! nextPos (&lat, &lon, twa, t, dt, &hdg, &twd, &tws, &g, &w, &uCurr, &vCurr, &sail)) {
+      snprintf (out, maxLen, "{ \"_Error\": \"Position not in Grib Zone\" }\n"); 
+      return;
+    }
+    fSailName (sail, strSail, sizeof strSail);
+    if ((sail != formerSail) && (i > 0)) nSailChange += 1;
+    dist = orthoDist(formerLat, formerLon, lat, lon);
+    totDist += dist;
+
+    snprintf (str, sizeof str , "    [%.4lf, %.4lf, %.0lf, %.4lf, %.0lf, %.4lf, %.4lf, %.4lf, %.4lf, %.4lf, %.4lf, \"%s\"]%s\n", 
+       lat, lon, (i+1) * dt * 3600 , dist, hdg, twd, tws, g, w, uCurr, vCurr, strSail, (i < max - 1) ? "," : ""
+    );
+    g_strlcat (out, str, maxLen);
+    formerLat = lat;
+    formerLon = lon;
+    formerSail = sail;
+    t += dt;
+  }
+  snprintf (str, sizeof str, "  ],\n  \"totDist\": %.2lf,\n  \"nSailChange\": %d\n}\n", totDist, nSailChange);
+  g_strlcat (out, str, maxLen);
+}

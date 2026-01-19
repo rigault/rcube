@@ -400,7 +400,7 @@ bool decodeFormReq (const char *req, ClientRequest *clientReq) {
       else if (g_str_has_prefix (parts[i], "sortByName=false")) clientReq->sortByName = false;  // Default false
       else if (sscanf (parts[i], "staminaVR=%lf",        &clientReq->staminaVR) == 1);          // stamina Virtual Regatta
       else if (sscanf (parts[i], "motorSpeed=%lf",       &clientReq->motorSpeed) == 1);         // motor speed
-      else if (sscanf (parts[i], "threshold=%lf",         &clientReq->threshold) == 1);         // threshold for motoe
+      else if (sscanf (parts[i], "threshold=%lf",        &clientReq->threshold) == 1);          // threshold for motoe
       else if (sscanf (parts[i], "nightEfficiency=%lf",  &clientReq->nightEfficiency) == 1);    // efficiency at night
       else if (sscanf (parts[i], "dayEfficiency=%lf",    &clientReq->dayEfficiency) == 1);      // efficiency daylight
       else if (sscanf (parts[i], "xWind=%lf",            &clientReq->xWind) == 1);              // xWind factor
@@ -408,8 +408,10 @@ bool decodeFormReq (const char *req, ClientRequest *clientReq) {
       else if (sscanf (parts[i], "constWindTws=%lf",     &clientReq->constWindTws) == 1);       // const Wind TWS
       else if (sscanf (parts[i], "constWindTwd=%lf",     &clientReq->constWindTwd) == 1);       // const Wind TWD
       else if (sscanf (parts[i], "constWave=%lf",        &clientReq->constWave) == 1);          // const Waves
-      else if (sscanf (parts[i], "constCurrentS=%lf",     &clientReq->constCurrentS) == 1);     // const current speed
-      else if (sscanf (parts[i], "constCurrentD=%lf",     &clientReq->constCurrentD) == 1);     // const current direction
+      else if (sscanf (parts[i], "constCurrentS=%lf",    &clientReq->constCurrentS) == 1);      // const current speed
+      else if (sscanf (parts[i], "constCurrentD=%lf",    &clientReq->constCurrentD) == 1);      // const current direction 
+      else if (sscanf (parts[i], "twa=%lf",              &clientReq->twa) == 1);                // for REQ_TWA     
+      else if (sscanf (parts[i], "nSteps=%d",            &clientReq->nStep) == 1);              // for REQ_TWA
       else fprintf (stderr, "In decodeFormReq Unknown value: %s\n", parts [i]);
    }
    g_strfreev (parts);
@@ -534,7 +536,9 @@ void infoCoordToJson (double lat, double lon, ClientRequest *clientReq, char *re
    if (pFileName != NULL) pFileName += 1;
    snprintf (res, maxLen, "{\n"
       "  \"isSea\": %s,\n  \"isSeaTolerant\": %s,\n  \"inWind\": %s,\n  \"inCurrent\": %s,\n"
-      "  \"epochGribStart\": %ld,\n  \"grib\": \"%s\",\n  \"meteoArray\": [\n", 
+      "  \"epochGribStart\": %ld,\n  \"grib\": \"%s\",\n"
+      "  \"comment\": \"[u, v, g, w]\",\n"
+      "  \"meteoArray\": [\n", 
       sea ? "true" : "false", seaTolerant ? "true": "false", wind ? "true": "false", current ? "true": "false", 
       epochGribStart, pFileName ? pFileName : ""); 
     
@@ -553,8 +557,12 @@ bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, size_t m
    char directory [MAX_SIZE_DIR_NAME];
    checkMessage  [0] = '\0';
    // printf ("startInfo after: %s, startTime: %lf\n", asctime (&startInfo), par.startTimeInHours);
-   if ((clientReq->nBoats == 0) || (clientReq->nWp == 0)) {
-      snprintf (checkMessage, maxLen, "1: No boats or no Waypoints");
+   if (clientReq->nBoats == 0) {
+      snprintf (checkMessage, maxLen, "1: No boats");
+      return false;
+   }
+   if (clientReq->nWp == 0  && clientReq->type == REQ_ROUTING) {
+      snprintf (checkMessage, maxLen, "1bis: no Waypoints");
       return false;
    }
    par.allwaysSea = !clientReq->forbid;
@@ -855,11 +863,14 @@ static char *isoDescToStrCatJson (char *res, size_t maxLen) {
    return res;
 }
 
-/*! generate json description of track boats */
+/*! generate json description of track boats 
+ * no boatKeu if boat name is "noname" 
+ */
 char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t maxLen) {
    char str [MAX_SIZE_MESS] = "";
-   char strSail [MAX_SIZE_NAME] = "";
-   double twa = 0.0, hdg = 0.0, twd = 0.0;
+   char strSail [MAX_SIZE_NAME] = ""; 
+   char boatKey [MAX_SIZE_NAME] = "";
+   double twa = 0.0, cog = 0.0, twd = 0.0;
    int nSeg = -1; // for checkRoute
    if (route->n <= 0) return NULL;
 
@@ -868,10 +879,13 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
    char *gribCurrentBaseName = g_path_get_basename (par.currentGribFileName);
    char *polarBaseName = g_path_get_basename (par.polarFileName);
    char *wavePolarBaseName = g_path_get_basename (par.wavePolFileName);
-
+   const bool hasBoatKey = (strncmp (competitors.t[iComp].name, "noname", 5) != 0);
+   snprintf (boatKey, sizeof boatKey, "\"%s\": {\n", competitors.t[iComp].name); 
+ 
    snprintf (res, maxLen, 
       "{\n" 
-      "\"%s\": {\n  \"duration\": %d,\n"
+      "%s" // boat key if hasBoatKey
+      "  \"duration\": %d,\n"
       "  \"totDist\": %.2lf,\n"
       "  \"epochStart\": %ld,\n"
       "  \"routingRet\": %d,\n"
@@ -881,7 +895,7 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
       "  \"distToDest\": %.2lf,\n"
       "  \"lastPointInfo\": %s,\n"
       "  \"lastStepDuration\": [",
-      competitors.t[iComp].name, 
+      hasBoatKey ? boatKey : "", 
       (int) (route->duration * 3600), 
       route->totDist,
       clientReq.epochStart,
@@ -906,6 +920,7 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
       "  \"wavePolar\": \"%s\",\n"
       "  \"grib\": \"%s\",\n"
       "  \"currentGrib\": \"%s\",\n"
+      "  \"comment\": \"[wp, lat, lon, t, dist, sog, twd, tws, cog, twa, g, w, stamina, sail, motor, id, father]\",\n"
       "  \"track\": [\n",
       route->lastStepDuration * 3600.0,
       route->motorDist, route->tribordDist, route->babordDist,
@@ -919,8 +934,8 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
    g_strlcat (res, str, maxLen);
    free(polarBaseName);
    free(wavePolarBaseName);
-   free (gribBaseName);
-   free (gribCurrentBaseName);
+   free(gribBaseName);
+   free(gribCurrentBaseName);
 
    for (int i = 0; i < route->n; i++) {
       if (route->t[i].sog > LIMIT_SOG)
@@ -928,8 +943,8 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
             route->t[i].lat, route->t[i].lon, route->t[i].sog, route->t[i].od, route->t[i].ld);
 
       twa = fTwa (route->t[i].lCap, route->t[i].twd);
-      hdg = route->t [i].oCap;
-      if (hdg < 0) hdg += 360;
+      cog = route->t [i].oCap;
+      if (cog < 0) cog += 360;
       twd = route->t[i].twd;
       if (twd < 0) twd += 360;
       fSailName (route->t[i].sail, strSail, sizeof strSail);
@@ -943,7 +958,7 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
          route->t[i].time * 3600.0,
          route->t[i].od, route->t[i].sog, 
          twd ,route->t[i].tws, 
-         hdg, twa,
+         cog, twa,
          route->t[i].g, route->t[i].w ,route->t[i].stamina, 
          strSail, (route->t[i].motor) ? "true" : "false",
          route->t[i].id, route->t[i].father,
@@ -953,7 +968,8 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
       g_strlcat (res, str, maxLen);
    }
 
-   g_strlcat (res, "  ]\n}", maxLen);
+   g_strlcat (res, "  ]", maxLen);   
+   if (hasBoatKey) g_strlcat (res, "\n}", maxLen);
 
    nSeg = checkRoute (route);
    if (nSeg != -1) { // route is not OK

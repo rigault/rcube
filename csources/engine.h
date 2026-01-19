@@ -18,6 +18,7 @@ extern void    logReport (int n);
 extern void    saveRoute (SailRoute *route);
 extern bool    exportRouteToGpx (const SailRoute *route, const char *filename);
 extern bool    dumpIsocToFile (const char *fileName);
+extern void    routeAtTwa (double lat0, double lon0, double twa, time_t epochStart, double t, double dt, int max, char *out, size_t maxLen);
 //extern GString *isochronesToJson ();
 //extern GString *routeToJson (SailRoute *route, int index, bool isoc, bool isoDesc);
 //extern GString *allCompetitorsToJson (int n, bool isoc, bool isoDesc);

@@ -48,13 +48,13 @@
 #define MAX_N_POL_MAT_LINES   128               // Max number of lines in polar
 #define MAX_SIZE_JSON_HEADER  10000             // Max size json header when reading polar json
 
-#define MAX_SIZE_LINE         1024		         // Max size of pLine in text files
-#define MAX_SIZE_STD          1024		         // Max size of lines standard
+#define MAX_SIZE_LINE         1024		          // Max size of pLine in text files
+#define MAX_SIZE_STD          1024		          // Max size of lines standard
 #define MAX_SIZE_LINE_BASE64  1024              // Max size of line in base64 mail file
-#define MAX_SIZE_TEXT         2048		         // Max size of text
-#define MAX_SIZE_TEXT_FILE    50000		         // Max size of text file
-#define MAX_SIZE_MESSAGE      2048		         // Max size of a mail message
-#define MAX_SIZE_URL          1024		         // Max size of a URL
+#define MAX_SIZE_TEXT         2048		          // Max size of text
+#define MAX_SIZE_TEXT_FILE    50000		          // Max size of text file
+#define MAX_SIZE_MESSAGE      2048		          // Max size of a mail message
+#define MAX_SIZE_URL          1024		          // Max size of a URL
 #define MAX_SIZE_DATE         32                // Max size of a string with date inside
 #define MAX_SIZE_BUFFER       1000000           // big buffer for malloc
 #define MAX_N_TIME_STAMPS     512               // Max number of time stamps in Grib file
@@ -87,6 +87,11 @@ enum {TRIBORD, BABORD};                         // amure TRIBORD = STARBOARD, BA
 enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION};                   // for chooseDeparture.ret values and allCompetitors check
 enum {ROUTING_STOPPED = -2, ROUTING_ERROR = -1, ROUTING_RUNNING = 0};   // for routingLaunch
 
+enum {REQ_KILL = -1793, REQ_TEST = 0, REQ_ROUTING = 1, REQ_COORD = 2, REQ_FORBID = 3, REQ_POLAR = 4, 
+      REQ_GRIB = 5, REQ_DIR = 6, REQ_PAR_RAW = 7, REQ_PAR_JSON = 8, 
+      REQ_INIT = 9, REQ_FEEDBACK = 10, REQ_DUMP_FILE = 11, REQ_NEAREST_PORT = 12, 
+      REQ_MARKS = 13, REQ_CHECK_GRIB = 14, REQ_GPX_ROUTE = 15, REQ_GRIB_DUMP = 16, REQ_TWA = 17}; // type of request
+
 /*! Client Request description */
 typedef struct {
    int level;                                // level of authorization
@@ -101,6 +106,7 @@ typedef struct {
    int penalty2;                             // penalty in seconds for sail change
    int initialAmure;                         // initial Amure of the routing calculation 0 = starboard = tribord, or 1 = port = babord
    int timeStep;                             // isoc time step in seconds
+   int nStep;                                // for TWA REQ
    time_t epochStart;                        // epoch time to start routing
    bool onlyUV;                              // for grib dump requesting only U and V
    bool isoc;                                // true if isochrones requested
@@ -109,6 +115,7 @@ typedef struct {
    bool forbid;                              // true if forbid zone (polygons or Earth) are considered
    bool withWaves;                           // true if waves specified in wavePolName file are considered
    bool withCurrent;                         // true if current specified in currentGribName is considered
+   double twa;                               // fot TWA REQ 
    double staminaVR;                         // Init stamina
    double motorSpeed;                        // motor speed if used
    double threshold;                         // threshold for motor use

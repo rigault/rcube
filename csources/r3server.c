@@ -240,15 +240,23 @@ int memoryUsage (void) {
 static char *testToJson (int serverPort, const char *clientIP, const char *userAgent, int level, char *out, size_t maxLen) {
    char strWind [MAX_SIZE_LINE] = "";
    char strCurrent [MAX_SIZE_LINE] = "";
-   char strMem [MAX_SIZE_LINE] = "";
+   char strMem [MAX_SIZE_LINE] = "";   
+   char strConf [MAX_SIZE_LINE] = "";
    char str [MAX_SIZE_TEXT_FILE] = "";
 
    formatThousandSep (strWind, sizeof strWind, sizeof(FlowP) * (zone.nTimeStamp + 1) * zone.nbLat * zone.nbLon);
    formatThousandSep (strCurrent, sizeof strCurrent, sizeof(FlowP) * (currentZone.nTimeStamp + 1) * currentZone.nbLat * currentZone.nbLon);
    formatThousandSep (strMem, sizeof strMem, memoryUsage ()); // KB ! 
-   
+
+   if (fileExists (parameterFileName)) {
+      snprintf (strConf, sizeof strConf, "Exist: %s", parameterFileName);
+   }
+   else {
+      snprintf (strConf, sizeof strConf, "Unfound: %s", parameterFileName);
+   }
    snprintf (out, maxLen,
       "{\n  \"Prog-version\": \"%s, %s, %s\",\n"
+      "  \"Conf File\": \"%s\",\n"
       "  \"API server port\": %d,\n"
       "  \"Grib Reader\": \"%s\",\n"
       "  \"Memory for Grib Wind\": \"%s\",\n"
@@ -259,7 +267,7 @@ static char *testToJson (int serverPort, const char *clientIP, const char *userA
       "  \"Client IP Address\": \"%s\",\n"
       "  \"User Agent\": \"%s\",\n"
       "  \"Authorization-Level\": %d\n}\n",
-      PROG_NAME, PROG_VERSION, PROG_AUTHOR, serverPort, gribReaderVersion (str, sizeof str), 
+      PROG_NAME, PROG_VERSION, PROG_AUTHOR, strConf, serverPort, gribReaderVersion (str, sizeof str), 
       strWind, strCurrent, __DATE__, getpid (), strMem, clientIP, userAgent, level
    );
    return out;
@@ -421,10 +429,12 @@ static bool launchAction (int serverPort, int sock, ClientRequest *clientReq,
          break;
       }
       if (hasGrib && !(updateWindGrib (clientReq, outBuffer, maxLen))) break;
+      clientReq->withCurrent = hasCurrentGrib; // necessary for updateCurrentGrib 
       if (hasCurrentGrib && !(updateCurrentGrib (clientReq, outBuffer, maxLen))) break;
-
       checkGribToStr (hasCurrentGrib, outBuffer, maxLen);
-      if (outBuffer [0] == '\0') g_strlcpy (outBuffer, "All is OK\n", maxLen);
+      if (outBuffer [0] == '\0') {
+        snprintf (outBuffer, maxLen, "All is OK for: %s %s\n", clientReq->gribName, clientReq->currentGribName);
+      }
       break;
    case REQ_GPX_ROUTE:
       buildRootName(GPX_ROUTE_FILE_NAME, tempFileName, sizeof tempFileName);
@@ -464,7 +474,16 @@ static bool launchAction (int serverPort, int sock, ClientRequest *clientReq,
       free(buf);
       resp = false;
       break;
-   default:;
+   case REQ_TWA:
+      if (checkParamAndUpdate (clientReq, checkMessage, sizeof checkMessage)) {       
+          routeAtTwa (par.pOr.lat, par.pOr.lon, clientReq->twa, clientReq->epochStart, 
+              par.startTimeInHours, par.tStep, clientReq->nStep, outBuffer, maxLen);
+      }
+      else {
+         snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", checkMessage);
+      }
+      break;
+   default: fprintf (stderr, "In launchAction, unknown type: %d\n", clientReq->type);
    }
    return resp;
 }
@@ -621,13 +640,10 @@ int main (int argc, char *argv[]) {
       return EXIT_FAILURE;
    }
    
-   if (argc > 2)
-      g_strlcpy (parameterFileName, argv [2], sizeof parameterFileName);
-   else 
-      g_strlcpy (parameterFileName, PARAMETERS_FILE, sizeof parameterFileName);
+   if (argc > 2) g_strlcpy (parameterFileName, argv [2], sizeof parameterFileName);
+   else g_strlcpy (parameterFileName, PARAMETERS_FILE, sizeof parameterFileName);
 
-   if (! initContext (parameterFileName, ""))
-      return EXIT_FAILURE;
+   if (! initContext (parameterFileName, "")) return EXIT_FAILURE;
 
    // option case, launch optionManage
    if (argv[1][0] == '-') {
@@ -702,7 +718,6 @@ int main (int argc, char *argv[]) {
       forbidZones[i].points = NULL;
       forbidZones[i].n = 0;
    }
-   
    return EXIT_SUCCESS;
 }
 

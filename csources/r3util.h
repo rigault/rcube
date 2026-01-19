@@ -35,8 +35,10 @@ extern char *tIsSea;                   // array of byte. 0 if earth, 1 if sea
 extern CompetitorsList competitors;
 
 /*! functions defined in r3util.c */
+extern bool   fileExists (const char *filename);
 extern void   wipeSpace(char *str); 
 extern void   normalizeSpaces (char *s);
+extern void   printFloat (char *buf, size_t len, double v);
 extern void   initZone (Zone *zone);
 extern char   *epochToStr (time_t t, bool seconds, char *str, size_t len);
 extern struct tm gribDateToTm (long intDate, double nHours);

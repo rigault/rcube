@@ -16,7 +16,7 @@
 
 /*! Manage command line option reduced to one character */
 void optionManage (char option) {
-	FILE *f = NULL;
+	 FILE *f = NULL;
    char *buffer = NULL;
    char footer [MAX_SIZE_LINE] = "";
    double w, twa, tws, lon, lat, lat2, lon2, cog, t, hours;
@@ -68,12 +68,11 @@ void optionManage (char option) {
       break;
    case 'h': // help
       printf ("Size of size_t : %zu bytes\n", sizeof (size_t));
-	   if ((f = fopen (par.cliHelpFileName, "r")) == NULL) {
-		   fprintf (stderr, "In optionManage, Error help: Impossible to read: %s\n", par.cliHelpFileName);
-		   break;
-	   }
-      while ((fgets (str, MAX_SIZE_LINE, f) != NULL ))
-         printf ("%s", str);
+	    if ((f = fopen (par.cliHelpFileName, "r")) == NULL) {
+		     fprintf (stderr, "In optionManage, Error help: Impossible to read: %s\n", par.cliHelpFileName);
+		     break;
+	    }
+      while ((fgets (str, MAX_SIZE_LINE, f) != NULL )) printf ("%s", str);
       fclose (f);
       break;
    case 'p': // polar
@@ -183,7 +182,7 @@ void optionManage (char option) {
          if (scanf ("%lf", &hours) < 1) break;
          printf ("DateUtc:    %s\n", newDate (dataDate, hours, str, sizeof str));
       }
- break;
+      break;
    case 'v': // version
       printf ("Prog version: %s, %s, %s\n", PROG_NAME, PROG_VERSION, PROG_AUTHOR);
       printf ("Compilation-date: %s\n", __DATE__);
@@ -196,7 +195,7 @@ void optionManage (char option) {
          if (scanf ("%lf", &twa) < 1) break;
          printf ("fTwa = %.2lf\n",fTwa (cog, twa));
       }
-   break;
+      break;
    case 'z': //
       printf ("Password %s\n", par.mailPw);
       // printf ("Password %s\n", dollarSubstitute (par.mailPw, buffer, strlen (par.mailPw)));

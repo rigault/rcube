@@ -65,11 +65,15 @@ char *tIsSea = NULL;
 Zone zone;                             // wind
 Zone currentZone;                      // current
 
-#include <time.h>
-#include <stdio.h>
+/*! Check if a file exists and is non-empty */
+bool fileExists (const char *filename) {
+   struct stat buffer;
+   return (stat (filename, &buffer) == 0 && buffer.st_size > 0);
+}
 
 /*! wipe all spaces within str */
 void wipeSpace(char *str) {
+   if (!str) return;
    char *src = str, *dst = str;
    while (*src) {
       if (!isspace((unsigned char)*src)) *dst++ = *src;
@@ -80,40 +84,47 @@ void wipeSpace(char *str) {
 
 /*! replace multiple spaces by just one */
 void normalizeSpaces(char *s) {
-    char *src = s;
-    char *dst = s;
-    bool inSpace = false;
+   char *src = s;
+   char *dst = s;
+   bool inSpace = false;
 
-    while (*src) {
-        if (*src == ' ') {
-            if (!inSpace) {
-                *dst++ = ' ';
-                inSpace = true;
-            }
-        } else {
-            *dst++ = *src;
-            inSpace = false;
-        }
-        src++;
-    }
-    *dst = '\0';
+   while (*src) {
+      if (*src == ' ') {
+         if (!inSpace) {
+            *dst++ = ' ';
+            inSpace = true;
+         }
+      } else {
+         *dst++ = *src;
+         inSpace = false;
+      }
+      src++;
+   }
+   *dst = '\0';
+}
+
+/*! formatted float print with simplified 0 */
+void printFloat(char *buf, size_t len, double v) {
+   const double epsilon = 0.00005;  // half 10⁻⁴ → consistent with %.4f 
+   if (fabs(v) < epsilon) g_strlcpy(buf, "0", len);
+   else snprintf(buf, len, "%.4f", v);
 }
 
 /*! translate time nnox in dataDate, datatime grib 
  *  Minutes are allways 00. Hours are 00, 06, 12 or 18
  */
 static void gribDateTimeNowUtc(long *dataDate, long *dataTime) {
-    time_t now = time(NULL);
-    struct tm t;
-    gmtime_r(&now, &t);               // UTC
-    int hour = t.tm_hour;             // 0..23
-    t.tm_hour = (hour / 6) * 6;   // floor to 00,06,12,18
-    t.tm_min  = 0; // HH = 00
-    t.tm_sec  = 0; // Sec = 0
+   time_t now = time(NULL);
+   struct tm t;
+   gmtime_r(&now, &t);               // UTC
+   int hour = t.tm_hour;             // 0..23
+   t.tm_hour = (hour / 6) * 6;       // floor to 00,06,12,18
+   t.tm_min  = 0; // HH = 00
+   t.tm_sec  = 0; // Sec = 0
 
-    // Recompose Grib dates
-    *dataDate = (long)((t.tm_year + 1900) * 10000 + (t.tm_mon + 1) * 100 + (t.tm_mday));
-    *dataTime = (long)(t.tm_hour * 100);   // minutes = 00
+   // Recompose Grib dates
+   *dataDate = (long)((t.tm_year + 1900) * 10000 + (t.tm_mon + 1) * 100 + (t.tm_mday));
+   *dataTime = (long)(t.tm_hour * 100);   // minutes = 00
 }
 
 /*! reinit zone describing geographic meta data */
@@ -159,10 +170,8 @@ void initZone (Zone *zone) {
 
 /*! return the name of the sail */
 char *fSailName (int val, char *str, size_t maxLen) {
-   if (val > 0 && val <= (int) polMat.nSail)
-      strlcpy (str, polMat.tSail[val-1].name, maxLen);
-   else 
-      g_strlcpy (str, "--", maxLen);
+   if (val > 0 && val <= (int) polMat.nSail) strlcpy (str, polMat.tSail[val-1].name, maxLen);
+   else g_strlcpy (str, "--", maxLen);
    return str;
 }
 
@@ -296,7 +305,6 @@ double getCoord (const char *str, double minLimit, double maxLimit) {
    if (minFound && (strchr (str, '"') != NULL)) {
       sec = strtod (strchr (str, '\'') + 1, NULL);
    }
-   
    return CLAMP (sign * (deg + min/60.0 + sec/3600.0), minLimit, maxLimit);
 }
 
@@ -339,15 +347,16 @@ char *buildRootName(const char *fileName, char *rootName, size_t maxLen) {
 char *epochToStr (time_t t, bool seconds, char *str, size_t maxLen) {
    struct tm *utc = gmtime (&t);
    if (!utc) return NULL;
-   if (seconds)
+   if (seconds) {
       snprintf (str, maxLen, "%04d-%02d-%02d %02d:%02d:%02d", 
          utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
          utc->tm_hour, utc->tm_min, utc->tm_sec);
-   else
+   }
+   else {
       snprintf (str, maxLen, "%04d-%02d-%02d %02d:%02d", 
          utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
          utc->tm_hour, utc->tm_min);
-      
+   }
    return str;
 }
 
@@ -360,7 +369,7 @@ double offsetLocalUTC (void) {
    time_t localTime = mktime (&localTm);
    time_t utcTime = mktime (&utcTm);
    double offsetSeconds = difftime (localTime, utcTime);
-   if (localTm.tm_isdst > 0) offsetSeconds += 3600;  // add one hour if summer time
+   if (localTm.tm_isdst > 0) offsetSeconds += 3600.0;  // add one hour if summer time
    return offsetSeconds;
 }
 
@@ -387,28 +396,27 @@ struct tm gribDateToTm (long intDate, double nHours) {
    mktime (&tm0);  
    return tm0;
 }*/
-
 struct tm gribDateToTm(long intDate, double nHours) {
-    struct tm tm0 = {0};
+   struct tm tm0 = {0};
 
-    tm0.tm_year = (int)(intDate / 10000) - 1900;
-    tm0.tm_mon  = (int)((intDate % 10000) / 100) - 1;
-    tm0.tm_mday = (int)(intDate % 100);
+   tm0.tm_year = (int)(intDate / 10000) - 1900;
+   tm0.tm_mon  = (int)((intDate % 10000) / 100) - 1;
+   tm0.tm_mday = (int)(intDate % 100);
 
-    int totalMinutes = (int)lround(nHours * 60.0);
-    int days         = totalMinutes / (24 * 60);
-    int minutesDay   = totalMinutes % (24 * 60);
+   int totalMinutes = (int)lround(nHours * 60.0);
+   int days         = totalMinutes / (24 * 60);
+   int minutesDay   = totalMinutes % (24 * 60);
 
-    tm0.tm_mday += days;
-    tm0.tm_hour  = minutesDay / 60;
-    tm0.tm_min   = minutesDay % 60;
-    tm0.tm_isdst = 0;  // UTC → no DST
+   tm0.tm_mday += days;
+   tm0.tm_hour  = minutesDay / 60;
+   tm0.tm_min   = minutesDay % 60;
+   tm0.tm_isdst = 0;  // UTC → no DST
 
-    // Normalize pure UTC pur
-    time_t t = timegm(&tm0);
-    struct tm out;
-    gmtime_r(&t, &out);
-    return out;
+   // Normalize pure UTC pur
+   time_t t = timegm(&tm0);
+   struct tm out;
+   gmtime_r(&t, &out);
+   return out;
 }
 
 /*! retrurn true if year is bissextile  */
@@ -498,23 +506,23 @@ char *newDateWeekDayVerbose (long intDate, double nHours, char *res, size_t maxL
 
 /*! convert long date/time from GRIB to time_t (UTC, via timegm) */
 time_t gribDateTimeToEpoch(long date, long hhmm) {
-    struct tm tm_utc = {0}; // UTC time with tm_utc.tm_isdst = 0;
-    tm_utc.tm_year = (int)(date / 10000) - 1900;          // YYYY -> tm_year
-    tm_utc.tm_mon  = (int)((date % 10000) / 100) - 1;     // MM   -> 0..11
-    tm_utc.tm_mday = (int)(date % 100);                   // DD
-    tm_utc.tm_hour = (int)(hhmm / 100);                   // HH
-    tm_utc.tm_min  = (int)(hhmm % 100);                   // MM
+   struct tm tm_utc = {0}; // UTC time with tm_utc.tm_isdst = 0;
+   tm_utc.tm_year = (int)(date / 10000) - 1900;          // YYYY -> tm_year
+   tm_utc.tm_mon  = (int)((date % 10000) / 100) - 1;     // MM   -> 0..11
+   tm_utc.tm_mday = (int)(date % 100);                   // DD
+   tm_utc.tm_hour = (int)(hhmm / 100);                   // HH
+   tm_utc.tm_min  = (int)(hhmm % 100);                   // MM
 
-    return timegm(&tm_utc);
+   return timegm(&tm_utc);
 }
 
 /*! calculate difference in hours between departure time in UTC and time 0 */
 double getDepartureTimeInHour (struct tm *startUtc) {
-    const time_t t0 = gribDateTimeToEpoch(zone.dataDate[0], zone.dataTime[0]);
-    if (t0 == (time_t)-1) return NAN;
-    const time_t tStart = timegm(startUtc);   // interprétation en UTC
-    if (tStart == (time_t)-1) return NAN;
-    return difftime(tStart, t0) / 3600.0;
+   const time_t t0 = gribDateTimeToEpoch(zone.dataDate[0], zone.dataTime[0]);
+   if (t0 == (time_t)-1) return NAN;
+   const time_t tStart = timegm(startUtc);   // interprétation en UTC
+   if (tStart == (time_t)-1) return NAN;
+   return difftime(tStart, t0) / 3600.0;
 }
 
 /*! convert hours in string with days, hours, minutes */
@@ -535,7 +543,7 @@ char *latToStr (double lat, int type, char* str, size_t maxLen) {
    const char c = (lat > 0) ? 'N' : 'S';
 
    if (lat > 90.0 || lat < -90.0) {
-      g_strlcpy (str, "Lat Errror", maxLen);
+      g_strlcpy (str, "Lat Error", maxLen);
       return str;
    }
    switch (type) {
@@ -557,7 +565,7 @@ char *lonToStr (double lon, int type, char *str, size_t maxLen) {
    const char c = (lon > 0) ? 'E' : 'W';
 
    if (lon > 180.0 || lon < -180.0) {
-      g_strlcpy (str, "Lon Errror", maxLen);
+      g_strlcpy (str, "Lon Error", maxLen);
       return str;
    }
    switch (type) {
@@ -582,11 +590,11 @@ bool readIsSea (const char *fileName) {
       fprintf (stderr, "In readIsSea, Error cannot open: %s\n", fileName);
       return false;
    }
-	if ((tIsSea = (char *) malloc (SIZE_T_IS_SEA + 1)) == NULL) {
-		fprintf (stderr, "In readIsSea, error Malloc");
-      fclose (f);
-		return false;
-	}
+	 if ((tIsSea = (char *) malloc (SIZE_T_IS_SEA + 1)) == NULL) {
+		 fprintf (stderr, "In readIsSea, error Malloc");
+     fclose (f);
+		 return false;
+	 }
 
    while (((c = fgetc (f)) != -1) && (i < SIZE_T_IS_SEA)) {
       if (c == '1') nSea += 1;
@@ -627,10 +635,9 @@ void updateIsSeaWithForbiddenAreas (void) {
    if (tIsSea == NULL) return;
    if (par.nForbidZone <= 0) return;
    for (int i = 0; i < SIZE_T_IS_SEA; i++) {
-      const double lon = (i % 3601) / 10 - 180.0;
-      const double lat = 90.0 - (i / (3601 *10));
-      if (isInForbidArea (lat, lon))
-         tIsSea [i] = 0;
+      const double lon = (i % 3601) / 10.0 - 180.0;
+      const double lat = 90.0 - (i / (3601.0 * 10.0));
+      if (isInForbidArea (lat, lon)) tIsSea [i] = 0;
    }
 }
 
@@ -1308,6 +1315,7 @@ bool readGeoJson(const char *fileName, MyPolygon forbidZones[], int maxZones, in
    *n = 0;
 
    char *txt = readTextFile(fileName, errMessage, sizeof(errMessage));
+   if (! txt) return false;
    wipeSpace(txt); // txt  contain all JSON specification without spaces
    if (txt[0] == '\0') { free (txt); return false; }
 
@@ -1324,13 +1332,13 @@ bool readGeoJson(const char *fileName, MyPolygon forbidZones[], int maxZones, in
       if (!cpos) break;
 
       // Rough check that we're inside a Polygon feature (optional but helps)
-      bool isPolygon = false;
+      bool isPolygon = false; 
       {
-          const char *back = cpos;
-          for (int k = 0; k < 5000 && back > txt; k++, back--) {
-             if (back[0] == '{') break;
-          }
-          if (strstr(back, "\"type\"") && strstr(back, "Polygon")) isPolygon = true;
+         const char *back = cpos;
+         for (int k = 0; k < 5000 && back > txt; k++, back--) {
+            if (back[0] == '{') break;
+         }
+         if (strstr(back, "\"type\"") && strstr(back, "Polygon")) isPolygon = true;
       }
 
       p = cpos + strlen("\"coordinates\"");
@@ -1405,7 +1413,7 @@ bool readGeoJson(const char *fileName, MyPolygon forbidZones[], int maxZones, in
             p++;
          }
       } else {
-          if (*p == ']') p++;
+         if (*p == ']') p++;
       }
       (*n)++;
    }

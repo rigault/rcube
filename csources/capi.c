@@ -84,16 +84,22 @@ bool computeRoutingJsonFromReq(const ClientRequest *reqIn, char *outBuffer, size
 static void testToJson (char *out, size_t maxLen) {
    char strWind [MAX_SIZE_LINE] = "";
    char strCurrent [MAX_SIZE_LINE] = "";
-
+   char strConf [MAX_SIZE_LINE] = "";
    formatThousandSep (strWind, sizeof strWind, sizeof(FlowP) * (zone.nTimeStamp + 1) * zone.nbLat * zone.nbLon);
    formatThousandSep (strCurrent, sizeof strCurrent, sizeof(FlowP) * (currentZone.nTimeStamp + 1) * currentZone.nbLat * currentZone.nbLon);
-   
+   if (fileExists (parameterFileName)) {
+      snprintf (strConf, sizeof strConf, "Exist: %s", parameterFileName);
+   }
+   else {
+      snprintf (strConf, sizeof strConf, "Unfound: %s", parameterFileName);
+   } 
    snprintf (out, maxLen,
       "{\n  \"Prog-version\": \"%s, %s, %s\",\n"
+      "  \"Conf File\": \"%s\",\n"
       "  \"Memory for Grib Wind\": \"%s\",\n"
       "  \"Memory for Grib Current\": \"%s\",\n"
       "  \"Compilation-date\": \"%s\"\n}\n",
-      PROG_NAME, PROG_VERSION, PROG_AUTHOR, strWind, strCurrent, __DATE__
+      PROG_NAME, PROG_VERSION, PROG_AUTHOR, strConf, strWind, strCurrent, __DATE__
    );
 }
 
@@ -227,7 +233,6 @@ bool computeRoutingJsonFromForm(const char *formReq, char *outBuffer, size_t max
          snprintf (outBuffer, maxLen, "{\n  \"message\": \"Init done\"\n}\n");
       break;
    case REQ_FEEDBACK:
-      printf ("try feednack\n");
       handleFeedbackRequest (par.feedbackFileName, date, "no ip", req.feedback);
       snprintf (outBuffer, maxLen, "{\"_Feedback\": \"%s\"}\n", "OK");
       break;
@@ -270,7 +275,7 @@ bool computeRoutingJsonFromForm(const char *formReq, char *outBuffer, size_t max
    case REQ_GRIB_DUMP:
       resp = gribDump (&req, outBuffer, maxLen);
       break;
-   default:;
+   default: fprintf (stderr, "In computeRoutingJsonFromForm, unknown type: %d\n", req.type);
    }
    return resp;
 }

@@ -118,7 +118,7 @@ static bool readPolarCsv (const char *fileName, PolMat *mat, char *errMessage, s
    strlcpy (mat->jsonHeader, "null", sizeof mat->jsonHeader); // important !
    
    if ((f = fopen (fileName, "r")) == NULL) {
-      snprintf (errMessage, maxLen,  "Error in readPolarCsv: cannot open: %s\n", fileName);
+      snprintf (errMessage, maxLen,  "Error in readPolarCsv: cannot open: %s", fileName);
       return false;
    }
    while (fgets (pLine, MAX_SIZE_TEXT, f) != NULL) {
@@ -139,14 +139,14 @@ static bool readPolarCsv (const char *fileName, PolMat *mat, char *errMessage, s
       }
       if (c <= 2) continue; // line is not validated if not at least 2 columns
       if (c >= MAX_N_POL_MAT_COLS) {
-         snprintf (errMessage, maxLen, "Error in readPolarCsv: max number of colums: %d\n", MAX_N_POL_MAT_COLS);
+         snprintf (errMessage, maxLen, "Error in readPolarCsv: max number of colums: %d", MAX_N_POL_MAT_COLS);
          fclose (f);
          return false;
       }
       mat->nLine += 1;
       
       if (mat->nLine >= MAX_N_POL_MAT_LINES) {
-         snprintf (errMessage, maxLen, "Error in readPolarCsv: max number of line: %d\n", MAX_N_POL_MAT_LINES);
+         snprintf (errMessage, maxLen, "Error in readPolarCsv: max number of line: %d", MAX_N_POL_MAT_LINES);
          fclose (f);
          return false;
       }
@@ -415,12 +415,12 @@ char *polToStrJson (bool report, const char *fileName, const char *objName, char
 
    if (!readPolar (polarName, &mat, &sailMat, errMessage, sizeof (errMessage))) {
       fprintf (stderr, "%s", errMessage);
-      snprintf (out, maxLen, "{}\n");
+      snprintf (out, maxLen, "{\"_Error\": \"%s\"}\n", errMessage);
       return out;
    }
    if ((mat.nLine < 2) || (mat.nCol < 2)) {
       fprintf (stderr, "In polToStrJson Error: no value in: %s\n", polarName);
-      snprintf (out, maxLen, "{}\n");
+      snprintf (out, maxLen, "{\"_Error\": \"No value in polar\"}\n");
       return out;
    }
    
@@ -432,11 +432,14 @@ char *polToStrJson (bool report, const char *fileName, const char *objName, char
    for (int i = 0; i < mat.nLine ; i++) {
       g_strlcat (out, "    [", maxLen);
       for (int j = 0; j < mat.nCol - 1; j++) {
-         snprintf (str, sizeof str, "%.4f, ", mat.t [i][j]);
-         g_strlcat (out, str, maxLen);
+         printFloat(str, sizeof str, mat.t[i][j]);
+         g_strlcat(out, str, maxLen);
+         g_strlcat(out, ", ", maxLen);
       }
-      snprintf (str, sizeof (str), "%.4f]%s\n", mat.t [i][mat.nCol -1], (i < mat.nLine - 1) ? "," : "");
-      g_strlcat (out, str, maxLen);
+      printFloat(str, sizeof str, mat.t[i][mat.nCol - 1]);
+      g_strlcat(out, str, maxLen);
+      snprintf(str, sizeof str, "]%s\n", (i < mat.nLine - 1) ? "," : "");
+      g_strlcat(out, str, maxLen);
    }
    g_strlcat (out, "  ]", maxLen);
 

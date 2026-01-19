@@ -15,10 +15,6 @@ extern void handleFeedbackRequest (const char *fileName, const char *date, const
 extern ClientRequest clientReq;
 extern const char *filter[]; 
 
-enum {REQ_KILL = -1793, REQ_TEST = 0, REQ_ROUTING = 1, REQ_COORD = 2, REQ_FORBID = 3, REQ_POLAR = 4, 
-      REQ_GRIB = 5, REQ_DIR = 6, REQ_PAR_RAW = 7, REQ_PAR_JSON = 8, 
-      REQ_INIT = 9, REQ_FEEDBACK = 10, REQ_DUMP_FILE = 11, REQ_NEAREST_PORT = 12, 
-      REQ_MARKS = 13, REQ_CHECK_GRIB = 14, REQ_GPX_ROUTE = 15, REQ_GRIB_DUMP = 16}; // type of request
 
 
 
