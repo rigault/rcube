@@ -6,10 +6,10 @@
    <link rel="icon" type="image/ico" href="favicon.ico">
 
    <!-- CSS appli -->
-   <link rel="stylesheet" type="text/css" href="r3.css">
-   <link rel="stylesheet" type="text/css" href="r3par.css">
-   <link rel="stylesheet" type="text/css" href="stamina.css">
-   <link rel="stylesheet" type="text/css" href="launch.css">
+   <link rel="stylesheet" type="text/css" href="css/r3.css">
+   <link rel="stylesheet" type="text/css" href="css/r3par.css">
+   <link rel="stylesheet" type="text/css" href="css/stamina.css">
+   <link rel="stylesheet" type="text/css" href="css/launch.css">
 
    <!-- Font Awesome local -->
    <link rel="stylesheet" href="lib/fontawesome/all.min.css">
@@ -22,29 +22,32 @@
    <script src="lib/swal/sweetalert2.all.min.js"></script>
    <script src="lib/plotly/plotly-2.11.0.min.js"></script>
 
-   <script src="init.js"></script>
-   <script src="filedump.js"></script>
-   <script src="r3grib.js"></script>
-   <script src="r3polar.js"></script>
-   <script src="r3waypoints.js"></script>
-   <script src="r3displaycomp.js"></script>
-   <script src="r3besttime.js"></script>
-   <script src="r3routereport.js"></script>
-   <script src="util.js"></script>
-   <script src="r3util.js"></script>
-   <script src="r3param.js"></script>
-   <script src="r3par.js"></script>
-   <script src="feedback.js"></script>
-   <script src="stamina.js"></script>
-   <script src="launch.js"></script>
-   <script src="aisgps.js"></script>
-   <script src="ports.js"></script>
-   <script src="polygons.js"></script>
-   <script src="marks.js"></script>
-   <script src="meters.js"></script>
-   <script src="trace.js"></script>
-   <script src="wind.js"></script>
-   <script src="r3.js?v=0.2"></script>
+   <script src="js/init.js"></script>
+   <script src="js/filedump.js"></script>
+   <script src="js/r3grib.js"></script>
+   <script src="js/r3polar.js"></script>
+   <script src="js/r3waypoints.js"></script>
+   <script src="js/r3displaycomp.js"></script>
+   <script src="js/r3besttime.js"></script>
+   <script src="js/r3routereport.js"></script>
+   <script src="js/util.js"></script>
+   <script src="js/r3util.js"></script>
+   <script src="js/r3param.js"></script>
+   <script src="js/r3par.js"></script>
+   <script src="js/feedback.js"></script>
+   <script src="js/stamina.js"></script>
+   <script src="js/launch.js"></script>
+   <script src="js/aisgps.js"></script>
+   <script src="js/ports.js"></script>  
+   <script src="js/ports4tide.js"></script>   
+   <script src="js/showports.js"></script>
+   <script src="js/polygons.js"></script>
+   <script src="js/marks.js"></script>
+   <script src="js/meters.js"></script>
+   <script src="js/trace.js"></script>
+   <script src="js/wind.js"></script>
+   <script src="js/r3.js?v=0.2"></script>   
+   <script src="js/twa.js"></script>
 </head>
 <body>
 <div class="container">
@@ -72,16 +75,17 @@
          <button class="menu">Route</button>
          <div class="dropdown-content">
             <button class="menu-link" onclick="launchRouting ();">Launch</button>
-            <button class="menu-link" onclick="showRouteReport (route);">Route Report</button>
-            <button class="menu-link" onclick="dumpRoute (route);">Route Dump</button>
+            <button class="menu-link" onclick="launchRouteReport ();">Route Report</button>
             <button class="menu-link" onclick="dispBestTimeHistogram (bestTimeResult,initialStartTime,bestStartTime,routeParam.timeInterval);">Best Time Report </button>
             <button class="menu-link" onclick="dispAllCompetitors (compResult);">Benchmark Report</button>
+            <button class="menu-link" onclick="launchTwaRouting ();">TWA Route</button>         
          </div>
       </div>
       <div class="dropdown">
          <button class="menu">Tech</button>
          <div class="dropdown-content">
-            <button class="menu-link" onclick="displayWayPoints(competitors, myWayPoints);">Waypoints</button>
+            <button class="menu-link" onclick="manageWaypoints();">Manage Waypoints</button>            
+            <button class="menu-link" onclick="displayWaypoints(competitors, myWayPoints);">Show Waypoints</button>
             <button class="menu-link" onclick="changeParam (routeParam);">Change</button>
             <button class="menu-link" onclick="manageCompetitors (competitors);">Manage Competitors</button>
             <button class="menu-link" onclick="showMarks(marks);">VR Marks show</button>
@@ -126,7 +130,8 @@
             <button class="menu-link" onclick="replay ();">Replay</button>
             <button class="menu-link" onclick="showTrace(map, myTrace);">Trace</button>
             <button class="menu-link" onclick="initServer();">ReInit</button>
-            <button class="menu-link" onclick="dumpPorts();">dump Ports</button>
+            <button class="menu-link" onclick="dumpPorts(ports);">dump Ports</button>
+            <a href="test.html" target="_blank">API Test</a>
             <a href="doc/clihelp.md" target="_blank">CLI Help</a>
             <a href="doc/README.md" target="_blank">README</a>
             <a href="doc/r3ServerTechDoc.html" target="_blank">Server side Tech Doc</a>
@@ -202,6 +207,32 @@
 </div>
 
 <script>
+   function launchRouteReport () {
+      if (route === null) {
+         Swal.fire ("No route", "", "warning");
+         return;
+      }
+      if (routeParam.iBoat !== 0) {
+         showRouteReport (route[competitors[Math.max(routeParam.iBoat - 1, 0)].name], DMSType);
+      }
+      else {
+        const inputOptions = {};
+        competitors.forEach((c, i) => {inputOptions[i] = c.name;});
+        Swal.fire({
+          title: "Choose competitor",
+          showCancelButton: true,
+          input: 'select',
+          inputOptions: inputOptions,
+          inputPlaceholder: 'Select a competitor',
+        }).then((result) => {
+          if (result.isConfirmed) {
+            const i = parseInt(result.value, 10);   // competitor index
+            console.log("Competitor", competitors[i].name);
+            showRouteReport(route[competitors[i].name], DMSType);
+          }
+        });
+      }
+   }
    document.addEventListener('DOMContentLoaded', async () => {
       try {
          if (clearAppState) localStorage.clear(); else loadAppState ();
@@ -242,7 +273,7 @@
    }
 
    function openTide(what, lat, lon) {
-      let {idPort, namePort} = findNearestPort (lat, lon);
+      let {idPort, namePort} = findNearestPort (lat, lon, ports4tide);
       const shomUrl = (what === 0) ? `https://maree.shom.fr/harbor/${namePort}`: `http://maree.info/${idPort}`;
       window.open(shomUrl, '_blank');
    }

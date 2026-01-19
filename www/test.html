@@ -1,0 +1,379 @@
+
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Rcube</title>
+
+  <style>
+    :root{
+      --bg: #0b0b0b;
+      --fg: #e6e6e6;
+      --btn-bg: #111;
+      --btn-fg: #d0d0d0;
+      --route-bg: #e60000;
+      --route-fg: #fff;
+      --gap: 8px;
+    }
+
+    /* iOS: évite l’auto-zoom / auto text resize bizarre */
+    html { -webkit-text-size-adjust: 100%; }
+
+    body{
+      margin: 0;
+      font-family: Verdana, Arial, sans-serif;
+      font-size: 14px;          /* lisible sur mobile */
+      background: var(--bg);
+      color: var(--fg);
+      padding:
+        env(safe-area-inset-top)
+        env(safe-area-inset-right)
+        env(safe-area-inset-bottom)
+        env(safe-area-inset-left);
+    }
+
+    header{
+      position: sticky;
+      top: 0;
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(8px);
+      padding: 10px;
+      border-bottom: 1px solid #222;
+      z-index: 10;
+    }
+
+    .toolbar{
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--gap);
+      align-items: center;
+    }
+
+    button{
+      appearance: none;
+      -webkit-appearance: none;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 10px 12px;       /* zone tactile confortable */
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+      touch-action: manipulation; /* meilleur click mobile */
+      background: var(--btn-bg);
+      color: var(--btn-fg);
+    }
+
+    button:active{
+      transform: translateY(1px);
+    }
+
+    .btn{
+      background: var(--btn-bg);
+      color: var(--btn-fg);
+    }
+
+    .routeBtn{
+      background: var(--route-bg);
+      color: var(--route-fg);
+      border-color: #7a0000;
+      font-weight: 700;
+    }
+    #main {
+      padding: 12px;
+      max-width: 100%;
+    }
+    #main pre {
+      margin: 0;
+      padding: 12px;
+      border: 1px solid #222;
+      border-radius: 12px;
+      background: #0f0f0f;
+      color: #eaeaea;
+    
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      line-height: 1.35;
+      overflow-x: auto;              /* scroll horizontal si nécessaire */
+      overflow-y: hidden;    -webkit-overflow-scrolling: touch; /* inertie iOS */
+      white-space: pre;              /* garde le format */
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+    }
+    
+    /* optionnel: si tu veux éviter le scroll horizontal et préférer couper les lignes */
+    #main pre.wrap{
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .cmdbar{
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+    }
+
+    #cmdInput{
+      flex: 1;
+      min-width: 0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #333;
+      background: #0f0f0f;
+      color: #eaeaea;
+      font-size: 14px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+    
+    footer{
+      padding: 12px;
+      border-top: 1px solid #222;
+      color: #aaa;
+    }
+   .loading{
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(6px);
+      z-index: 9999;
+
+      /* évite le scroll derrière (iOS) */
+      touch-action: none;
+  }
+
+  .loading.hidden{ display: none; }
+
+  .spinner{
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 4px solid rgba(255,255,255,0.25);
+    border-top-color: rgba(255,255,255,0.95);
+    animation: spin 0.9s linear infinite;
+  }
+
+  @keyframes spin{
+    to { transform: rotate(360deg); }
+  }
+    
+  .loadingText{
+    font-family: Verdana, Arial, sans-serif;
+    font-size: 14px;
+    color: #fff;
+  }
+  .rawToggle{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #ccc;
+    user-select: none;
+  }
+  .rawToggle input{
+    width: 18px;
+    height: 18px;
+  }
+  #urlInput {
+    min-width: 300px;   /* ou 20rem, ou 50vw */
+  }
+  #cmdInput {
+    width: 100%;
+    resize: vertical;        /* L'utilisateur peut agrandir */
+    overflow-y: auto;        /* Scroll vertical */
+    font-family: monospace;  /* Très utile pour URLs & commandes */
+    font-size: 14px;
+    line-height: 1.4;
+    padding: 6px;
+  }
+  </style>
+</head>
+
+<body>
+  <header>
+    <input id="urlInput" type="text"> 
+    <div class="toolbar">
+      <button class="btn" onclick="test('type=0')">0: test</button>
+      <button class="btn" onclick="test('type=2&boat=bidon,41.24,-16.0')">2: pos</button>
+      <button class="btn" onclick="test('type=3')">3: forbid</button>
+      <button class="btn" onclick="test('type=4&polar=pol/first260.pol')">4: polar</button>   
+      <button class="btn" onclick="test('type=4&polar=wavepol/polwave.csv')">4bis: wave polar</button>
+      <button class="btn" onclick="test('type=5&model=GFS')">5: meta Grib</button>
+      <button class="btn" onclick="test('type=6&dir=grib')">6: dir Grib</button>    
+      <button class="btn" onclick="test('type=6&dir=pol')">6bis: dir pol</button>
+      <button class="btn" onclick="test('type=7&model=yaml', true)">7: par Dump</button>
+      <button class="btn" onclick="test('type=8')">8: Json Param</button>      
+      <button class="btn" onclick="test('type=9')">9: Reinit</button>
+      <button class="btn" onclick="test('type=10&feedback=This_is_a_test')">10: Feedack</button>
+      <button class="btn" onclick="test('type=11&file=r3server_8080.log', true)">11: File Dump</button>
+      <button class="btn" onclick="test('type=12&waypoints=47.5,-2.5')">12: Ports</button>
+      <button class="btn" onclick="test('type=13')">13: Marks</button>
+      <button class="btn" onclick="test('type=14&grib=grib/reference.grb2&currentGrib=currentgrib/referenceCurrent.grb2', true)">14: Consistency</button>
+      <button class="btn" onclick="test('type=15', true)">15: GPX Route</button>      
+      <button class="btn" onclick="test('type=17&boat=bidon,47,-3&twa=90&nSteps=10&model=GFS')">17: TWA Route</button>
+    </div>
+    <div class="toolbar">
+      <button class="routeBtn"
+        onclick="test('type=1&boat=bidon,47,-2.5&waypoints=47,-4&model=GFS')">
+        Route Now
+      </button>
+      <button class="routeBtn"
+        onclick="test('type=1&boat=pistache,28.82,-14.20;&waypoints=16.9,-61.74&timeStep=1800&polar=pol/class40-2021.json&wavePolar=wavepol/polwave.csv&forbid=true&isoc=true&isodesc=false&withWaves=false&withCurrent=false&xWind=1&maxWind=100&penalty0=300&penalty1=300&penalty2=300&motorSpeed=1&threshold=1&dayEfficiency=1&nightEfficiency=1&initialAmure=0&staminaVR=100&cogStep=2&cogRange=90&jFactor=40&kFactor=40&nSectors=720&model=GFS&constWindTws=0&constWindTwd=0&constWave=0&constCurrentS=0&constCurrentD=0')">
+        Route ++
+      </button>
+
+    </div>
+    <div class="cmdbar">
+      <textarea id="cmdInput"
+          rows="3"
+          placeholder="API URL or command..."></textarea>
+      <label class="rawToggle">
+        <input type="checkbox" id="rawChk">
+        Raw
+      </label>
+      <button class="routeBtn" onclick="test(cmdInput.value, gloRaw)">Send</button>
+    </header>
+
+    <div id="loading" class="loading hidden" aria-hidden="true">
+      <div class="spinner" role="status" aria-label="Loading"></div>
+      <div class="loadingText">Computing…</div>
+    </div>
+
+    <div id="main"></div>
+    <footer class="footer"></footer>
+<script>
+
+const apiUrlLoc = "http://localhost:8080";
+const apiUrlServ = `https://rcube.ddns.net/post-api/`;
+let gloRaw = false;
+let apiUrl = (window.location.hostname === "rcube.ddns.net") ? apiUrlServ : apiUrlLoc;
+const urlInp = document.getElementById("urlInput");
+urlInp.value = apiUrl;
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  const chk = document.getElementById("rawChk");
+  chk.checked = gloRaw;
+  chk.addEventListener("change", () => {
+    gloRaw = chk.checked;
+    console.log("Raw mode:", gloRaw);
+  });
+});
+
+urlInp.addEventListener("input", () => {
+    apiUrl = urlInp.value;
+});
+
+
+function test(formData, raw = false) {
+  const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+  console.log("Request sent:", formData);
+  gloRaw = raw;
+  const chk = document.getElementById("rawChk");
+  chk.checked = gloRaw;
+  showLoading("Computing…");
+  fetch(apiUrl, {
+    method: "POST",
+    headers,
+    body: formData,
+    cache: "no-store"
+  })
+  .then(response => {
+    if (!response.ok) {
+      throw new Error("HTTP " + response.status);
+    }
+    return raw ? response.text() : response.json();
+  })
+  .then(data => {
+    const elmt = document.getElementById("main");
+    elmt.textContent = "";
+
+    const pre = document.createElement("pre");
+
+    if (raw) {
+      // Affichage texte brut
+      pre.textContent = data;
+    } else {
+      // Affichage JSON formaté
+      const txt = stringifyCompactArrays(data, 2);
+      console.log(txt);
+      pre.textContent = txt;
+    }
+
+    elmt.appendChild(pre);
+
+    // synchronise le champ commande
+    const inp = document.getElementById("cmdInput");
+    if (inp) inp.value = formData;
+  })
+  .catch(error => {
+    console.error("Error test:", error);
+    alert("Erreur: Impossible to access server");
+  })
+  .finally(() => {
+    hideLoading();
+  });
+}
+
+
+function stringifyCompactArrays(obj, indent = 2) {
+  function isScalar(v) {
+    return v === null || ["string", "number", "boolean"].includes(typeof v);
+  }
+
+  function isLeafArray(arr) {
+    return Array.isArray(arr) && arr.every(isScalar);
+  }
+
+  function render(value, level) {
+    const pad = " ".repeat(level * indent);
+
+    if (Array.isArray(value)) {
+      if (isLeafArray(value)) {
+        // array on one line
+        return "[" + value.map(v => JSON.stringify(v)).join(", ") + "]";
+      }
+
+      const items = value.map(v =>
+        pad + " ".repeat(indent) + render(v, level + 1)
+      );
+      return "[\n" + items.join(",\n") + "\n" + pad + "]";
+    }
+
+    if (value && typeof value === "object") {
+       const entries = Object.entries(value).map(
+         ([k, v]) =>
+            pad + " ".repeat(indent) +
+              JSON.stringify(k) + ": " +
+              render(v, level + 1)
+         );
+         return "{\n" + entries.join(",\n") + "\n" + pad + "}";
+    }
+
+    return JSON.stringify(value);
+  }
+
+  return render(obj, 0);
+}
+
+function showLoading(msg = "Computing…") {
+  const el = document.getElementById("loading");
+  el.querySelector(".loadingText").textContent = msg;
+  el.classList.remove("hidden");
+  document.body.style.overflow = "hidden"; // bloque scroll derrière
+}
+
+function hideLoading() {
+  const el = document.getElementById("loading");
+  el.classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+</script>
+</body>
+</html>

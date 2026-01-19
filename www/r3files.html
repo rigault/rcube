@@ -6,16 +6,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>RCube</title>
 <link rel="icon" type="image/ico" href="favicon.ico">
-<link rel="stylesheet" type="text/css" href="r3files.css">
-<link rel="stylesheet" type="text/css" href="stamina.css">
+<link rel="stylesheet" type="text/css" href="css/r3files.css">
+<link rel="stylesheet" type="text/css" href="css/stamina.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdn.plot.ly/plotly-2.11.0.min.js"></script>
-<script src="r3polar.js"></script>
-<script src="r3grib.js"></script>
-<script src="r3util.js"></script>   <!-- pour helpInfo () -->
-<script src="stamina.js"></script>  <!-- pour stamina () -->
-<script src="feedback.js"></script> <!-- pour feedback () -->
+<script src="js/r3polar.js"></script>
+<script src="js/r3grib.js"></script>
+<script src="js/r3util.js"></script>   <!-- pour helpInfo () -->
+<script src="js/stamina.js"></script>  <!-- pour stamina () -->
+<script src="js/feedback.js"></script> <!-- pour feedback () -->
 </head>
 
 <body> 
@@ -74,7 +74,13 @@ const getTextColorFromLuminance = (luminance) => luminance < 128 ? 'white' : 'bl
 const userId = "admin";    // should be "" to enable authent
 const password = "admin";  // idem
 const updateStatusBar = () => "";
+const isMobile = () => true;
+
 let gribLimits = {};
+
+function view (name) {
+   Swal.fire ("View", name, "info");
+}
 
 /**
  * choose a grib file then launch gribInfo 
@@ -108,9 +114,12 @@ function getDir (dir) {
                       : (dir === 'pol') ? `polarInfo (0, '${name}')`
                       : (dir === 'wavepol') ? `polarInfo (1, '${name}')`
                       : `Swal.fire ('Error', 'dir choice', 'error')`;
+         let viewFn =  `view (${name}`;
+         
          return `
          <tr class="row">
             <td><button class='empty-btn' title="Info" onclick="${callFn};"><i class='fas fa-anchor' style='color:navy;font-size:40px; border:none; background:white';></i></button>
+            <td><button class='empty-btn' title="View" onclick="${viewFn};"><i class='<i class="fa-solid fa-download"></i>' style='color:green;font-size:40px; border:none; background:white';></i></button>
             <a href= "https://rcube.ddns.net/files/${dir}/${name}" download>${name}</a></td>
             <!--<td style="text-align:right">${size}</td>-->
             <!--<td>${ts}</td>-->
