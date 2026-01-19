@@ -78,19 +78,6 @@ function formatPolarName(polarPath, maxLen = 15) {
 }
 
 /**
- * Returns DMS type (integer) based on string stored in coordFormat
- * @returns {number}
- */
-function getDMSType () {
-  const fmt = (appState && appState.coordFormat) ? appState.coordFormat : "DMS";
-  return (fmt == "DMS") ? DMS_DISPLAY.DMS
-         : (fmt == "DM") ? DMS_DISPLAY.DM 
-         : (fmt == "DD") ? DMS_DISPLAY.DD 
-         : (fmt == "BASIC") ? DMS_DISPLAY.BASIC 
-         : DMS_DISPLAY.DMS; 
-}
-
-/**
  * Convert epoch time (seconds) to a local date string.
  * @param {number} epoch - Epoch time in seconds.
  * @returns {string} Formatted local datetime.
