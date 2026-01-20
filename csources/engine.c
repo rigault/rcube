@@ -408,16 +408,6 @@ void freeHistoryRoute (void) {
    historyRoute.n = 0;
 }
 
-/*! return the total duration of the route, taking into acount last steps duration */
-static double calcDuration (SailRoute *route) {
-   double duration = (route->n - route->nWayPoints - 1) * par.tStep;
-   for (int i = 0; i < route->nWayPoints; i += 1) {
-      duration += route->lastStepWpDuration [i];
-   }
-   duration += route->lastStepDuration;
-   return duration;
-}
-
 /*! add additionnal information to the route */
 static void statRoute (SailRoute *route) {
    bool manoeuvre;
@@ -448,10 +438,10 @@ static void statRoute (SailRoute *route) {
       manoeuvre = false;
       p.lat = route->t [i-1].lat;
       p.lon = route->t [i-1].lon;
-      if ((i > 1) && (route->t [i-1].toIndexWp >= 0) && (route->t [i-1].toIndexWp < route->nWayPoints) 
-         && (route->t [i-1].toIndexWp != route->t [i].toIndexWp)) {
 
-        fprintf (stdout, "i = %d, WayPoint no: %d\n", i, route-> t[i-1].toIndexWp);
+      if ((route->t [i-1].toIndexWp >= 0) && (route->t [i-1].toIndexWp < route->nWayPoints) 
+         && (route->t [i-1].toIndexWp != route->t [i].toIndexWp)) {
+         fprintf (stdout, "i = %d, WayPoint no: %d\n", i, route-> t[i-1].toIndexWp);
          deltaTime = route->lastStepWpDuration [route-> t[i-1].toIndexWp];
       }
       else if ((i == route->n - 1) && route->destinationReached)
@@ -556,7 +546,7 @@ static void statRoute (SailRoute *route) {
    route->avrTws /= route->n;
    route->avrGust /= route->n;
    route->avrWave /= route->n;
-   route->duration = calcDuration (route);
+   route->duration = route->t [route->n-1].time;
    route->avrSog = route->totDist / route->duration;
 }
 
