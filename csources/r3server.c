@@ -45,8 +45,7 @@
 char *bigBuffer = NULL;
 
 // level of authorization
-//const int typeLevel [16] = {0, 1, 0, 0, 0, 0, 0, 0, 0, ADMIN_LEVEL, 0, 0, 0, 0, 0, 0};        
-const int typeLevel [17] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; // everybody access to all       
+const int typeLevel [MAX_TYPE] = {0, 1, 0, 0, 0, 0, 0, 0, 0, ADMIN_LEVEL, 0, 0, 0, 0, 0, 0, 0};        
  
 char parameterFileName [MAX_SIZE_FILE_NAME];
 
@@ -70,7 +69,7 @@ static bool getRealIPAddress (const char* headers, char* clientAddress, size_t b
       if (headerEnd) {
          size_t ipLength = headerEnd - headerStart;
          if (ipLength < bufferSize) {
-            g_strlcpy (clientAddress, headerStart, ipLength + 1);
+            strlcpy (clientAddress, headerStart, ipLength + 1);
             g_strstrip (clientAddress); 
             return true;
          } else {
@@ -127,11 +126,14 @@ static bool allowedLevel (ClientRequest *clientReq) {
 static void logRequest (const char* fileName, const char *date, int serverPort, const char *remote_addr, \
    char *dataReq, const char *userAgent, ClientRequest *client, double duration) {
 
-   char newUserAgent [MAX_SIZE_LINE];
-   g_strlcpy (newUserAgent, userAgent, sizeof newUserAgent);
-   g_strdelimit (newUserAgent, ";", ':'); // to avoid ";" the CSV delimiter inside field
-   char *startAgent = strchr (newUserAgent, '('); // we delete what is before ( if exist
-   if (startAgent == NULL) startAgent = newUserAgent;
+   char *startAgent = NULL;
+   char newUserAgent [MAX_SIZE_LINE] = "";
+   if (userAgent) {
+      strlcpy (newUserAgent, userAgent, sizeof newUserAgent);
+      g_strdelimit (newUserAgent, ";", ':'); // to avoid ";" the CSV delimiter inside field
+      startAgent = strchr (newUserAgent, '('); // we delete what is before ( if exist
+      if (startAgent == NULL) startAgent = newUserAgent;
+   }
 
    FILE *logFile = fopen (fileName, "a");
    if (logFile == NULL) {
@@ -302,7 +304,7 @@ void sendBinaryResponse(int sock, const void *data, size_t len, const char *shor
 
 /*! launch action and returns outBuffer after execution */
 static bool launchAction (int serverPort, int sock, ClientRequest *clientReq, 
-             const char *date, const char *clientIPAddress, const char *userAgent, char *outBuffer, size_t maxLen) {
+            const char *date, const char *clientIPAddress, const char *userAgent, char *outBuffer, size_t maxLen) {
    char tempFileName [MAX_SIZE_FILE_NAME];
    char checkMessage [MAX_SIZE_TEXT];
    char errMessage [MAX_SIZE_TEXT] = "";
@@ -316,7 +318,7 @@ static bool launchAction (int serverPort, int sock, ClientRequest *clientReq,
    switch (clientReq->type) {
    case REQ_KILL:
       printf ("Killed on port: %d, At: %s, By: %s\n", serverPort, date, clientIPAddress);
-      snprintf (outBuffer, maxLen, "{\n  \"killed_on_port\": %d,\n  \"date\": \"%s\",\n  \"by\": \"%s\"\n}\n", serverPort, date, clientIPAddress);
+      snprintf (outBuffer, maxLen, "{\n \"killed_on_port\": %d,\n  \"date\": \"%s\",\n  \"by\": \"%s\"\n}\n", serverPort, date, clientIPAddress);
       break;
    case REQ_TEST:
       testToJson (serverPort, clientIPAddress, userAgent, clientReq->level, outBuffer, maxLen);
@@ -474,16 +476,17 @@ static bool launchAction (int serverPort, int sock, ClientRequest *clientReq,
       free(buf);
       resp = false;
       break;
-   case REQ_TWA:
+   case REQ_ANGLE:
       if (checkParamAndUpdate (clientReq, checkMessage, sizeof checkMessage)) {       
-          routeAtTwa (par.pOr.lat, par.pOr.lon, clientReq->twa, clientReq->epochStart, 
-              par.startTimeInHours, par.tStep, clientReq->nStep, outBuffer, maxLen);
+          routeAtAngle (clientReq, outBuffer, maxLen);
       }
       else {
          snprintf (outBuffer, maxLen, "{\"_Error\": \"%s\"}\n", checkMessage);
       }
       break;
-   default: fprintf (stderr, "In launchAction, unknown type: %d\n", clientReq->type);
+   default: 
+      fprintf (stderr, "In launchAction, unknown type: %d\n", clientReq->type);
+      snprintf (outBuffer, maxLen, "{ \"_Error\": unknown type: %d\" }\n", clientReq->type);
    }
    return resp;
 }
@@ -518,13 +521,13 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
    }
    buffer [bytes_read] = '\0'; // terminate string
    // printf ("Client Request: %s\n", buffer);
-   g_strlcpy (saveBuffer, buffer, sizeof buffer);
+   strlcpy (saveBuffer, buffer, sizeof buffer);
 
    if (! getRealIPAddress (buffer, clientIPAddress, sizeof clientIPAddress)) { // try if proxy 
       // Get client IP address if IP address not found with proxy
       char remoteAddr [INET_ADDRSTRLEN];
       inet_ntop (AF_INET, &(client_addr->sin_addr), remoteAddr, INET_ADDRSTRLEN); // not used
-      g_strlcpy (clientIPAddress, remoteAddr, INET_ADDRSTRLEN);
+      strlcpy (clientIPAddress, remoteAddr, INET_ADDRSTRLEN);
    }
 
    // Extract HTTP first line request
@@ -545,11 +548,9 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
         if (end_path) {
       *end_path = '\0'; // Terminate string
       }
-
       if (strcmp(requested_path, "/") == 0) {
          requested_path = "/index.html"; // Default page
       }
-
       serveStaticFile (clientFd, requested_path);
       return true; // stop
    }
@@ -559,7 +560,6 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
    if (postData == NULL) {
       return false;
    }
-
    char* userAgent = extractUserAgent (saveBuffer);
    postData += 4; // Ignore HTTP request separators
    printf ("🟠 POST Request:\n%s\n", postData);
@@ -571,23 +571,24 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
    if (! decodeFormReq (postData, &clientReq)) {
       const char *errorResponse = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nError 400\n";
       fprintf (stderr, "In handleClient, Error: %s", errorResponse);
-      send (clientFd, errorResponse, strlen(errorResponse), 0);
-      return false;
+      strlcpy (bigBuffer, "{ \"_Error\": \"Incorrect Request\" }\n", BIG_BUFFER_SIZE);
    }
-   clientReq.level = extractLevel (saveBuffer);
-   printf ("user level: %d\n", clientReq.level);
+   else {
+      clientReq.level = extractLevel (saveBuffer);
+      printf ("user level: %d\n", clientReq.level);
 
-   const char *corsHeaders = "Access-Control-Allow-Origin: *\r\n"
+      if (! allowedLevel (&clientReq)) {
+        strlcpy (bigBuffer, "{\"_Error\": \"Too low level of authorization\"}\n", BIG_BUFFER_SIZE);
+      }
+      else {
+        resp = launchAction (serverPort, clientFd, &clientReq, date, clientIPAddress, userAgent, bigBuffer, BIG_BUFFER_SIZE);
+      }
+   }
+   if (resp) {
+      const char *corsHeaders = "Access-Control-Allow-Origin: *\r\n"
               "Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n"
               "Access-Control-Allow-Headers: Content-Type\r\n";
 
-   if (! allowedLevel (&clientReq)) {
-      g_strlcpy (bigBuffer, "{\"_Error\": \"Too low level of authorization\"}\n", BIG_BUFFER_SIZE);
-   }
-   else {
-      resp = launchAction (serverPort, clientFd, &clientReq, date, clientIPAddress, userAgent, bigBuffer, BIG_BUFFER_SIZE);
-   }
-   if (resp) {
       char header [512];
       const size_t bigBufferLen = strlen (bigBuffer);
       const int headerLen = snprintf (header, sizeof header,
@@ -606,7 +607,6 @@ static bool handleClient (int serverPort, int clientFd, struct sockaddr_in *clie
          if (bigBufferLen >= MAX_PRINT) printf ("...\nTruncated to: %d characters.\n", MAX_PRINT);
       }
    }
-
    const double duration = monotonic () - start; 
    logRequest (par.logFileName, date, serverPort, clientIPAddress, postData, userAgent, &clientReq, duration);
    if (userAgent) free (userAgent);
@@ -630,18 +630,13 @@ int main (int argc, char *argv[]) {
       return EXIT_FAILURE;
    }
 
-   if (setlocale (LC_ALL, "C") == NULL) {                // very important for printf decimal numbers
-      fprintf (stderr, "In main, Error: setlocale failed");
-      return EXIT_FAILURE;
-   }
-
    if (argc <= 1 || argc > 3) {
       fprintf (stderr, "Synopsys: %s %s\n", argv [0], SYNOPSYS);
       return EXIT_FAILURE;
    }
    
-   if (argc > 2) g_strlcpy (parameterFileName, argv [2], sizeof parameterFileName);
-   else g_strlcpy (parameterFileName, PARAMETERS_FILE, sizeof parameterFileName);
+   if (argc > 2) strlcpy (parameterFileName, argv [2], sizeof parameterFileName);
+   else strlcpy (parameterFileName, PARAMETERS_FILE, sizeof parameterFileName);
 
    if (! initContext (parameterFileName, "")) return EXIT_FAILURE;
 

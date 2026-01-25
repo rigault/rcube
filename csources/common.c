@@ -60,7 +60,10 @@ bool initContext (const char *parameterFileName, const char *pattern) {
    char str [MAX_SIZE_LINE];
    char errMessage [MAX_SIZE_TEXT] = "";
    bool readGribRet;
-
+   if (setlocale (LC_ALL, "C") == NULL) {                // very important for printf decimal numbers
+      fprintf (stderr, "In main, Error: setlocale failed");
+      return false;
+   }
    if (! readParam (parameterFileName, false)) {
       fprintf (stderr, "In initContext, Error readParam: %s\n", parameterFileName);
       return false;
@@ -111,7 +114,7 @@ bool initContext (const char *parameterFileName, const char *pattern) {
    route.n = 0;
    route.destinationReached = false;
    if (par.isSeaFileName [0] != '\0')
-      readIsSea (par.isSeaFileName);
+      tIsSea = readIsSea (par.isSeaFileName);
    updateIsSeaWithForbiddenAreas ();
    return true;
 }
@@ -281,10 +284,10 @@ char *listDirToStrJson (char *root, char *dir, bool sortByName, const char *patt
       char *escaped = jsonEscapeStrdup(arr[i].name);
       snprintf (line, sizeof line,"  [\"%s\", %lld, \"%s\"]%s\n",
                 escaped ? escaped : "", (long long)arr[i].size, time_str, (i + 1 < n) ? "," : "");
-      g_strlcat (out, line, maxLen);
+      strlcat (out, line, maxLen);
       free(escaped);  
    }
-   g_strlcat (out, "]\n", maxLen);
+   strlcat (out, "]\n", maxLen);
 
    for (size_t i = 0; i < n; i++) free(arr[i].name);
    free(arr);
@@ -316,7 +319,7 @@ bool decodeFormReq (const char *req, ClientRequest *clientReq) {
       g_strstrip (parts [i]);      
       if (sscanf(parts[i], "type=%d", &clientReq->type) == 1);// type extraction
       else if (g_str_has_prefix (parts[i], "boat=")) {
-         char *boatsPart = parts[i] + strlen ("boat="); // After boats=="
+         char *boatsPart = parts[i] + strlen ("boat="); // After boats="
          if (*boatsPart == '\0') { 
             g_strfreev(parts);
             return false;  // parsing error
@@ -331,7 +334,7 @@ bool decodeFormReq (const char *req, ClientRequest *clientReq) {
             char name [MAX_SIZE_NAME];
             double lat, lon;
             if (sscanf(boatsCoords[i], "%63[^,], %lf, %lf", name, &lat, &lon) == 3) {
-               g_strlcpy (clientReq->boats [clientReq->nBoats].name, name, MAX_SIZE_NAME);
+               strlcpy (clientReq->boats [clientReq->nBoats].name, name, MAX_SIZE_NAME);
                clientReq->boats [clientReq->nBoats].lat = lat;
                clientReq->boats [clientReq->nBoats].lon = lon;
                clientReq->nBoats += 1;
@@ -340,7 +343,7 @@ bool decodeFormReq (const char *req, ClientRequest *clientReq) {
          g_strfreev(boatsCoords);
       }
       else if (g_str_has_prefix (parts[i], "waypoints=")) {
-         char *wpPart = parts[i] + strlen ("waypoints="); // Partie après "waypoints="
+         char *wpPart = parts[i] + strlen ("waypoints="); // After "waypoints="
          if (*wpPart == '\0') {
             g_strfreev(parts);
             return false;  // parsing error
@@ -361,7 +364,30 @@ bool decodeFormReq (const char *req, ClientRequest *clientReq) {
          }
          g_strfreev(wpCoords);
       }
-
+      else if (g_str_has_prefix (parts[i], "cmd=")) {
+         char *cmdPart = parts[i] + strlen ("cmd="); // After cmd="
+         if (*cmdPart == '\0') { 
+            g_strfreev(parts);
+            return false;  // parsing error
+         }
+         // cmd parsing
+         char **cmdCoords = g_strsplit (cmdPart, ";", -1);
+         if (! cmdCoords) {
+            fprintf (stderr, "In decodeFormReq, Error parsing cmd\n");
+            return false;
+         }
+         for (int i = 0; cmdCoords[i] && clientReq->nCmd < MAX_N_CMD; i++) {
+            int fromTwa;
+            double angle, duration;
+            if (sscanf(cmdCoords[i], "%lf, %lf, %d", &angle, &duration, &fromTwa) == 3) {
+               clientReq->cmd [clientReq->nCmd].angle = angle;
+               clientReq->cmd[clientReq->nCmd].duration = duration;               
+               clientReq->cmd[clientReq->nCmd].fromTwa = fromTwa;
+               clientReq->nCmd += 1;
+            }
+         }
+         g_strfreev(cmdCoords);
+      }
       else if (sscanf (parts[i], "timeStep=%d", &clientReq->timeStep) == 1);                    // time step extraction
       else if (sscanf (parts[i], "cogStep=%d",  &clientReq->cogStep) == 1);                     // cog step extraction
       else if (sscanf (parts[i], "cogRange=%d", &clientReq->rangeCog) == 1);                    // range sog  extraction
@@ -381,9 +407,9 @@ bool decodeFormReq (const char *req, ClientRequest *clientReq) {
       else if (sscanf (parts[i], "currentGrib=%255s", clientReq->currentGribName) == 1);        // current grib name may be empty
       else if (sscanf (parts[i], "dir=%255s",   clientReq->dirName) == 1);                      // directory name
       else if (g_str_has_prefix (parts[i], "dir=")) 
-         g_strlcpy (clientReq->dirName, parts [i] + strlen ("dir="), sizeof clientReq->dirName); // defaulr empty works
+         strlcpy (clientReq->dirName, parts [i] + strlen ("dir="), sizeof clientReq->dirName);  // default empty works
       else if (g_str_has_prefix (parts[i], "feedback=")) 
-         g_strlcpy (clientReq->feedback, parts [i] + strlen ("feedback="), sizeof clientReq->feedback);
+         strlcpy (clientReq->feedback, parts [i] + strlen ("feedback="), sizeof clientReq->feedback);
       else if (g_str_has_prefix (parts[i], "onlyUV=true")) clientReq->onlyUV = true;            // Default false
       else if (g_str_has_prefix (parts[i], "onlyUV=false")) clientReq->onlyUV = false;          // Default false
       else if (g_str_has_prefix (parts[i], "isoc=true")) clientReq->isoc = true;                // Default false
@@ -410,12 +436,11 @@ bool decodeFormReq (const char *req, ClientRequest *clientReq) {
       else if (sscanf (parts[i], "constWave=%lf",        &clientReq->constWave) == 1);          // const Waves
       else if (sscanf (parts[i], "constCurrentS=%lf",    &clientReq->constCurrentS) == 1);      // const current speed
       else if (sscanf (parts[i], "constCurrentD=%lf",    &clientReq->constCurrentD) == 1);      // const current direction 
-      else if (sscanf (parts[i], "twa=%lf",              &clientReq->twa) == 1);                // for REQ_TWA     
-      else if (sscanf (parts[i], "nSteps=%d",            &clientReq->nStep) == 1);              // for REQ_TWA
+      else if (sscanf (parts[i], "constCurrentD=%lf",    &clientReq->constCurrentD) == 1);      // const current direction 
       else fprintf (stderr, "In decodeFormReq Unknown value: %s\n", parts [i]);
    }
    g_strfreev (parts);
-   return clientReq->type != -1;  
+   return clientReq->type == REQ_KILL ||  (clientReq->type >= 0 && clientReq->type < MAX_TYPE);  
 }
 
 /*! Generate Json array for polygon */
@@ -446,7 +471,6 @@ void forbidToJson (char *res, size_t maxLen) {
       if (i < par.nForbidZone -1) strlcat (res, ",", maxLen);
       strlcat (res, "\n", maxLen);
    }
-
    strlcat (res, "]\n", maxLen);
 }
 
@@ -465,7 +489,7 @@ bool updateWindGrib (ClientRequest *clientReq, char *checkMessage, size_t maxLen
    printf ("Grib Found: %s\n", strGrib);
    if (strncmp (par.gribFileName, strGrib, strlen (strGrib)) != 0) {
       if (readGribAll (strGrib, &zone, WIND)) {
-         g_strlcpy (par.gribFileName, strGrib, sizeof par.gribFileName);
+         strlcpy (par.gribFileName, strGrib, sizeof par.gribFileName);
          printf ("Grib loaded   : %s\n", strGrib);
       }
       else {
@@ -497,7 +521,7 @@ bool updateCurrentGrib (ClientRequest *clientReq, char *checkMessage, size_t max
    if (strncmp (par.currentGribFileName, strGrib, strlen (strGrib)) != 0) {
       printf ("current readGrib: %s\n", strGrib);
       if (readGribAll (strGrib, &currentZone, CURRENT)) {
-         g_strlcpy (par.currentGribFileName, strGrib, sizeof par.currentGribFileName);
+         strlcpy (par.currentGribFileName, strGrib, sizeof par.currentGribFileName);
          printf ("Current Grib loaded   : %s\n", strGrib);
       }
       else {
@@ -596,7 +620,7 @@ bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, size_t m
       if (strncmp (par.polarFileName, strPolar, strlen (strPolar)) != 0) {
          printf ("read polar: %s\n", strPolar);
          if (readPolar (strPolar, &polMat, &sailPolMat, checkMessage, maxLen)) {
-            g_strlcpy (par.polarFileName, strPolar, sizeof par.polarFileName);
+            strlcpy (par.polarFileName, strPolar, sizeof par.polarFileName);
             printf ("Polar loaded   : %s\n", strPolar);
          }
          else {
@@ -611,7 +635,7 @@ bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, size_t m
       if (strncmp (par.wavePolFileName, strPolar, strlen (strPolar)) != 0) {
          printf ("read wave polar: %s\n", strPolar);
          if (readPolar (strPolar, &wavePolMat, NULL, checkMessage, maxLen)) {
-            g_strlcpy (par.wavePolFileName, strPolar, sizeof par.wavePolFileName);
+            strlcpy (par.wavePolFileName, strPolar, sizeof par.wavePolFileName);
             printf ("Wave Polar loaded : %s\n", strPolar);
          }
          else {
@@ -632,8 +656,7 @@ bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, size_t m
    updateCurrentGrib (clientReq, checkMessage, maxLen);
    if (checkMessage [0] != '\0') return false;
    
-   if (clientReq->epochStart <= 0)
-      clientReq->epochStart = time (NULL); // default value if empty is now
+   if (clientReq->epochStart <= 0) clientReq->epochStart = time (NULL); // default value if empty is now
    const time_t theTime0 = gribDateTimeToEpoch (zone.dataDate [0], zone.dataTime [0]);
    par.startTimeInHours = (clientReq->epochStart - theTime0) / 3600.0;
    printf ("Start Time Epoch: %ld, theTime0: %ld\n", clientReq->epochStart, theTime0);
@@ -655,7 +678,7 @@ bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, size_t m
          free (gribBaseName);
          return false;
       }
-      g_strlcpy (competitors.t [i].name, clientReq -> boats [i].name, MAX_SIZE_NAME);
+      strlcpy (competitors.t [i].name, clientReq -> boats [i].name, MAX_SIZE_NAME);
       printf ("competitor name: %s\n", competitors.t [i].name);
       competitors.t [i].lat = clientReq -> boats [i].lat;
       competitors.t [i].lon = clientReq -> boats [i].lon;
@@ -688,7 +711,6 @@ bool checkParamAndUpdate (ClientRequest *clientReq, char *checkMessage, size_t m
    }
 
    par.tStep = clientReq->timeStep / 3600.0;
-
    par.pOr.lat = clientReq->boats [0].lat;
    par.pOr.lon = clientReq->boats [0].lon;
    par.pOr.amure = clientReq->initialAmure;
@@ -802,7 +824,7 @@ static char *isochronesToStrCatJson (char *res, size_t maxLen) {
    char str [10000];
    int index;
    char *savePt = res + strlen (res);
-   g_strlcat (res, ",\n\"_isoc\": [\n", maxLen);
+   strlcat (res, ",\n\"_isoc\": [\n", maxLen);
    Pp *newIsoc = NULL; // array of points
    if ((newIsoc = malloc (MAX_SIZE_ISOC * sizeof(Pp))) == NULL) {
       fprintf (stderr, "In isochronesToStrJson: error in memory newIsoc allocation\n");
@@ -810,7 +832,7 @@ static char *isochronesToStrCatJson (char *res, size_t maxLen) {
    }
    
    for (int i = 0; i < nIsoc; i += 1) {
-      g_strlcat (res, "  [\n", maxLen);
+      strlcat (res, "  [\n", maxLen);
       index = (isoDesc [i].size <= 1) ?  0 : isoDesc [i].first;
       for (int j = 0; j < isoDesc [i].size; j++) {
          newIsoc [j] = isocArray [i * MAX_SIZE_ISOC + index];
@@ -822,17 +844,17 @@ static char *isochronesToStrCatJson (char *res, size_t maxLen) {
          pt = newIsoc [k];
          snprintf (str, sizeof str, "    [%.6lf, %.6lf, %d, %d, %d]%s\n", 
             pt.lat, pt.lon, pt.id, pt.father, k, (k < max - 1) ? ","  : ""); 
-         g_strlcat (res, str, maxLen);
+         strlcat (res, str, maxLen);
       }
       snprintf (str, sizeof str,  "  ]%s\n", (i < nIsoc -1) ? "," : ""); // no comma for last value 
-      g_strlcat (res, str, maxLen);
+      strlcat (res, str, maxLen);
    }
    if (strlen (res) >= (maxLen - sizeof str - 2)) {// too big
       res = savePt;
       *res = '\0';
       strlcat (res, ",\n\"_Warning_1\": \"No isochrone sent because too big!\"\n", maxLen); // no isochrone if too big !
    }
-   else g_strlcat (res, "]", maxLen); 
+   else strlcat (res, "]", maxLen); 
    free (newIsoc);
    return res;
 }
@@ -841,7 +863,7 @@ static char *isochronesToStrCatJson (char *res, size_t maxLen) {
 static char *isoDescToStrCatJson (char *res, size_t maxLen) {
    char str [10000];
    char *savePt = res + strlen (res);
-   g_strlcat (res, ",\n\"_isodesc\": [\n", maxLen);
+   strlcat (res, ",\n\"_isodesc\": [\n", maxLen);
 
    for (int i = 0; i < nIsoc; i++) {
       //double distance = isoDesc [i].distance;
@@ -852,24 +874,24 @@ static char *isoDescToStrCatJson (char *res, size_t maxLen) {
          isoDesc [i].focalLat, 
          isoDesc [i].focalLon,
          (i < nIsoc - 1) ? "," : "");
-      g_strlcat (res, str, maxLen);
+      strlcat (res, str, maxLen);
    }
    if (strlen (res) >= (maxLen - sizeof str - 2)) {// too big
       res = savePt;
       *res = '\0';
       strlcat (res, ",\n\"_Warning_2\": \"No isoDesc sent because too big!\"\n", maxLen); // no isochrone if too big !
    }
-   else g_strlcat (res, "]", maxLen); 
+   else strlcat (res, "]", maxLen); 
    return res;
 }
 
 /*! generate json description of track boats 
- * no boatKeu if boat name is "noname" 
+ * note: no boat Key if boat name is "noname" 
  */
 char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t maxLen) {
    char str [MAX_SIZE_MESS] = "";
    char strSail [MAX_SIZE_NAME] = ""; 
-   char boatKey [MAX_SIZE_NAME] = "";
+   char boatKey [MAX_SIZE_LINE] = "";
    double twa = 0.0, cog = 0.0, twd = 0.0;
    int nSeg = -1; // for checkRoute
    if (route->n <= 0) return NULL;
@@ -879,7 +901,7 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
    char *gribCurrentBaseName = g_path_get_basename (par.currentGribFileName);
    char *polarBaseName = g_path_get_basename (par.polarFileName);
    char *wavePolarBaseName = g_path_get_basename (par.wavePolFileName);
-   const bool hasBoatKey = (strncmp (competitors.t[iComp].name, "noname", 5) != 0);
+   const bool hasBoatKey = (strcmp (competitors.t[iComp].name, "noname") != 0);
    snprintf (boatKey, sizeof boatKey, "\"%s\": {\n", competitors.t[iComp].name); 
  
    snprintf (res, maxLen, 
@@ -908,7 +930,7 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
    );
    for (int i = 0; i < route->nWayPoints; i += 1) {
       snprintf (str, sizeof str, "%.4lf, ", route->lastStepWpDuration [i] * 3600.0);
-      g_strlcat (res, str, maxLen);
+      strlcat (res, str, maxLen);
    }
    const bool waves = isPresentGrib(&zone,"swh") && par.withWaves;
    snprintf (str, sizeof str,
@@ -931,7 +953,7 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
       gribBaseName, 
       (par.withCurrent) ? gribCurrentBaseName : ""
    );
-   g_strlcat (res, str, maxLen);
+   strlcat (res, str, maxLen);
    free(polarBaseName);
    free(wavePolarBaseName);
    free(gribBaseName);
@@ -943,10 +965,8 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
             route->t[i].lat, route->t[i].lon, route->t[i].sog, route->t[i].od, route->t[i].ld);
 
       twa = fTwa (route->t[i].lCap, route->t[i].twd);
-      cog = route->t [i].oCap;
-      if (cog < 0) cog += 360;
-      twd = route->t[i].twd;
-      if (twd < 0) twd += 360;
+      cog = norm360(route->t [i].oCap);
+      twd = norm360(route->t[i].twd);
       fSailName (route->t[i].sail, strSail, sizeof strSail);
       if ((route->t[i].toIndexWp < -1) || (route->t[i].toIndexWp >= route->nWayPoints)) {
          printf ("In routeToJson, Error: toIndexWp outside range; %d\n", route->t[i].toIndexWp);
@@ -965,18 +985,18 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
          //(route->destinationReached || i < route-> n - 1) ? "," :"");
          (i < route-> n - 1) ? "," :""
       );
-      g_strlcat (res, str, maxLen);
+      strlcat (res, str, maxLen);
    }
 
-   g_strlcat (res, "  ]", maxLen);   
-   if (hasBoatKey) g_strlcat (res, "\n}", maxLen);
+   strlcat (res, "  ]", maxLen);   
+   if (hasBoatKey) strlcat (res, "\n}", maxLen);
 
    nSeg = checkRoute (route);
    if (nSeg != -1) { // route is not OK
       fprintf (stderr, "In routeToSrJson, checkRoute warns bad segment (no sea): %d\n", nSeg);
       snprintf (str, sizeof str, ",\n\"_Warning_0\": \"route over sea or forbidden zone on segment: %d (%.2lf, %.2lf) to (%.2lf, %.2lf)\"\n", 
          nSeg, route->t[nSeg].lat, route->t[nSeg].lon, route->t[nSeg + 1].lat, route->t[nSeg + 1].lon);
-      g_strlcat (res, str, maxLen);
+      strlcat (res, str, maxLen);
    }
    if (isoDesc) {
       isoDescToStrCatJson (res, maxLen - 2);    // concat in res des descriptors
@@ -984,7 +1004,7 @@ char  *routeToJson (SailRoute *route, bool isoc, bool isoDesc, char *res, size_t
    if (isoc) {
       isochronesToStrCatJson (res, maxLen - 2); // concat in res the isochrones
    }
-   g_strlcat (res, "\n}\n", maxLen);
+   strlcat (res, "\n}\n", maxLen);
    return res;
 }
 

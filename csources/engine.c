@@ -21,12 +21,14 @@
 #include "r3util.h"
 #include "grib.h"
 
-#define MAX_N_INTERVAL  1000                    // for chooseDeparture
-#define LIMIT           1                       // for forwardSectorOptimize
-#define MIN_VMC_RATIO   0.5                     // for forwardSectorOptimize
-#define MAX_N_HISTORY   20                      // for saveRoute
-#define MAX_UNREACHABLE 0                       // for bestTimeDeparture. 0 means stop after first unreeach detected.
-#define MIN_DT          0.1                     // in hours, the minimum delta time to progress, including penalties
+#define MAX_N_INTERVAL      1000                    // for chooseDeparture
+#define LIMIT               1                       // for forwardSectorOptimize
+#define MIN_VMC_RATIO       0.5                     // for forwardSectorOptimize
+#define MAX_N_HISTORY       20                      // for saveRoute
+#define MAX_UNREACHABLE     0                       // for bestTimeDeparture. 0 means stop after first unreeach detected.
+#define MIN_DT              0.1                     // in hours, the minimum delta time to progress, including penalties
+#define MAX_DURATION_HOURS  (16 * 24)               // 16 days in hours for routeAtAngle: twa and hdg)
+
 
 /*! global variables */
 Pp      *isocArray = NULL;                      // list of isochrones Two dimensions array : maxNIsoc  * MAX_SIZE_ISOC
@@ -220,7 +222,7 @@ static int buildNextIsochrone (const Pp *pOr, const Pp *pDest, const Pp *isoList
    static const double epsilon = 0.01;
    Pp newPt;
    int lenNewL = 0;
-   double u, v, gust, w, twa, sog, uCurr, vCurr, currTwd, currTws, vDirectCap;
+   double u, v, gust, w, twa, sog, uCurr = 0.0, vCurr = 0.0, currTwd, currTws, vDirectCap;
    double dLat, dLon, penalty, efficiency;
    double waveCorrection, invDenominator, twd, tws;
    int bidon; // useless
@@ -332,7 +334,7 @@ bool isoDescToStr (char *str, size_t maxLen) {
    char strLat [MAX_SIZE_LINE], strLon [MAX_SIZE_LINE];
    if (maxLen < MAX_SIZE_LINE) 
       return false;
-   g_strlcpy (str, "No; toWp; Size; First; Closest; Distance; VMC;      FocalLat;    FocalLon\n", MAX_SIZE_LINE);
+   strlcpy (str, "No; toWp; Size; First; Closest; Distance; VMC;      FocalLat;    FocalLon\n", MAX_SIZE_LINE);
 
    for (int i = 0; i < nIsoc; i++) {
       //double distance = isoDesc [i].distance;
@@ -347,7 +349,7 @@ bool isoDescToStr (char *str, size_t maxLen) {
    
       if ((strlen (str) + strlen (line)) > maxLen) 
          return false;
-      g_strlcat (str, line, maxLen);
+      strlcat (str, line, maxLen);
    }
    return true;
 }
@@ -417,7 +419,7 @@ static void statRoute (SailRoute *route) {
    if (route->n == 0) return;
    fprintf (stdout, "route.n = %d\n", route->n);
    char *polarFileName = g_path_get_basename (par.polarFileName);
-   g_strlcpy (route->polarFileName, polarFileName, sizeof (route->polarFileName));
+   strlcpy (route->polarFileName, polarFileName, sizeof (route->polarFileName));
    free (polarFileName);
    route->dataDate = zone.dataDate [0]; // save Grib origin
    route->dataTime = zone.dataTime [0];
@@ -561,7 +563,7 @@ bool storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest) {
    Pp pt = *pDest;
    Pp ptLast = *pDest;
    route->t [route->n - 1].lat = pDest->lat;
-   route->t [route->n - 1].lon = lonCanonize (pDest->lon);
+   route->t [route->n - 1].lon = norm180 (pDest->lon);
    route->t [route->n - 1].id = pDest->id;
    route->t [route->n - 1].father = pDest->father;
    route->t [route->n - 1].motor = pDest->motor;
@@ -584,7 +586,7 @@ bool storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest) {
          fprintf (stdout, "In storeRoute: ERROR isoc: %d pt.toIndexWp: %d\n", i, pt.toIndexWp);
       }
       route->t [i+1].lat = pt.lat;
-      route->t [i+1].lon = lonCanonize (pt.lon);
+      route->t [i+1].lon = norm180 (pt.lon);
       route->t [i+1].id = pt.id;
       route->t [i+1].father = pt.father;
       route->t [i+1].motor = ptLast.motor;
@@ -594,7 +596,7 @@ bool storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest) {
       ptLast = pt;
    }
    route->t [0].lat = pOr->lat;
-   route->t [0].lon = lonCanonize (pOr->lon);
+   route->t [0].lon = norm180 (pOr->lon);
    route->t [0].id = pOr->id;
    route->t [0].father = pOr->father;
    route->t [0].motor = ptLast.motor;
@@ -607,12 +609,12 @@ bool storeRoute (SailRoute *route, const Pp *pOr, const Pp *pDest) {
 
 /*! produce string that says if Motor, Tribord, Babord */
 static char *motorTribordBabord (bool motor, int amure, char* str, size_t maxLen) {
-   if (motor) g_strlcpy (str, "Mot", maxLen);
+   if (motor) strlcpy (str, "Mot", maxLen);
    else
       if (amure == TRIBORD)
-         g_strlcpy (str, "Tri", maxLen);
+         strlcpy (str, "Tri", maxLen);
       else
-         g_strlcpy (str, "Bab", maxLen);
+         strlcpy (str, "Bab", maxLen);
    return str;
 }
 
@@ -631,9 +633,9 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
       return false;
    }
 
-   fSailName (route->t[0].sail, strSail, sizeof (strSail)),
+   fSailName (route->t[0].sail, strSail, sizeof (strSail));
 
-   g_strlcpy (str, "  No;  WP; Lat;        Lon;         Date-Time;            Sail;  M/T/B;   HDG;\
+   strlcpy (str, "  No;  WP; Lat;        Lon;         Date-Time;            Sail;  M/T/B;   HDG;\
     Dist;     SOG;   Twd;   Twa;     Tws;    Gust;   Awa;     Aws;   Waves; Stamina\n", MAX_SIZE_LINE);
    snprintf (line, sizeof line, \
       " pOr; %3d; %-12s;%-12s; %s; %-8s; %6s; %4d°; %7.2lf; %7.2lf; %4d°; %4.0lf°; %7.2lf; %7.2lf; %4.0lf°; %7.2lf; %7.2lf; %7.2lf\n",\
@@ -648,7 +650,7 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
       twa, route->t[0].tws,\
       MS_TO_KN * route->t[0].g, awa, aws, route->t[0].w, route->t[0].stamina);
 
-   g_strlcat (str, line, maxLen);
+   strlcat (str, line, maxLen);
    for (int i = 1; i < route->n; i++) {
       twa = fTwa (route->t[i].lCap, route->t[i].twd);
       fAwaAws (twa, route->t[i].tws, route->t[i].sog, &awa, &aws);
@@ -669,10 +671,10 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
             (int) (route->t[i].twd + 360) % 360,\
             fTwa (route->t[i].lCap, route->t[i].twd), route->t[i].tws,\
             MS_TO_KN * route->t[i].g, awa, aws, route->t[i].w, route->t[i].stamina);
-      g_strlcat (str, line, maxLen);
+      strlcat (str, line, maxLen);
    }
   
-   g_strlcat (str, "\n \n", maxLen); 
+   strlcat (str, "\n \n", maxLen); 
    snprintf (line, sizeof line, 
        " Avr/Max Tws      : %.2lf/%.2lf Kn\n"
        " Total/Motor Dist.: %.2lf/%.2lf NM\n"
@@ -684,7 +686,7 @@ bool routeToStr (const SailRoute *route, char *str, size_t maxLen, char *footer,
        durationToStr (route->duration, strDur, sizeof (strDur)),
        route->nSailChange, route->nAmureChange, route->polarFileName);
 
-   g_strlcat (str, line, maxLen);
+   strlcat (str, line, maxLen);
 
    snprintf (footer, maxLenFooter, "%s Arrival: %s     Route length: %d,   Isoc time Step: %.2lf", 
       competitors.t [route->competitorIndex].name,\
@@ -1180,7 +1182,7 @@ static void checkArrival (SailRoute *route, Pp *pDest) {
 
 /*! launch routing with parameters */
 void *routingLaunch (void) {
-   double lastStepDuration;
+   double lastStepDuration = 0.0;
    Pp pNext;
    initRouting ();
    route.competitorIndex = competitors.runIndex;
@@ -1335,7 +1337,7 @@ void *allCompetitors (void) {
       if (localRet < 0) {
          fprintf (stderr, "In allCompetitors, No solution for competitor: %s with return: %d\n",\
                   competitors.t[i].name, g_atomic_int_get (&route.ret));
-         g_strlcpy (competitors.t [i].strETA, "No Solution", MAX_SIZE_DATE); 
+         strlcpy (competitors.t [i].strETA, "No Solution", MAX_SIZE_DATE); 
          competitors.t [i].duration = 0; // hours
          competitors.t [i].dist = 0;
          continue;
@@ -1441,9 +1443,20 @@ bool exportRouteToGpx (const SailRoute *route, const char *fileName) {
    return true;
 }
 
+/*! update twa and hdg depending en fromTwa and angle */
+void updateAngles(bool fromTwa, double twd, double angle, double *twa, double *hdg) {
+  if (fromTwa) {
+    *twa = norm180(angle);          // au cas où angle arrive hors borne
+    *hdg = norm360(twd - *twa);
+  } else {
+    *hdg = norm360(angle);
+    *twa = norm180(twd - *hdg);
+  }
+}
+
 /*! calculate next pos (lat, lon) at TWA and provides wind current and route parameters */
-static bool nextPos(double *lat, double *lon, double twa, double t, double dt,
-   double *hdg, double *twd, double *tws, double *gust, double *w, double *uCurr, double *vCurr, int *sailChoice) {
+static bool nextPos(bool fromTwa, double *lat, double *lon, double angle, double t, double dt,
+   double *hdg, double *twa, double *twd, double *tws, double *gust, double *w, double *uCurr, double *vCurr, int *sailChoice) {
 
    static const double epsilon = 0.01;
    int bidon;   
@@ -1454,17 +1467,16 @@ static bool nextPos(double *lat, double *lon, double twa, double t, double dt,
    if (!isInZone (*lat, *lon, &zone)) return false;
    findWindGrib (*lat, *lon, t, &u, &v, gust, w, twd, tws);
    if (par.withCurrent) findCurrentGrib (*lat, *lon, t - tDeltaCurrent, uCurr, vCurr, &currTwd, &currTws);
+   updateAngles (fromTwa, *twd, angle, twa, hdg);
 
    if (par.dayEfficiency == par.nightEfficiency) efficiency = par.dayEfficiency;
    else efficiency = isDay(t, zone.dataDate[0], zone.dataTime[0], *lat, *lon) ? par.dayEfficiency : par.nightEfficiency;
   
-   sog = efficiency * findPolar(twa, *tws * par.xWind, &polMat, &sailPolMat, sailChoice);
+   sog = efficiency * findPolar(*twa, *tws * par.xWind, &polMat, &sailPolMat, sailChoice);
    if (par.withWaves && *w > 0.0 ) {
-      const double waveCorrection = findPolar(twa, *w, &wavePolMat, NULL, &bidon);
+      const double waveCorrection = findPolar(*twa, *w, &wavePolMat, NULL, &bidon);
       if (waveCorrection > 0.0) sog *= waveCorrection * 0.01;
    }
-   *hdg = *twd - twa;
-   if (*hdg < 0) *hdg += 360.0;
    dLat = sog * dt * cos (DEG_TO_RAD * *hdg);                   // nautical miles in N S direction
    dLon = sog * dt * sin (DEG_TO_RAD * *hdg) * invDenominator;  // nautical miles in E W direction
 
@@ -1478,79 +1490,169 @@ static bool nextPos(double *lat, double *lon, double twa, double t, double dt,
 }
 
 /*! Calculate TWA route and produce Json output */ 
-void routeAtTwa (double lat0, double lon0, double twa, time_t epochStart, double t, double dt, int max, char *out, size_t maxLen) {
-  if (max < 1) {
-    snprintf (out, maxLen, "{ \"_Error\": \"nStep should be >= 2\"}\n"); 
-    return;
-  }  
-  if (!isInZone (lat0, lon0, &zone)) {
-    snprintf (out, maxLen, "{ \"_Error\": \"Start position not in Grib Zone\" }\n"); 
+void routeAtAngle (ClientRequest *clientReq, char *out, size_t maxLen) {
+  const double lat0 = clientReq->boats[0].lat;
+  const double lon0 = clientReq->boats[0].lon;
+  const double dt = clientReq->timeStep / 3600.0;   // hours
+  const double epsilon = 1e-12;
+
+  double angle = 0.0;
+  double durationHours = 0.0;
+  bool fromTwa = false;
+
+  if (!isInZone(lat0, lon0, &zone)) {
+    snprintf(out, maxLen, "{ \"_Error\": \"Start position not in Grib Zone\" }\n");
     return;
   }
-  const bool waves = isPresentGrib(&zone,"swh") && par.withWaves;
-  const long duration = (par.tStep * 3600) * max;
-  char strSail [MAX_SIZE_NAME] = "";
-  double hdg, u, v, g, w, uCurr = 0.0, vCurr = 0.0, twd, tws, currTwd, currTws;
+  if (clientReq->nCmd <=0) {
+    snprintf(out, maxLen, "{ \"_Error\": \"No command\" }\n");
+    return;
+  }
+  if (clientReq->epochStart <= 0) clientReq->epochStart = time(NULL); // default value if empty is now
+  const time_t theTime0 = gribDateTimeToEpoch(zone.dataDate[0], zone.dataTime[0]);
+  const double departureTime = (clientReq->epochStart - theTime0) / 3600.0; // hours from grib ref
+  const bool waves = isPresentGrib(&zone, "swh") && clientReq->withWaves;
+
+  int nSteps = 0;
+  int nSailChange = 0;
+
+  double t = departureTime;  // current simulation time (hours since ref)
+  double hdg = 0.0, twa = 0.0;
+  double u = 0.0, v = 0.0, g = 0.0, w = 0.0;
+  double uCurr = 0.0, vCurr = 0.0;
+  double twd = 0.0, tws = 0.0, currTwd = 0.0, currTws = 0.0;
   double dist = 0.0, totDist = 0.0;
-  double formerLat = lat0, formerLon = lon0;
   double lat = lat0, lon = lon0;
-  int sail, formerSail = 0, nSailChange = 0;
-  char str [MAX_SIZE_LINE];
-  char *gribBaseName = g_path_get_basename (par.gribFileName);
-  char *gribCurrentBaseName = g_path_get_basename (par.currentGribFileName);
-  char *polarBaseName = g_path_get_basename (par.polarFileName);
-  char *wavePolarBaseName = g_path_get_basename (par.wavePolFileName);
+  double formerLat = lat0, formerLon = lon0;
 
-  tDeltaCurrent = zoneTimeDiff (&currentZone, &zone); // global variable/
-  findWindGrib (lat0, lon0, t, &u, &v, &g, &w, &twd, &tws);
-  if (par.withCurrent) findCurrentGrib (lat0, lon0, t - tDeltaCurrent, &uCurr, &vCurr, &currTwd, &currTws);
-  hdg = twd - twa;
-  if (hdg < 0) hdg += 360.0;
+  int sail = 0, formerSail = 0;
 
-  snprintf(out, maxLen, "{\n"
-    "  \"twa\": %.2lf,\n"    
-    "  \"nSteps\": %d,\n"
+  char strSail[MAX_SIZE_NAME] = "";
+  char str[MAX_SIZE_TEXT];
+  char temp[MAX_SIZE_LINE];
+  char list[MAX_SIZE_LINE] = "[";
+
+  char *gribBaseName = g_path_get_basename(par.gribFileName);
+  char *gribCurrentBaseName = g_path_get_basename(par.currentGribFileName);
+  char *polarBaseName = g_path_get_basename(par.polarFileName);
+  char *wavePolarBaseName = g_path_get_basename(par.wavePolFileName);
+
+  double tDeltaCurrentLocal = zoneTimeDiff(&currentZone, &zone);
+
+  // Initialize wind/current at start (t = departureTime)
+  findWindGrib(lat0, lon0, t, &u, &v, &g, &w, &twd, &tws);
+  if (clientReq->withCurrent) findCurrentGrib(lat0, lon0, t - tDeltaCurrentLocal, &uCurr, &vCurr, &currTwd, &currTws);
+
+  // Initialize hdg/twa from first command for the initial row 
+  angle = clientReq->cmd[0].angle;
+  fromTwa = clientReq->cmd[0].fromTwa ? true : false;
+  updateAngles(fromTwa, twd, angle, &twa, &hdg);
+
+  // JSON header + first point
+  snprintf(out, maxLen,
+    "{\n"
+    "  \"nCmd\": %d,\n"
     "  \"timeStep\": %.0lf,\n"
-    "  \"epochStart\": %ld,\n"    
-    "  \"duration\": %ld,\n"
+    "  \"epochStart\": %ld,\n"
     "  \"bottomLat\": %.2lf, \"leftLon\": %.2lf, \"topLat\": %.2lf, \"rightLon\": %.2lf,\n"
     "  \"polar\": \"%s\",\n"
     "  \"wavePolar\": \"%s\",\n"
     "  \"grib\": \"%s\",\n"
     "  \"currentGrib\": \"%s\",\n"
-    "  \"comment\": \"[lat, lon, t, dist, hdg, twd, tws, g, w, uCurr, vCurr, sail]\",\n"
-    "  \"array\": [\n    [%.4lf, %.4lf,    0, 0.0000, %.0lf, %.4lf, %.4lf, %.4lf, %.4lf, %.4lf, %.4lf, \"--\"],\n", 
-    twa, max, par.tStep * 3600, epochStart, duration, zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight,
-    polarBaseName, 
-    (waves) ? wavePolarBaseName : "",  
-    gribBaseName, 
+    "  \"comment\": \"[step, lat, lon, t, dist, hdg, twa, twd, tws, g, w, uCurr, vCurr, sail]\",\n"
+    "  \"array\": [\n"
+    "    [0, %.4lf, %.4lf,    0, 0.0000, %.0lf, %.0lf, %.4lf, %.4lf, %.4lf, %.4lf, %.4lf, %.4lf, \"--\"],\n",
+    clientReq->nCmd, par.tStep * 3600.0, clientReq->epochStart,
+    zone.latMin, zone.lonLeft, zone.latMax, zone.lonRight,
+    polarBaseName,
+    (waves) ? wavePolarBaseName : "",
+    gribBaseName,
     (par.withCurrent) ? gribCurrentBaseName : "",
-    lat0, lon0, hdg, twd, tws, g, w, uCurr, vCurr);
+    lat0, lon0, hdg, twa, twd, tws, g, w, uCurr, vCurr);
 
   free(polarBaseName);
   free(wavePolarBaseName);
-  free (gribBaseName);
-  free (gribCurrentBaseName);
+  free(gribBaseName);
+  free(gribCurrentBaseName);
 
-  for (int i = 0; i < max; i += 1) {
-    if (! nextPos (&lat, &lon, twa, t, dt, &hdg, &twd, &tws, &g, &w, &uCurr, &vCurr, &sail)) {
-      snprintf (out, maxLen, "{ \"_Error\": \"Position not in Grib Zone\" }\n"); 
+  double totDurationSec = 0.0; 
+
+  // Run each command segment
+  for (int i = 0; i < clientReq->nCmd; i++) {
+    angle = clientReq->cmd[i].angle;
+    fromTwa = clientReq->cmd[i].fromTwa ? true : false;
+    const double durationSec = clientReq->cmd[i].duration; // duration is in seconds
+    durationHours = durationSec / 3600.0;
+    printf("i: %d, angle: %.2lf, duration: %.2lf h, fromTwa: %d\n", i, angle, durationHours, fromTwa);
+
+    if (durationHours > MAX_DURATION_HOURS) {
+      snprintf(out, maxLen,
+        "{ \"_Error\": \"Step: %d, Max duration exceeded: %d hours\"}\n", i, MAX_DURATION_HOURS);
       return;
     }
-    fSailName (sail, strSail, sizeof strSail);
-    if ((sail != formerSail) && (i > 0)) nSailChange += 1;
-    dist = orthoDist(formerLat, formerLon, lat, lon);
-    totDist += dist;
 
-    snprintf (str, sizeof str , "    [%.4lf, %.4lf, %.0lf, %.4lf, %.0lf, %.4lf, %.4lf, %.4lf, %.4lf, %.4lf, %.4lf, \"%s\"]%s\n", 
-       lat, lon, (i+1) * dt * 3600 , dist, hdg, twd, tws, g, w, uCurr, vCurr, strSail, (i < max - 1) ? "," : ""
-    );
-    g_strlcat (out, str, maxLen);
-    formerLat = lat;
-    formerLon = lon;
-    formerSail = sail;
-    t += dt;
+    totDurationSec += durationSec;
+
+    // Update angles for this segment using current TWD
+    updateAngles(fromTwa, twd, angle, &twa, &hdg);
+
+    // commandList entry: duration in seconds
+    snprintf(temp, sizeof temp, "{\"%s\": %.0lf, \"duration\": %.0lf},", (fromTwa) ? "twa" : "hdg", angle, durationSec);
+    strlcat(list, temp, sizeof list);
+
+    // Advance along this segment with partial last step if needed 
+    double done = 0.0; // hours already done in this segment
+                       
+    while (done + epsilon < durationHours) {
+      const double step = (done + dt <= durationHours + epsilon) ? dt : (durationHours - done);
+      t += step;
+      if (!nextPos(fromTwa, &lat, &lon, angle, t, step, &hdg, &twa, &twd, &tws, &g, &w, &uCurr, &vCurr, &sail)) {
+        done = durationHours; // end segment because out of zone
+        break;
+      }
+
+      fSailName(sail, strSail, sizeof strSail);
+      if ((sail != formerSail) && (t > departureTime)) nSailChange++;
+
+      dist = orthoDist(formerLat, formerLon, lat, lon);
+      totDist += dist;
+
+      // elapsed time since departure, in seconds 
+      const double tElapsedSec = (t - departureTime) * 3600.0;
+
+      snprintf(str, sizeof str,
+        "    [%d, %.4lf, %.4lf, %.0lf, %.4lf, %.0lf, %.0lf, %.4lf, %.4lf, %.4lf, %.4lf, %.4lf, %.4lf, \"%s\"],\n",
+        i, lat, lon, tElapsedSec, dist, hdg, twa, twd, tws, g, w, uCurr, vCurr, strSail);
+
+      strlcat(out, str, maxLen);
+
+      formerLat = lat;
+      formerLon = lon;
+      formerSail = sail;
+
+      done += step;
+      nSteps++;
+    }
   }
-  snprintf (str, sizeof str, "  ],\n  \"totDist\": %.2lf,\n  \"nSailChange\": %d\n}\n", totDist, nSailChange);
-  g_strlcat (out, str, maxLen);
+
+  /* Remove last comma in "array" */
+  char *pt = strrchr(out, ',');
+  if (pt) *pt = ' ';
+
+  /* Remove last comma in command list */
+  pt = strrchr(list, ',');
+  if (pt) *pt = ' ';
+
+  snprintf(str, sizeof str,
+    "  ],\n"
+    "  \"totDist\": %.2lf,\n"
+    "  \"nSailChange\": %d,\n"
+    "  \"duration\": %.0lf,\n"
+    "  \"nSteps\": %d,\n"
+    "  \"commandList\": %s]\n"
+    "}\n",
+    totDist, nSailChange, totDurationSec, nSteps, list);
+
+  strlcat(out, str, maxLen);
 }
+

@@ -44,13 +44,13 @@ static bool polarCheck (PolMat *mat, char *report, size_t maxLen) {
    for (int c = 1; c < mat->nCol; c += 1) {  // check values in line 0 progress
       if (mat->t [0][c] < mat->t[0][c-1]) {
          snprintf (str, sizeof str, "Values in row 0 should progress, col: %d; ", c);
-         g_strlcat (report, str, maxLen);
+         strlcat (report, str, maxLen);
       }
    }
    for (int row = 1; row < mat->nLine; row += 1) {
       if ((mat->t [row][0] < mat->t[row-1] [0])) {
          snprintf (str, sizeof str, "Values in col 0 should progress, row: %d; ", row);
-         g_strlcat (report, str, maxLen);
+         strlcat (report, str, maxLen);
       }
    }
    for (int row = 1; row < mat->nLine; row += 1) {
@@ -65,14 +65,14 @@ static bool polarCheck (PolMat *mat, char *report, size_t maxLen) {
       for (int c = 2; c <= cMax; c += 1) {
          if (mat->t [row][c] < mat->t[row][c-1]) {
             snprintf (str, sizeof str, "Values in row: %d should progress at col: %d up to maxInRow: %.2lf; ", row, c, maxInRow);
-            g_strlcat (report, str, maxLen);
+            strlcat (report, str, maxLen);
             break;
          }
       }
       for (int c = cMax + 1; c < mat->nCol; c += 1) {
          if ((mat->t [row][c] > mat->t[row][c-1])) {
             snprintf (str, sizeof str, "Values in row: %d should regress at col: %d after maxInRow: %.2lf; ", row, c, maxInRow);
-            g_strlcat (report, str, maxLen);
+            strlcat (report, str, maxLen);
             break;
          }
       }
@@ -90,14 +90,14 @@ static bool polarCheck (PolMat *mat, char *report, size_t maxLen) {
       for (int row = 2; row <= rowMax; row += 1) {
          if (mat->t [row][c] < mat->t[row-1][c]) {
             snprintf (str, sizeof str, "Values in col: %d should progress at row: %d up to maxInCol: %.2lf; ", c, row, maxInCol);
-            g_strlcat (report, str, maxLen);
+            strlcat (report, str, maxLen);
             break;
          }
       }
       for (int row = rowMax + 1; row < mat->nLine; row += 1) {
          if ((mat->t [row][c] > mat->t[row-1][c])) {
             snprintf (str, sizeof str, "Values in col: %d should regress at row: %d after maxInCol: %.2lf; ", c, row, maxInCol);
-            g_strlcat (report, str, maxLen);
+            strlcat (report, str, maxLen);
             break;
          }
       }
@@ -196,9 +196,9 @@ char *polToStr (const PolMat *mat, char *str, size_t maxLen) {
    for (int i = 0; i < mat->nLine; i++) {
       for (int j = 0; j < mat->nCol; j++) {
          snprintf (line, MAX_SIZE_LINE, "%6.2f ", mat->t [i][j]);
-         g_strlcat (str, line, maxLen);
+         strlcat (str, line, maxLen);
       }
-      g_strlcat (str, "\n", maxLen);
+      strlcat (str, "\n", maxLen);
    }
    snprintf (line, sizeof line, 
              "Number of rows in polar : %d\n"
@@ -206,13 +206,13 @@ char *polToStr (const PolMat *mat, char *str, size_t maxLen) {
              "Max                     : %.2lf\n"
              "nSail                   : %.zu\n",
              mat->nCol, mat->nLine, mat->maxAll, mat->nSail);
-   g_strlcat (str, line, maxLen);
+   strlcat (str, line, maxLen);
    return str;
 }
 
 /*! add a new sail in PoMat object */
 static bool addSail (PolMat *polMat, int id, char *name, double max) {
-   const int nSail = polMat->nSail;
+   const int nSail = (int) polMat->nSail;
    if (nSail >= MAX_N_SAIL - 1) return false;
    polMat->tSail [nSail].id = id;
    strlcpy (polMat->tSail [nSail].name, name, MAX_SIZE_NAME);
@@ -350,7 +350,7 @@ static bool readPolarJson (const char *fileName, PolMat *polMat, PolMat *sailPol
       return false;
    }
    strlcpy (start, begin, (ptr-begin));
-   const int len = strlen (start);
+   const size_t len = strlen (start);
    if (start [len - 1] == ',') start [len - 1 ] = '\0';     // last comma elimination if exist 
    snprintf (polMat->jsonHeader, sizeof polMat->jsonHeader, "{%s}", start); // header extracted
 
@@ -430,51 +430,51 @@ char *polToStrJson (bool report, const char *fileName, const char *objName, char
 
    // generate two dimensions array with the values 
    for (int i = 0; i < mat.nLine ; i++) {
-      g_strlcat (out, "    [", maxLen);
+      strlcat (out, "    [", maxLen);
       for (int j = 0; j < mat.nCol - 1; j++) {
          printFloat(str, sizeof str, mat.t[i][j]);
-         g_strlcat(out, str, maxLen);
-         g_strlcat(out, ", ", maxLen);
+         strlcat(out, str, maxLen);
+         strlcat(out, ", ", maxLen);
       }
       printFloat(str, sizeof str, mat.t[i][mat.nCol - 1]);
-      g_strlcat(out, str, maxLen);
+      strlcat(out, str, maxLen);
       snprintf(str, sizeof str, "]%s\n", (i < mat.nLine - 1) ? "," : "");
-      g_strlcat(out, str, maxLen);
+      strlcat(out, str, maxLen);
    }
-   g_strlcat (out, "  ]", maxLen);
+   strlcat (out, "  ]", maxLen);
 
    // if several sails, generate two dimensions array with sail number
    if (mat.nSail > 1) {
-      g_strlcat (out, ",\n  \"arraySail\": [\n", maxLen);
+      strlcat (out, ",\n  \"arraySail\": [\n", maxLen);
    
       for (int i = 0; i < mat.nLine ; i++) {
-         g_strlcat (out, "    [", maxLen);
+         strlcat (out, "    [", maxLen);
          for (int j = 0; j < mat.nCol - 1; j++) {
             snprintf (str, sizeof str, "%.0f, ", sailMat.t [i][j]);
-            g_strlcat (out, str, maxLen);
+            strlcat (out, str, maxLen);
          }
          snprintf (str, sizeof (str), "%.0f]%s\n", sailMat.t [i][mat.nCol -1], (i < mat.nLine - 1) ? "," : "");
-         g_strlcat (out, str, maxLen);
+         strlcat (out, str, maxLen);
       }
-      g_strlcat (out, "  ],\n", maxLen);
+      strlcat (out, "  ],\n", maxLen);
 
       // generate one dimension array that list the name of sails, ordered NA = 0, Sail1, sail2 etc
-      g_strlcat (out, "  \"legend\": [", maxLen);
-      g_strlcat (out, "\"NA\",", maxLen); // first is NA (id 0)
+      strlcat (out, "  \"legend\": [", maxLen);
+      strlcat (out, "\"NA\",", maxLen); // first is NA (id 0)
       for (size_t i = 0; i < mat.nSail; i += 1) {
          snprintf (str, sizeof str, "\"%s\"%s", mat.tSail [i].name, (i < mat.nSail -1) ? ", " : "");
-         g_strlcat (out, str, maxLen);
+         strlcat (out, str, maxLen);
       }
-      g_strlcat (out, "  ]", maxLen);   
+      strlcat (out, "  ]", maxLen);   
    } // end if mat.nSail > 1
    
    // generate report
    if (report) {
-      g_strlcat (out, ",\n  \"report\": \"", maxLen);  
+      strlcat (out, ",\n  \"report\": \"", maxLen);  
       polarCheck (&mat, str, sizeof str);
-      g_strlcat (out, str, maxLen);
-      g_strlcat (out, "\"", maxLen);
+      strlcat (out, str, maxLen);
+      strlcat (out, "\"", maxLen);
    }
-   g_strlcat (out, "\n}\n", maxLen);
+   strlcat (out, "\n}\n", maxLen);
    return out;
 }

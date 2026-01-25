@@ -12,8 +12,6 @@
 #define MAX(i, j) (((i) > (j)) ? (i) : (j))
 #define CLAMP(x, lo, hi) ( ((x) < (lo)) ? (lo) : ( ((x) > (hi)) ? (hi) : (x)) )
 #define N_ELEMENTS(arr) (sizeof(arr) / sizeof((arr)[0])) // GLIB like
-#define g_strlcpy(dest, src, size) strlcpy((dest),(src),(size))
-#define g_strlcat(dest, src, size) strlcat((dest),(src),(size))
 
 /*! Length of array of string NULL terminated (like GLib g_strv_length) */
 static inline size_t g_strv_length (char * const *strv) {

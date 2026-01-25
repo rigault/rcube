@@ -85,8 +85,8 @@ static void testToJson (char *out, size_t maxLen) {
    char strWind [MAX_SIZE_LINE] = "";
    char strCurrent [MAX_SIZE_LINE] = "";
    char strConf [MAX_SIZE_LINE] = "";
-   formatThousandSep (strWind, sizeof strWind, sizeof(FlowP) * (zone.nTimeStamp + 1) * zone.nbLat * zone.nbLon);
-   formatThousandSep (strCurrent, sizeof strCurrent, sizeof(FlowP) * (currentZone.nTimeStamp + 1) * currentZone.nbLat * currentZone.nbLon);
+   formatThousandSep (strWind, sizeof strWind, (int) sizeof(FlowP) * (zone.nTimeStamp + 1) * zone.nbLat * zone.nbLon);
+   formatThousandSep (strCurrent, sizeof strCurrent, (int) sizeof(FlowP) * (currentZone.nTimeStamp + 1) * currentZone.nbLat * currentZone.nbLon);
    if (fileExists (parameterFileName)) {
       snprintf (strConf, sizeof strConf, "Exist: %s", parameterFileName);
    }
@@ -154,6 +154,7 @@ bool computeRoutingJsonFromForm(const char *formReq, char *outBuffer, size_t max
    const char *date = getCurrentDate ();
    char errMessage [MAX_SIZE_TEXT] = "";
    bool resp = true;
+   bool yaml = true;
    char directory [MAX_SIZE_DIR_NAME];
    ClientRequest req;
    char tempFileName [MAX_SIZE_FILE_NAME];
@@ -211,7 +212,7 @@ bool computeRoutingJsonFromForm(const char *formReq, char *outBuffer, size_t max
       break;
    case REQ_PAR_RAW:
       // yaml style if model = 1
-      bool yaml = req.model [0] == 'y';
+      yaml = (req.model [0] == 'y');
       buildRootName (TEMP_FILE_NAME, tempFileName, sizeof tempFileName);
       writeParam (tempFileName, false, false, yaml);
       strTemp = readTextFile (tempFileName, errMessage, sizeof errMessage);
@@ -270,7 +271,7 @@ bool computeRoutingJsonFromForm(const char *formReq, char *outBuffer, size_t max
       if (hasCurrentGrib && !(updateCurrentGrib (&req, outBuffer, maxLen))) break;
 
       checkGribToStr (hasCurrentGrib, outBuffer, maxLen);
-      if (outBuffer [0] == '\0') g_strlcpy (outBuffer, "All is OK\n", maxLen);
+      if (outBuffer [0] == '\0') strlcpy (outBuffer, "All is OK\n", maxLen);
       break;
    case REQ_GRIB_DUMP:
       resp = gribDump (&req, outBuffer, maxLen);
@@ -284,20 +285,15 @@ int main (int argc, char *argv[]) {
    char *bigBuffer = NULL;
    const double start = monotonic ();
 
-   if (setlocale (LC_ALL, "C") == NULL) {                // very important for printf decimal numbers
-      fprintf (stderr, "In main, Error: setlocale failed");
-      return EXIT_FAILURE;
-   }
-
    if (argc <= 1 || argc > 3) {
       fprintf (stderr, "Synopsys: %s %s\n", argv [0], SYNOPSYS);
       return EXIT_FAILURE;
    }
    
    if (argc > 2)
-      g_strlcpy (parameterFileName, argv [2], sizeof parameterFileName);
+      strlcpy (parameterFileName, argv [2], sizeof parameterFileName);
    else 
-      g_strlcpy (parameterFileName, PARAMETERS_FILE, sizeof parameterFileName);
+      strlcpy (parameterFileName, PARAMETERS_FILE, sizeof parameterFileName);
 
    if (! initContext (parameterFileName, ""))
       return EXIT_FAILURE;

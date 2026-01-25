@@ -12,7 +12,6 @@
 #include <time.h>
 #include <math.h>
 #include <locale.h>
-#include <errno.h>
 #include "glibwrapper.h"
 #include "r3types.h"
 #include "grib.h"
@@ -106,7 +105,7 @@ void normalizeSpaces(char *s) {
 /*! formatted float print with simplified 0 */
 void printFloat(char *buf, size_t len, double v) {
    const double epsilon = 0.00005;  // half 10⁻⁴ → consistent with %.4f 
-   if (fabs(v) < epsilon) g_strlcpy(buf, "0", len);
+   if (fabs(v) < epsilon) strlcpy(buf, "0", len);
    else snprintf(buf, len, "%.4f", v);
 }
 
@@ -171,7 +170,7 @@ void initZone (Zone *zone) {
 /*! return the name of the sail */
 char *fSailName (int val, char *str, size_t maxLen) {
    if (val > 0 && val <= (int) polMat.nSail) strlcpy (str, polMat.tSail[val-1].name, maxLen);
-   else g_strlcpy (str, "--", maxLen);
+   else strlcpy (str, "--", maxLen);
    return str;
 }
 
@@ -185,7 +184,7 @@ char *newFileNameSuffix (const char *fileName, const char *suffix, char *newFile
    if (baseLen + strlen (suffix) + 1 >= maxLen) { // for the  '.'
       return NULL; // not enough space
    }
-   g_strlcpy (newFileName, fileName, baseLen + 1);
+   strlcpy (newFileName, fileName, baseLen + 1);
    strlcat (newFileName, ".", maxLen);
    strlcat (newFileName, suffix, maxLen);
 
@@ -321,7 +320,7 @@ double getCoord (const char *str, double minLimit, double maxLimit) {
    const char *workingDir = par.workingDir[0] != '\0' ? par.workingDir : WORKING_DIR;
    char *fullPath = (g_path_is_absolute (fileName)) ? g_strdup (fileName) : g_build_filename (workingDir, fileName, NULL);
    if (!fullPath) return NULL;
-   g_strlcpy (rootName, fullPath, maxLen);
+   strlcpy (rootName, fullPath, maxLen);
    g_free (fullPath);
    return rootName;
 }
@@ -543,7 +542,7 @@ char *latToStr (double lat, int type, char* str, size_t maxLen) {
    const char c = (lat > 0) ? 'N' : 'S';
 
    if (lat > 90.0 || lat < -90.0) {
-      g_strlcpy (str, "Lat Error", maxLen);
+      strlcpy (str, "Lat Error", maxLen);
       return str;
    }
    switch (type) {
@@ -565,7 +564,7 @@ char *lonToStr (double lon, int type, char *str, size_t maxLen) {
    const char c = (lon > 0) ? 'E' : 'W';
 
    if (lon > 180.0 || lon < -180.0) {
-      g_strlcpy (str, "Lon Error", maxLen);
+      strlcpy (str, "Lon Error", maxLen);
       return str;
    }
    switch (type) {
@@ -580,20 +579,21 @@ char *lonToStr (double lon, int type, char *str, size_t maxLen) {
    return str;
 }
 
-/*! read issea file and fill table tIsSea */
-bool readIsSea (const char *fileName) {
+/*! read issea file and fill table tIsSea. Return pointer*/
+char *readIsSea (const char *fileName) {
    FILE *f = NULL;
    int i = 0;
    char c;
+   char *tIsSea = NULL;
    int nSea = 0;
    if ((f = fopen (fileName, "r")) == NULL) {
       fprintf (stderr, "In readIsSea, Error cannot open: %s\n", fileName);
-      return false;
+      return NULL;
    }
 	 if ((tIsSea = (char *) malloc (SIZE_T_IS_SEA + 1)) == NULL) {
 		 fprintf (stderr, "In readIsSea, error Malloc");
      fclose (f);
-		 return false;
+		 return NULL;
 	 }
 
    while (((c = fgetc (f)) != -1) && (i < SIZE_T_IS_SEA)) {
@@ -603,7 +603,7 @@ bool readIsSea (const char *fileName) {
    }
    fclose (f);
    // printf ("isSea file     : %s, Size: %d, nIsea: %d, Proportion sea: %lf\n", fileName, i, nSea, (double) nSea/ (double) i); 
-   return true;
+   return tIsSea;
 } 
 
 /*! fill str with polygon information */
@@ -1187,7 +1187,7 @@ int nearestPort (double lat, double lon, const char *fileName, char *res, size_t
          if (d < minDist) {
             minDist = d;
             g_strstrip (portName);
-            g_strlcpy (res, portName, maxLen);
+            strlcpy (res, portName, maxLen);
             bestId = id;
             //printf ("%s %.2lf %.2lf %.2lf %.2lf %.2lf \n", portName, d, lat, lon, latPort, lonPort);
          }

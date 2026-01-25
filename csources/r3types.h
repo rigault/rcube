@@ -5,6 +5,7 @@
 #pragma once
 //#include <sys/_types/_time_t.h>
 #include <stdbool.h>
+#include <time.h>
 
 #define MAX_SIZE_RESOURCE_NAME 256              // Max size polar or grib name
 #define MAX_SIZE_FEED_BACK    1024              // Max sieze of client feedback
@@ -34,6 +35,7 @@
 #define DEG_TO_RAD            (G_PI/180.0)      // conversion degree to radius
 #define SIZE_T_IS_SEA         (3601 * 1801)     // size of size is sea 
 #define MAX_N_WAY_POINT       10                // Max number of Way Points
+#define MAX_N_CMD             10
 #define PROG_NAME             "RCube"         
 #define PROG_VERSION          "0.1"  
 #define PROG_AUTHOR           "René Rigault"
@@ -87,10 +89,11 @@ enum {TRIBORD, BABORD};                         // amure TRIBORD = STARBOARD, BA
 enum {RUNNING, STOPPED, NO_SOLUTION, EXIST_SOLUTION};                   // for chooseDeparture.ret values and allCompetitors check
 enum {ROUTING_STOPPED = -2, ROUTING_ERROR = -1, ROUTING_RUNNING = 0};   // for routingLaunch
 
+#define MAX_TYPE              18
 enum {REQ_KILL = -1793, REQ_TEST = 0, REQ_ROUTING = 1, REQ_COORD = 2, REQ_FORBID = 3, REQ_POLAR = 4, 
       REQ_GRIB = 5, REQ_DIR = 6, REQ_PAR_RAW = 7, REQ_PAR_JSON = 8, 
       REQ_INIT = 9, REQ_FEEDBACK = 10, REQ_DUMP_FILE = 11, REQ_NEAREST_PORT = 12, 
-      REQ_MARKS = 13, REQ_CHECK_GRIB = 14, REQ_GPX_ROUTE = 15, REQ_GRIB_DUMP = 16, REQ_TWA = 17}; // type of request
+      REQ_MARKS = 13, REQ_CHECK_GRIB = 14, REQ_GPX_ROUTE = 15, REQ_GRIB_DUMP = 16, REQ_ANGLE = 17}; // type of request
 
 /*! Client Request description */
 typedef struct {
@@ -106,7 +109,6 @@ typedef struct {
    int penalty2;                             // penalty in seconds for sail change
    int initialAmure;                         // initial Amure of the routing calculation 0 = starboard = tribord, or 1 = port = babord
    int timeStep;                             // isoc time step in seconds
-   int nStep;                                // for TWA REQ
    time_t epochStart;                        // epoch time to start routing
    bool onlyUV;                              // for grib dump requesting only U and V
    bool isoc;                                // true if isochrones requested
@@ -115,7 +117,6 @@ typedef struct {
    bool forbid;                              // true if forbid zone (polygons or Earth) are considered
    bool withWaves;                           // true if waves specified in wavePolName file are considered
    bool withCurrent;                         // true if current specified in currentGribName is considered
-   double twa;                               // fot TWA REQ 
    double staminaVR;                         // Init stamina
    double motorSpeed;                        // motor speed if used
    double threshold;                         // threshold for motor use
@@ -139,6 +140,12 @@ typedef struct {
       double lat;                            // latitude
       double lon;                            // longitude
    } wp [MAX_N_WAY_POINT];                   // way points
+   int nCmd;                                 // Number of commands fot TWA or GDG route
+   struct {                                  // for Twa and Hdg based routing
+      double angle;                          // angle (twa or hdg depeding on from Twa)
+      time_t duration;                       // max duration in seconds
+      int fromTwa;                           // true if twa routing
+   } cmd [MAX_N_CMD];
    char model      [MAX_SIZE_RESOURCE_NAME]; // grib model
    char dirName    [MAX_SIZE_RESOURCE_NAME]; // remote directory name
    char wavePolName[MAX_SIZE_RESOURCE_NAME]; // polar file name

@@ -87,7 +87,7 @@ bool readGribLists (const char *fileName, Zone *zone) {
          }
       } 
       if ((! found) && (zone->nShortName < MAX_N_SHORT_NAME)) { // new shortName
-         g_strlcpy (zone->shortName [zone->nShortName], shortName, MAX_SIZE_SHORT_NAME); 
+         strlcpy (zone->shortName [zone->nShortName], shortName, MAX_SIZE_SHORT_NAME); 
          zone->nShortName += 1;
       }
       zone->nTimeStamp = updateLong (timeStep, zone->nTimeStamp, MAX_N_TIME_STAMPS, zone->timeStamp); 
@@ -99,7 +99,7 @@ bool readGribLists (const char *fileName, Zone *zone) {
    // Replace unknown by gust ? (GFS case where gust identified by specific indicatorOfParameter)
    for (size_t i = 0; i < zone->nShortName; i++) {
       if (strcmp (zone->shortName[i], "unknown") == 0)
-         g_strlcpy (zone->shortName[i], "gust?", 6);
+         strlcpy (zone->shortName[i], "gust?", 6);
    }
    zone->intervalLimit = 0;
    if (zone->nTimeStamp > 1) {
@@ -158,13 +158,13 @@ bool readGribParameters (const char *fileName, Zone *zone) {
    CODES_CHECK(codes_get_double (h,"iDirectionIncrementInDegrees",&zone->lonStep),0);
    CODES_CHECK(codes_get_double (h,"jDirectionIncrementInDegrees",&zone->latStep),0);
 
-   if ((lonCanonize (zone->lonLeft) > 0.0) && (lonCanonize (zone->lonRight) < 0.0)) {
+   if ((norm180 (zone->lonLeft) > 0.0) && (norm180 (zone->lonRight) < 0.0)) {
       zone -> anteMeridian = true;
    }
    else {
       zone -> anteMeridian = false;
-      zone->lonLeft = lonCanonize (zone->lonLeft);
-      zone->lonRight = lonCanonize (zone->lonRight);
+      zone->lonLeft = norm180 (zone->lonLeft);
+      zone->lonRight = norm180 (zone->lonRight);
    }
    zone->latMin = fmin (lat1, lat2);
    zone->latMax = fmax (lat1, lat2);
@@ -283,7 +283,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow) {
       // Loop on all the lat/lon/values.
       while (codes_grib_iterator_next(iter, &lat, &lon, &val)) {
          if (! (zone -> anteMeridian))
-            lon = lonCanonize (lon);
+            lon = norm180 (lon);
          // printf ("lon : %.2lf\n", lon);
          iGrib = indexOf (timeStep, lat, lon, zone);
    

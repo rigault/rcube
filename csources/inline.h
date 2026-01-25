@@ -25,20 +25,22 @@ static inline bool isSeaTolerant (char * isSeaArray, double lat, double lon) {
        || isSeaArray [(iLatSup * 3601) + iLonSup];
 }
 
-/*! return lon on ]-180, 180 ] interval */
-static inline double lonCanonize (double lon) {
-  return remainder (lon, 360.0);
+/*! return angle on [0, 360 ] interval */
+static inline double norm360(double a) {
+  a = fmod(a, 360.0);
+  if (a < 0) a += 360.0;
+  return a;
 }
-/* equivalent to:
-   lon = fmod (lon, 360);
-   if (lon > 180) lon -= 360;
-   else if (lon <= -180) lon += 360;
-   return lon;
-*/
+
+/*! return angle on ]-180, 180 ] interval 
+ * Useful for for lon and twa */
+static inline double norm180(double a) {
+  return remainder(a, 360.0);   // (-180, 180]
+}
 
 /*! if antemeridian -180 < lon < 360. Normal case : -180 < lon <= 180 */
 static inline double lonNormalize (double lon, bool anteMeridian) {
-   lonCanonize (lon);
+   norm180 (lon);
    if (anteMeridian && lon < 0) lon += 360;
    return lon;
 }
@@ -406,7 +408,7 @@ static inline void orthoFindInterPoint(double lat1, double lon1,
    double lambdaR = atan2(y, x);
 
    *latR = phiR * RAD_TO_DEG;
-   *lonR = lonCanonize(lambdaR * RAD_TO_DEG);
+   *lonR = norm180(lambdaR * RAD_TO_DEG);
 }
 
 /*! true if day light, false if night
@@ -419,7 +421,7 @@ static inline void orthoFindInterPoint(double lat1, double lon1,
  *    - polar caps: rough month-based rule
  */
 static inline bool isDay(double t, long dataDate, long dataTime, double lat, double lon) {
-   lon = lonCanonize(lon);
+   lon = norm180(lon);
 
    // Polar case: only beginning og grib considered GRIB
    int month = (int)((dataDate % 10000) / 100);   // 1..12

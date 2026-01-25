@@ -61,7 +61,7 @@ extern char   *newDateWeekDay (long intDate, double myTime, char *res, size_t ma
 extern char   *newDateWeekDayVerbose (long intDate, double myTime, char *res, size_t maxLen);
 extern bool   readParam (const char *fileName, bool initDisp);
 extern bool   writeParam (const char *fileName, bool header, bool password, bool yaml);
-extern bool   readIsSea (const char *fileName);
+extern char   *readIsSea (const char *fileName);
 extern void   updateIsSeaWithForbiddenAreas (void);
 extern bool   hasSlash (const char *name);
 extern bool   mostRecentFile (const char *directory, const char *pattern0, const char *pattern1, char *name, size_t maxLen);

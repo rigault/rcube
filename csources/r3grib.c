@@ -183,12 +183,12 @@ static int consistentGrib (const Zone *zone, int iFlow, double epsilon, int *nLa
    for (size_t k = 0; k < zone->nTimeStamp; k++) {
       for (int i = 0; i < zone->nbLat; i++) {
          for (int j = 0; j < zone->nbLon; j++) {
-            n += 1,
-	         iGrib = (k * zone->nbLat * zone->nbLon) + (i * zone->nbLon) + j;
+            n += 1;
+	          iGrib = (k * zone->nbLat * zone->nbLon) + (i * zone->nbLon) + j;
             lat = zone->latMin + i * zone->latStep;  
             lon = zone->lonLeft + j * zone->lonStep;
             if (! zone->anteMeridian) 
-               lon = lonCanonize (lon);
+               lon = norm180 (lon);
             if (fabs (lat - tGribData [iFlow][iGrib].lat) > epsilon) {
                *nLatSuspects += 1;
             }
@@ -212,99 +212,99 @@ bool checkGribInfoToStr (int type, Zone *zone, char *buffer, size_t maxLen) {
    char str [MAX_SIZE_LINE] = "";
    const char *separator = "----------------------------------------------------------------------------------"; 
    snprintf (str, MAX_SIZE_LINE, "\n%s\nCheck Grib Info: %s\n%s\n", separator, (type == WIND) ? "Wind" : "Current", separator);
-   g_strlcat (buffer, str, maxLen);
+   strlcat (buffer, str, maxLen);
 
    if (zone->nbLat <= 0) {
       snprintf (str, MAX_SIZE_LINE, "No %s grib available\n", (type == WIND) ? "Wind" : "Current");
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
       return true;
    }
    if ((zone->nDataDate != 1) || (zone->nDataTime != 1)) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "Expected nDataDate = 1 and nDataTime = 1. nDataDate: %zu, nDataTime: %zu\n", zone->nDataDate, zone->nDataTime);
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
    }
    if (zone->stepUnits != 1) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "Expected stepUnits = 1, stepUnits = %ld\n", zone->stepUnits);
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
    }
    if (zone->numberOfValues != zone->nbLon * zone->nbLat) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "Expected numberofValues = nbLon x nbLat = %ld, but numberOfValues = %ld\n",\
          zone->nbLon * zone->nbLat, zone->numberOfValues);
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
    }
    if (! (fabs ((zone->lonRight - zone->lonLeft) - zone->lonStep * (zone->nbLon - 1)) < EPSILON)) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "Expected difference between lonLeft and lonRight is %.2lf, found: %.2lf\n",\
          (zone->lonStep * (zone->nbLon - 1)), zone->lonRight - zone->lonLeft);
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
    }
    if (! (fabs((zone->latMax - zone->latMin) - (zone->latStep * (zone->nbLat - 1)) ) < EPSILON )) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "Expected difference between latMax and latMin is %.2lf, found: %.2lf\n",\
          (zone->latStep * (zone->nbLat - 1)), zone->latMax - zone->latMin);
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
    }
    if ((zone->nTimeStamp) < 1 ) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "Expected nTimeStamp >= 1, nTimeStamp =  %zu\n", zone->nTimeStamp);
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
    }
 
    nVal = consistentGrib (zone, type, (type == WIND) ? windEpsilon : currentEpsilon, &nLatSuspects, &nLonSuspects);
    if ((nLatSuspects > 0) || (nLonSuspects > 0)) {
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "n Val suspect Lat: %d, ratio: %.2lf %% \n", nLatSuspects, 100 * (double)nLatSuspects/(double) (nVal));
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
       snprintf (str, MAX_SIZE_LINE, "n Val suspect Lon: %d, ratio: %.2lf %% \n", nLonSuspects, 100 * (double)nLonSuspects/(double) (nVal));
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
    }
    snprintf (str, MAX_SIZE_LINE, "n Val Values: %d\n", nVal); // at least this line
-   g_strlcat (buffer, str, maxLen);
+   strlcat (buffer, str, maxLen);
    snprintf (str, MAX_SIZE_LINE, "%s\n", (zone->wellDefined) ? (zone->allTimeStepOK) ? "Wind Zone Well defined" : "All Zone TimeSteps are not defined" : "Zone Undefined");
-   g_strlcat (buffer, str, maxLen);
+   strlcat (buffer, str, maxLen);
    
    if (!uvPresentGrib (zone)) { 
 	   OK = false;
       snprintf (str, MAX_SIZE_LINE, "lack u or v\n");
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
    }
    
    if (! timeStepRegularGrib (zone)) {
       OK = false;
 	   snprintf (str, MAX_SIZE_LINE, "timeStep is NOT REGULAR !!!\n");
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
    }
    
    // check grib missing or strange values and out of zone for wind
    if (! checkGrib (zone, type, &sCheck)) {
       OK = false;
       snprintf (str, MAX_SIZE_LINE, "out zone Values: %d, ratio: %.2lf %% \n", sCheck.outZone, 100 * (double)sCheck.outZone/(double) (nVal));
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
 
       snprintf (str, MAX_SIZE_LINE, "u missing Values: %d, ratio: %.2lf %% \n", sCheck.uMissing, 100 * (double)sCheck.uMissing/(double) (nVal));
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
       snprintf (str, MAX_SIZE_LINE, "u strange Values: %d, ratio: %.2lf %% \n", sCheck.uStrange, 100 * (double)sCheck.uStrange/(double) (nVal));
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
 
       snprintf (str, MAX_SIZE_LINE, "v missing Values: %d, ratio: %.2lf %% \n", sCheck.vMissing, 100 * (double)sCheck.vMissing/(double) (nVal));
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
       snprintf (str, MAX_SIZE_LINE, "v strange Values: %d, ratio: %.2lf %% \n", sCheck.vStrange, 100 * (double)sCheck.vStrange/(double) (nVal));
-      g_strlcat (buffer, str, maxLen);
+      strlcat (buffer, str, maxLen);
 
       if (type == WIND) {
          snprintf (str, MAX_SIZE_LINE, "w missing Values: %d, ratio: %.2lf %% \n", sCheck.wMissing, 100 * (double)sCheck.wMissing/(double) (nVal));
-         g_strlcat (buffer, str, maxLen);
+         strlcat (buffer, str, maxLen);
          
          snprintf (str, MAX_SIZE_LINE, "w strange Values: %d, ratio: %.2lf %% \n", sCheck.wStrange, 100 * (double)sCheck.wStrange/(double) (nVal));
-         g_strlcat (buffer, str, maxLen);
+         strlcat (buffer, str, maxLen);
 
          snprintf (str, MAX_SIZE_LINE, "g missing Values: %d, ratio: %.2lf %% \n", sCheck.gMissing, 100 * (double)sCheck.gMissing/(double) (nVal));
-         g_strlcat (buffer, str, maxLen);
+         strlcat (buffer, str, maxLen);
          snprintf (str, MAX_SIZE_LINE, "g strange Values: %d, ratio: %.2lf %% \n", sCheck.gStrange, 100 * (double)sCheck.gStrange/(double) (nVal));
-         g_strlcat (buffer, str, maxLen);
+         strlcat (buffer, str, maxLen);
       }
    } 
    return OK;
@@ -327,13 +327,13 @@ bool checkGribToStr (bool hasCurrentGrib, char *buffer, size_t maxLen) {
       if (! geoIntersectGrib (&zone, &currentZone)) {
          OK = false;
          snprintf (str, MAX_SIZE_LINE, "\nCurrent and wind grib have no common geo\n");
-         g_strlcat (buffer, str, maxLen);
+         strlcat (buffer, str, maxLen);
       }
       // check time intersection between current and wind
       if (! timeIntersectGrib (&zone, &currentZone)) {
          OK = false;
 	      snprintf (str, MAX_SIZE_LINE, "\nCurrent and wind grib have no common time\n");
-         g_strlcat (buffer, str, maxLen);
+         strlcat (buffer, str, maxLen);
       }
    }
    return OK;
@@ -349,7 +349,7 @@ static inline void findTimeAround (double t, int *iTInf, int *iTSup, const Zone 
    }
    for (k = 0; k < zone->nTimeStamp; k++) {
       if (t == zone->timeStamp [k]) {
-         *iTInf = k;
+        *iTInf = k;
 	      *iTSup = k;
 	      return;
       }
@@ -415,7 +415,7 @@ static bool findFlow (double lat, double lon, double t, double *rU, double *rV, 
    int iT0, iT1;
    FlowP windP00, windP01, windP10, windP11;
    if ((!zone->wellDefined) || (zone->nbLat == 0) || (! isInZone (lat, lon, zone) && par.constWindTws == 0) || (t < 0)){
-      *rU = 0, *rV = 0, *rG = 0; *rW = 0;
+      *rU = 0; *rV = 0; *rG = 0; *rW = 0;
       return false;
    }
    
@@ -535,7 +535,7 @@ char *gribToStr (const Zone *zone, char *str, size_t maxLen) {
    
    for (size_t i = 0; i < sizeof(meteoTab) / sizeof(meteoTab[0]); i++) // search name of center
      if (meteoTab [i].id == zone->centreId) 
-        g_strlcpy (centreName, meteoTab [i].name, sizeof (centreName));
+        strlcpy (centreName, meteoTab [i].name, sizeof (centreName));
          
    newDate (zone->dataDate [0], zone->dataTime [0]/100.0, strTmp, sizeof (strTmp));
    snprintf (str, maxLen, "Centre ID: %ld %s   %s   Ed number: %ld\nnMessages: %d\nstepUnits: %ld\n# values : %ld\n",\
@@ -545,39 +545,39 @@ char *gribToStr (const Zone *zone, char *str, size_t maxLen) {
       lonToStr (zone->lonLeft, par.dispDms, strLon0, sizeof (strLon0)),\
       latToStr (zone->latMax, par.dispDms, strLat1, sizeof (strLat1)),\
       lonToStr (zone->lonRight, par.dispDms, strLon1, sizeof (strLon1)));
-   g_strlcat (str, line, maxLen);   
+   strlcat (str, line, maxLen);   
    snprintf (line, MAX_SIZE_LINE, "LatStep  : %04.4f° LonStep: %04.4f°\n", zone->latStep, zone->lonStep);
-   g_strlcat (str, line, maxLen);   
+   strlcat (str, line, maxLen);   
    snprintf (line, MAX_SIZE_LINE, "Nb Lat   : %ld      Nb Lon : %ld\n", zone->nbLat, zone->nbLon);
-   g_strlcat (str, line, maxLen);   
+   strlcat (str, line, maxLen);   
    if (zone->nTimeStamp < 8) {
       snprintf (line, MAX_SIZE_LINE, "TimeStamp List of %zu : [ ", zone->nTimeStamp);
-      g_strlcat (str, line, maxLen);   
+      strlcat (str, line, maxLen);   
       for (size_t k = 0; k < zone->nTimeStamp; k++) {
          snprintf (line, MAX_SIZE_LINE, "%ld ", zone->timeStamp [k]);
-         g_strlcat (str, line, maxLen);   
+         strlcat (str, line, maxLen);   
       }
-      g_strlcat (str, "]\n", maxLen);
+      strlcat (str, "]\n", maxLen);
    }
    else {
       snprintf (line, MAX_SIZE_LINE, "TimeStamp List of %zu : [%ld, %ld, ..%ld]\n", zone->nTimeStamp,\
          zone->timeStamp [0], zone->timeStamp [1], zone->timeStamp [zone->nTimeStamp - 1]);
-      g_strlcat (str, line, maxLen);   
+      strlcat (str, line, maxLen);   
    }
 
    snprintf (line, MAX_SIZE_LINE, "Shortname List: [ ");
-   g_strlcat (str, line, maxLen);   
+   strlcat (str, line, maxLen);   
    for (size_t k = 0; k < zone->nShortName; k++) {
       snprintf (line, MAX_SIZE_LINE, "%s ", zone->shortName [k]);
-      g_strlcat (str, line, maxLen);   
+      strlcat (str, line, maxLen);   
    }
-   g_strlcat (str, "]\n", maxLen);
+   strlcat (str, "]\n", maxLen);
    if ((zone->nDataDate > 1) || (zone->nDataTime > 1)) {
       snprintf (line, MAX_SIZE_LINE, "Warning number of Date: %zu, number of Time: %zu\n", zone->nDataDate, zone->nDataTime);
-      g_strlcat (str, line, maxLen);   
+      strlcat (str, line, maxLen);   
    }
    snprintf (line, MAX_SIZE_LINE, "Zone is       :  %s\n", (zone->wellDefined) ? "Well defined" : "Undefined");
-   g_strlcat (str, line, maxLen);   
+   strlcat (str, line, maxLen);   
    return str;
 }
 
@@ -618,7 +618,7 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
    }
    for (size_t i = 0; i < N_METEO_ADMIN; i++) {// search name of center
       if (meteoTab [i].id == gZone.centreId) {
-         g_strlcpy (centreName, meteoTab [i].name, sizeof (centreName));
+         strlcpy (centreName, meteoTab [i].name, sizeof (centreName));
          break;
       }
    }
@@ -643,18 +643,18 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
 
   for (size_t i = 0; i < gZone.nTimeStamp; i += 1) {
       snprintf (str, sizeof (str), "%ld%s", gZone.timeStamp [i], (i < gZone.nTimeStamp -1) ? ", " : ""); // no comma for last
-      g_strlcat (out, str, maxLen);
+      strlcat (out, str, maxLen);
    }
-   g_strlcat (out, "],\n", maxLen);
+   strlcat (out, "],\n", maxLen);
 
    snprintf (str, sizeof (str), "  \"nShortName\": %zu, \"shortNames\": [", gZone.nShortName);
-   g_strlcat (out, str, maxLen);
+   strlcat (out, str, maxLen);
 
    for (size_t i = 0; i < gZone.nShortName; i += 1) {
       snprintf (str, sizeof (str), "\"%s\"%s", gZone.shortName [i], (i < gZone.nShortName -1) ? ", " : ""); // no comma for last
-      g_strlcat (out, str, maxLen);
+      strlcat (out, str, maxLen);
    }
-   g_strlcat (out, "],\n", maxLen);
+   strlcat (out, "],\n", maxLen);
 
    tm_info = localtime_r (&st.st_mtime, &tm_buf);
    if (tm_info) strftime(strTime, sizeof strTime, "%Y-%m-%d %H:%M:%S", tm_info);
@@ -662,14 +662,14 @@ char *gribToStrJson (const char *fileName, char *out, size_t maxLen) {
    char *gribBaseName = g_path_get_basename (fileName);
    snprintf (str, sizeof (str),  "  \"name\": \"%s\", \"fileSize\": %ld, \"fileTime\": \"%s\",\n", 
             gribBaseName, st.st_size, strTime);
-   g_strlcat (out, str, maxLen);
+   strlcat (out, str, maxLen);
    free (gribBaseName);
 
    if ((gZone.nDataDate != 1) || (gZone.nDataTime != 1)) {
       snprintf (infoStr, sizeof (infoStr), "Warning number of Date: %zu, number of Time: %zu", gZone.nDataDate, gZone.nDataTime);
    }
    snprintf (str, sizeof (str), "  \"info\": \"%s\"\n}\n", infoStr);
-   g_strlcat (out, str, maxLen);
+   strlcat (out, str, maxLen);
    return out;
 }
 

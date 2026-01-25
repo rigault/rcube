@@ -47,7 +47,6 @@ char *gribReaderVersion (char *str, size_t maxLen) {
 static inline uint8_t  rdU8(const uint8_t *p)   { return p[0]; }
 static inline uint16_t rdU16BE(const uint8_t *p){ return (uint16_t)((p[0]<<8)|p[1]); }
 static inline uint32_t rdU32BE(const uint8_t *p){ return (uint32_t)((p[0]<<24)|(p[1]<<16)|(p[2]<<8)|p[3]); }
-static inline int32_t  rdI32BE(const uint8_t *p){ return (int32_t)rdU32BE(p); }
 static inline uint64_t rdU64BE(const uint8_t *p){ return ((uint64_t)rdU32BE(p)<<32) | (uint64_t)rdU32BE(p+4); }
 
 // Remplace la lecture brute int16 par une lecture "flexible":
@@ -332,8 +331,6 @@ static bool parseSec3LatLon(const uint8_t *s, uint32_t bodyLen, Sec3Grid *out){
 }
 
 // ---- Scan flags helpers (WMO): bit=1 means negative direction for i/j ------
-static inline bool scanIPlus(int scan){ return ( (scan & 0x80) == 0 ); }  // 0 => +i
-static inline bool scanJPlus(int scan){ return ( (scan & 0x40) == 0 ); }  // 0 => +j
 static inline bool scanAdjI (int scan){ return ( (scan & 0x20) == 0 ); }  // 0 => adjacent along i
 static inline bool scanBoustro(int scan){ return ( (scan & 0x10) != 0 ); } // 1 => boustrophedon
 
@@ -763,15 +760,15 @@ bool readGribParameters(const char *fileName, Zone *zone){
    zone->latMin = fmin(latStart, latEnd);
    zone->latMax = fmax(latStart, latEnd);
 
-   zone->lonLeft  = lonCanonize(lonStart);
-   zone->lonRight = lonCanonize(lonEnd);
+   zone->lonLeft  = norm180(lonStart);
+   zone->lonRight = norm180(lonEnd);
 
-   if(lonCanonize(zone->lonLeft) > 0.0 && lonCanonize(zone->lonRight) < 0.0){
+   if(norm180(zone->lonLeft) > 0.0 && norm180(zone->lonRight) < 0.0){
       zone->anteMeridian = true;   // crosses +180/-180
    } else {
       zone->anteMeridian = false;
-      zone->lonLeft  = lonCanonize(zone->lonLeft);
-      zone->lonRight = lonCanonize(zone->lonRight);
+      zone->lonLeft  = norm180(zone->lonLeft);
+      zone->lonRight = norm180(zone->lonRight);
    }
 
    zone->numberOfValues = (long)zone->nbLon * (long)zone->nbLat;
@@ -816,7 +813,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow){
       double lat = zone->latMin + j * zone->latStep * ((zone->latMax>=zone->latMin)?1.0:-1.0);
       for(int i=0;i<zone->nbLon;i++){
          double lon = zone->lonLeft + i * zone->lonStep;
-         if(!zone->anteMeridian) lon = lonCanonize(lon);
+         if(!zone->anteMeridian) lon = norm180(lon);
          for(size_t t=0;t<zone->nTimeStamp;t++){
             long k = idxTij((int)t, i, j, zone);
             tGribData[iFlow][k].lat = (float)lat;
@@ -897,7 +894,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow){
 
                      double lat = lat1 + j * dj;
                      double lon = lon1 + i * di;
-                     if(!zone->anteMeridian) lon = lonCanonize(lon);
+                     if(!zone->anteMeridian) lon = norm180(lon);
 
                      long iLat = indLat(lat, zone);
                      long iLon = indLonWrap(lon, zone);
@@ -939,7 +936,7 @@ bool readGribAll (const char *fileName, Zone *zone, int iFlow){
 
                      double lat = lat1 + j * dj;
                      double lon = lon1 + i * di;
-                     if(!zone->anteMeridian) lon = lonCanonize(lon);
+                     if(!zone->anteMeridian) lon = norm180(lon);
 
                      long iLat = indLat(lat, zone);
                      long iLon = indLonWrap(lon, zone);
