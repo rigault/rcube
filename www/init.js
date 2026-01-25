@@ -114,6 +114,7 @@ function additionalInit() {
    lastPointLayer = L.layerGroup().addTo(map);
 
    meters(map);
+   twaRoutesGroup.addTo(map);
 }
 
 /**

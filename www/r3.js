@@ -100,7 +100,7 @@ const colorMap = ["red", "green", "blue", "orange", "black"];
 // equivalent server side: enum {REQ_TEST, REQ_ROUTING, ...}; // type of request
 const REQ = {TEST: 0, ROUTING: 1, COORD: 2, FORBID_ZONE: 3, POLAR: 4, 
              GRIB: 5, DIR: 6, PAR_RAW: 7, PAR_JSON: 8,
-             INIT: 9, FEEDBACK:10, DUMP_FILE:11, NEAREST_PORT:12, MARKS: 13, GRIB_CHECK: 14, GPX_ROUTE: 15, GRIB_DUMP: 16}; 
+             INIT: 9, FEEDBACK:10, DUMP_FILE:11, NEAREST_PORT:12, MARKS: 13, GRIB_CHECK: 14, GPX_ROUTE: 15, GRIB_DUMP: 16, TWA: 17}; 
 
 const MARKER = encodeURIComponent(`<?xml version="1.0" encoding="UTF-8" standalone="no"?>
         <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
@@ -363,7 +363,7 @@ function loadAppState() {
    if (savedPOIs) POIs = JSON.parse (savedPOIs);
    if (savedWaypoints) myWayPoints = JSON.parse(savedWaypoints);
    if (savedMapMode) mapMode = savedMapMode;
-   //  if (savedRouteParam) routeParam = JSON.parse (savedRouteParam);
+   if (savedRouteParam) routeParam = JSON.parse (savedRouteParam);
 }
 
 /**
@@ -1049,8 +1049,6 @@ async function requestTwo () {
       const { boatName, routeData } = response;
       console.log ("requestTwo 1/2:" + JSON.stringify(routeData, null, 2));
       route = routeData; // global variable
-      // showRouteReport (routeData);  
-      // finalUpdate (boatName);
       OK0 = routeData[boatName].destinationReached;
       duration = routeData[boatName].duration;
    } else {
@@ -1060,13 +1058,13 @@ async function requestTwo () {
    }
    
    routeParam.isoStep = savedIsoStep; // idem with requested timestep
-   if (adjustIsoStep (routeParam, duration)) {
+   /*if (adjustIsoStep (routeParam, duration)) {
       const mn = routeParam.isoStep / 60;
       await Swal.fire ("Time Step Modified", 
                  `The time step has been set to higher value: ${mn} mn`, 
                  "Info"); 
    }
-
+   */ 
    requestBody = buildBodyRequest (competitors[routeParam.iBoat - 1], myWayPoints, routeParam);
    if (clipBoard) navigator.clipboard.writeText (requestBody);
    response = await handleRequest (requestBody);
@@ -1085,11 +1083,11 @@ async function requestTwo () {
       await Swal.fire({
          icon: "error",
          title: "Reachable but failed with proposed timeStep",
-         text: "Try lower timestep",
+         text: "Try Higher timestep",
          confirmButtonText: "OK"
       });
    }
-   showRouteReport (routeData);  
+   showRouteReport (routeData[boatName], DMSType);  
    finalUpdate (boatName);
 }
 
@@ -1110,7 +1108,7 @@ async function requestOne () {
       const { boatName, routeData } = response;
       console.log ("requestOne:" + JSON.stringify(routeData, null, 2));
       route = routeData; // global variable
-      showRouteReport (routeData);  
+      showRouteReport (routeData[boatName], DMSType);  
       finalUpdate (boatName);
    } else {
       console.error('Request failed');
@@ -1137,13 +1135,12 @@ function request () {
 
    if (routeParam.nTry > 1 && routeParam.timeInterval !== 0) {
       requestBestTime ();
-      return;
    }
-   if (routeParam.iBoat === 0) { // iboat == 0 means all competitors
+   else if (routeParam.iBoat === 0) { // iboat == 0 means all competitors
       requestAllCompetitors ();
-      return;
    }
-   requestTwo ();
+   else requestTwo ();
+   saveAppState ();
 }
 
 /**
@@ -1344,6 +1341,7 @@ function clearRoutes () {
    route = null;
    index = 0;
    competitors.forEach (refreshMarker);
+   clearTwaRoutes ();
    updateStatusBar (route);
 }
 
@@ -1504,7 +1502,14 @@ function arrowEmojiFromAngle(deg) {
  */
 function updateBindPopup (competitor) {
    const epsilon = 0.1;
-   let [wp, lat, lon, time, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor] = route [competitor.name].track [index];
+   if (! competitor || !competitor.name || ! route || ! route[competitor.name]) return;
+   const r = route?.[competitor?.name];
+   const track = r?.track;
+   if (!Array.isArray(track)) return;
+   const point = track[index];
+   if (!point) return;          // end of error management
+
+   let [wp, lat, lon, time, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor] = point;
    hdg = (360 + hdg) % 360;
    const propulse = (motor ? "Motor": "Sail: " + sail) ?? "-";
    const theDate = new Date (routeParam.startTime.getTime() + time * 1000);
@@ -1692,10 +1697,10 @@ function updateStatusBar (route = null, warning = null) {
    }
    document.getElementById("infoRoute").innerHTML = "";
    if (time.length > 0) document.getElementById("infoTime").innerHTML = time; 
-   if (polar.length > 0) document.getElementById("infoRoute").innerHTML += "    ⛵ polar: " + polar; 
-   if (routeParam.withWaves && wavePolar.length > 0) document.getElementById("infoRoute").innerHTML += "    🌊 wavePolar: " + wavePolar;
-   if (grib.length > 0) document.getElementById("infoRoute").innerHTML += "    💨 Grib: " + grib;
-   if (currentGrib.length > 0) document.getElementById("infoRoute").innerHTML += "    🔄 currentGrib: " + currentGrib;
+   if (polar.length > 0) document.getElementById("infoRoute").innerHTML += "    Polar: " + polar; 
+   if (routeParam.withWaves && wavePolar.length > 0) document.getElementById("infoRoute").innerHTML += "    wavePolar: " + wavePolar;
+   if (grib.length > 0) document.getElementById("infoRoute").innerHTML += "    Grib: " + grib;
+   if (currentGrib.length > 0) document.getElementById("infoRoute").innerHTML += "    currentGrib: " + currentGrib;
    if (warning) document.getElementById("infoRoute").innerHTML +=` <span class="warning-blink"> ⚠️ ${warning}</span>`;
 }
 

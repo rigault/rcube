@@ -5,7 +5,7 @@
  * on each point of sail.
  *
  * @param {Array} track - Array of points, each point shaped like:
- *   [indexWp, lat, lon, time, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor]
+ *   [indexWp, lat, lon, time, dist, sog, twd, tws, cog, twa, g, w, stamina, sail, motor]
  * @param {string} containerId - DOM element id where the Plotly chart will be drawn
  * @returns {Object} stats - Raw stats including time buckets and totalTime
  */
@@ -85,14 +85,17 @@ function statRoute(track, containerId) {
             y: -0.05
          }
       };
-
-      Plotly.newPlot(containerId, data, layout);
+      const plotlyConf = {
+        responsive: true,
+        displaylogo: false,
+        displayModeBar: false,
+        staticPlot: isMobile()
+      };
+ 
+      Plotly.newPlot(containerId, data, layout, plotlyConf);
    }
 
-   return {
-      buckets,
-      totalTime
-   };
+   return { buckets, totalTime };
 }
 
 /**
@@ -101,28 +104,21 @@ function statRoute(track, containerId) {
  *
  * @param {Object} routeData 
  */
-function displayStatRoute(routeData) {
-   // Get first available boat name in routeData
-   let boatName = null;
-   if (routeData) {
-      const keys = Object.keys(routeData);
-      if (keys.length > 0) boatName = keys[0];
-   }
-
+function displayStatRoute(routeData, type) {
    // Basic validation
-   if (!routeData || !boatName || !routeData[boatName]) {
-      Swal.fire("Error", `The route for "${boatName || "N/A"}" does not exist.`, "error");
+   if (!routeData) {
+      Swal.fire("Error", `The route does not exist.`, "error");
       return;
    }
 
-   const track = routeData[boatName].track;
+   const track = routeData.track;
    if (!Array.isArray(track) || track.length < 2) {
-      Swal.fire("Error", `No usable track data for "${boatName}".`, "error");
+      Swal.fire("Error", `No usable track data.`, "error");
       return;
    }
 
    Swal.fire({
-      title: `Points of sails - ${boatName}`,
+      title: `Points of sails`,
       html: `
          <div style="display:flex; flex-direction:column; gap:1rem; align-items:center; width:100%;">
             <div id="routeStatsPlot" style="width:320px; height:320px;"></div>
@@ -135,100 +131,54 @@ function displayStatRoute(routeData) {
       confirmButtonText: "Back",
 
       didOpen: () => {
-         // 1. compute stats + render donut
-         const stats = statRoute(track, "routeStatsPlot");
+         statRoute(track, "routeStatsPlot");
       }
-   }).then ((res) => {if (res.isConfirmed) showRouteReport (route)});  
+   }).then ((res) => {if (res.isConfirmed) showRouteReport (routeData, type)});  
 }
 
-
-/**
- * Calculates the number of sail changes and tack/gybe transitions (amure changes)
- * from a given sailing track.
+/*
+ * Build Html meta datas for routeData
  *
- * A sail change is detected when the `sail` value changes between two consecutive steps.
- * An amure change is detected when the sign of the True Wind Angle (`twa`) changes,
- * indicating a tack or gybe (crossing the wind).
- *
- * @param {Array<Array<number>>} track - The sailing track, where each entry is an array
- *   containing [lat, lon, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor].
- *
- * @returns {{nSailChange: number, nAmureChange: number}} An object with the number of sail changes
- *   and amure changes detected in the track.
+ * @param {Object} routeData 
  */
-function statChanges (track) {
-   const NIL = -10000;
-   let nSailChange = 0;
-   let nAmureChange = 0;
-   let oldSail = NIL;
-   let oldTwa = NIL; 
-   let sumDist = 0;
-   for (let i = 0; i < track.length; i++) {
-      let [indexWp, lat, lon, time, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor] = track[i];
-      if (oldSail !== NIL && oldSail !== sail) nSailChange += 1;
-      if (oldTwa !== NIL && oldTwa * twa < 0) nAmureChange += 1;
-      oldSail = sail;
-      oldTwa = twa;
-      sumDist += dist; 
-   }
-   return { nSailChange, nAmureChange, sumDist };
-}
+function buildMeta (routeData) {
+  const total = routeData.totDist;
+  if (total < 0) return;
+  const pMoteur  = (routeData.motorDist  / total * 100).toFixed(0);
+  const pTribord = (routeData.starboardDist / total * 100).toFixed(0);
+  const pBabord  = (routeData.portDist  / total * 100).toFixed(0);
 
-function controlDistance (boat, sumDist) {
-   const sum = boat.motorDist + boat.portDist + boat.starboardDist;
-   Swal.fire({
-      icon: 'info',
-      title: 'distance',
-      html: `sumDist: ${sumDist.toFixed(2)}<br> totDist: ${boat.totDist.toFixed(2)}<br> motor + port + starbord dist: ${sum.toFixed(2)}`,
-   });
-}
-
-function buildMeta (boat) {
-   const total = boat.totDist;
-   const pMoteur  = total > 0 ? (boat.motorDist  / total * 100).toFixed(0) : 0;
-   const pTribord = total > 0 ? (boat.starboardDist / total * 100).toFixed(0) : 0;
-   const pBabord  = total > 0 ? (boat.portDist  / total * 100).toFixed(0) : 0;
-   const { nSailChange, nAmureChange, sumDist } = statChanges(boat.track);
-
-   const content = 
-   `<div style="border: 1px; width: 800px; margin: 0 auto; text-align: center;"> 
-      <div style="margin-bottom:20px; display:flex; justify-content:center; font-size:15px; ">
-         Total Distance: ${total.toFixed(2)} nm, Average Speed: ${(3600 * boat.totDist/boat.duration).toFixed(2)} kn, Sail Changes: ${nSailChange}, Amure Changes: ${nAmureChange}
-      </div>
-      <div style="font-size:0.9rem; display:flex; justify-content:center; gap: 10px; ">
-         <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#999;margin-right:4px;"></span>Motor ${pMoteur}%&nbsp; </div>
-         <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:green;margin-right:4px;"></span>Starboard ${pTribord}%&nbsp;</div>
-         <div><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:red;margin-right:4px;"></span>Port ${pBabord}%&nbsp;</div>
-      </div>
-   </div>
-`;
+  const content =
+    `<div style="width:100%; margin:0; padding:6px 0; text-align:center;">
+        <div style="font-size:11px; display:flex; justify-content:center; gap:10px; margin:0;">
+           <div style="margin:0;"><span style="display:inline-block;width:10px;height:10px;
+              border-radius:2px;background:#999;margin-right:4px;"></span>Motor ${pMoteur}% ${routeData.motorDist} NM</div>
+           <div style="margin:0;"><span style="display:inline-block;width:10px;height:10px;
+              border-radius:2px;background:green;margin-right:4px;"></span>Starboard ${pTribord}% ${routeData.starboardDist} NM</div>
+           <div style="margin:0;"><span style="display:inline-block;width:10px;height:10px;
+              border-radius:2px;background:red;margin-right:4px;"></span>Port ${pBabord}% ${routeData.portDist} NM</div>
+        </div>
+        <div style="font-size:11px; margin:0;">
+           <strong>TotalDist:</strong> ${total} NM, 
+           <strong>Average Speed:</strong> ${(3600 * total / routeData.duration).toFixed(2)} Kn<br>
+           <strong>Sail Changes:</strong> ${routeData.nSailChange} &nbsp;
+           <strong>Amure Changes:</strong> ${routeData.nAmureChange}
+        </div>
+     </div>
+   `;
    return content;
 }
-
 
 /**
  * Displays a graphical representation of the route data using Plotly.
  * 
  * @param {Object} routeData - The dataset containing route information.
  */
-function showRouteReport(routeData) {
-  let boatName;
-  if (routeData) boatName = Object.keys(routeData)[0];
-
-  if (!routeData || !boatName || !routeData[boatName]) {
-    Swal.fire({
-      icon: "error",
-      title: "Route Not Found",
-      text: `The route for "${boatName}" does not exist.`
-    });
-    return;
-  }
-
-  const boat = routeData[boatName];
-  const durationFormatted = formatDuration(boat.duration);
-  const trackPoints = boat.track.length;
-  const isocTimeStep = boat.isocTimeStep || 3600;
-  const startTime = boat.epochStart;
+function buildRouteGraph (routeData, graphContainer) {
+  const durationFormatted = formatDuration(routeData.duration);
+  const trackPoints = routeData.track.length;
+  const isocTimeStep = routeData.isocTimeStep || 3600;
+  const startTime = routeData.epochStart;
 
   const times = [];
   const sogData = [];
@@ -244,16 +194,16 @@ function showRouteReport(routeData) {
   const ySailLine = -1;
 
   // maxY
-  for (let i = 0; i < boat.track.length; i++) {
-    const row = boat.track[i];
+  for (let i = 0; i < routeData.track.length; i++) {
+    const row = routeData.track[i];
     const sog = row[5];
     const tws = row[7];
     const g   = row[10];
     maxY = Math.max(maxY, sog, tws, g * MS_TO_KN);
   }
 
-  for (let i = 0; i < boat.track.length; i++) {
-    const [indexWp, lat, lon, time, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor] = boat.track[i];
+  for (let i = 0; i < routeData.track.length; i++) {
+    const [indexWp,,, time,, sog, twd, tws,, twa, g, w,, sail, ] = routeData.track[i];
 
     const currentTime = new Date((startTime + time) * 1000);
     times.push(currentTime);
@@ -318,7 +268,7 @@ function showRouteReport(routeData) {
   ];
 
   // arrows density
-  let modulo = Math.round(boat.track.length / 20);
+  let modulo = Math.round(routeData.track.length / 20);
   if (modulo < 1) modulo = 1;
 
   const annotations = windArrows
@@ -332,14 +282,11 @@ function showRouteReport(routeData) {
       textangle: 90 + twd
     }));
 
-  const startDate = new Date(startTime * 1000);
-  const lastDate = new Date((startTime + boat.duration) * 1000);
-
   const mobile = isMobile();
 
   const layout = {
-    autosize: false,
-    margin: mobile ? { l: 28, r: 12, t: 55, b: 55 } : { l: 40, r: 16, t: 55, b: 60 },
+    autosize: true,
+    margin: mobile ? { l: 28, r: 12, t: 55, b: 55 } : { l: 30, r: 10, t: 20, b: 20 },
 
     xaxis: { title: "", tickformat: "%H:%M\n%d-%b", type: "date", automargin: false },
     yaxis: { automargin: false, tickfont: { size: mobile ? 10 : 12 } },
@@ -352,77 +299,20 @@ function showRouteReport(routeData) {
       itemwidth: mobile ? 70 : 95,   // ✅ 4 traces on one line
       itemsizing: "constant"
     },
+    plot_bgcolor:  "#f5efe6",
 
     annotations
   };
 
-  const graphContainer = document.createElement("div");
-  graphContainer.style.width = "100%";
-  graphContainer.style.height = "500px";
-  graphContainer.style.boxSizing = "border-box";
-
   const plotlyConf = {
+    responsive: true,
     displaylogo: false,
-    responsive: false,
     displayModeBar: false,
     staticPlot: mobile
   };
 
   Plotly.newPlot(graphContainer, traces, layout, plotlyConf);
-
-  const metaDataContainer = document.createElement("div");
-  metaDataContainer.innerHTML = buildMeta(boat);
-
-  const isocTimeStepFormatted = formatDurationShort(isocTimeStep);
-  const footer = `<strong>${boatName}</strong> Calculation Time: ${boat.calculationTime} s,
-    Isoc Time Step: ${isocTimeStepFormatted}, Steps: ${trackPoints},
-    Polar: ${boat.polar}, Wave Polar: ${boat.wavePolar},
-    Grib: ${boat.grib}, Current Grib: ${boat.currentGrib}`;
-
-  const container = document.createElement("div");
-  container.style.width = "100%";
-  container.style.boxSizing = "border-box";
-  container.appendChild(graphContainer);
-  if (!mobile) container.appendChild(metaDataContainer);
-
-
-  let reachable = boat.destinationReached
-    ? `🎯 Destination Reached after ${durationFormatted}`
-    : `😩 Ureached: ${boat.distToDest} NM to destination.`;
-  reachable += ` <br><i><small>Start Time: ${dateToStr(startDate)}, &nbsp; ETA: ${dateToStr(lastDate)}</small></i>`;
-
-  Swal.fire({
-    title: reachable,
-    html: '<div id="swal-container"></div>',
-    showCancelButton: true,
-    confirmButtonText: "Stat",
-    width: "100vw",
-    padding: 0,
-    heightAuto: false,
-    scrollbarPadding: false,
-    footer: mobile ? null : footer,
-    customClass: { popup: "swal-fullscreen-plot", title: mobile ? "swal-title-mobile" : "" },
-
-    didOpen: () => {
-      const host = document.getElementById("swal-container");
-      host.style.width = "100%";
-      host.style.boxSizing = "border-box";
-      host.appendChild(container);
-
-      const popup = Swal.getPopup();
-      const w = popup.clientWidth;
-      const h = Math.min(520, window.innerHeight * 0.70);
-
-      graphContainer.style.height = `${h}px`;
-      Plotly.relayout(graphContainer, { width: w, height: h });
-
-      requestAnimationFrame(() => Plotly.Plots.resize(graphContainer));
-      setTimeout(() => Plotly.Plots.resize(graphContainer), 200);
-    }
-  }).then(res => {
-    if (res.isConfirmed) displayStatRoute(routeData);
-  });
-}
+};
 
 /**
  * Formats an array of durations (in seconds) into a single string separated by commas.
@@ -441,44 +331,27 @@ function lastStepDurationFormatted (durationArray) {
  * 
  * @param {Object} routeData - The complete dataset containing route information.
  */
-function dumpRoute (routeData, locDMSType = DMSType) {
-   if (! window.matchMedia('(orientation: landscape)').matches) {
-      Swal.fire('dump Warning', 'Use landscape mode', 'warning');
-      return;
-   }
-
-   let boatName;
-   let options = {
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit',
-   hour12: false
-   };
-
-   if (routeData)
-      boatName = Object.keys(routeData)[0]; // Extract first key from response
-   if (!routeData || !boatName || !routeData[boatName]) {
+function showRouteReport(routeData, locDMSType = DMS_DISPLAY.DMS) {
+   if (!routeData) {
       Swal.fire({
          icon: 'error',
          title: 'Route Not Found',
-         text: `The route for "${boatName}" does not exist.`,
+         text: `The route does not exist.`,
       });
       return;
    }
-
-   let boat = routeData[boatName];
-   const startTime = boat.epochStart;
-   let isocTimeStep = boat.isocTimeStep || 3600; // Default time step in seconds
-   const lastDate = new Date ((startTime + boat.duration) * 1000);
-   let currentTime;
-   let len = boat.track.length;  
+   const mobile = isMobile ();
+   const startTime = routeData.epochStart;
+   let isocTimeStep = routeData.isocTimeStep || 3600; // Default time step in seconds
+   const lastDate = new Date ((startTime + routeData.duration) * 1000);
    let oldStamina = 100;
    // Prepare table data
-   let tableData = boat.track.map((point, index) => {
+   let tableData = routeData.track.map((point, index) => {
       if (!Array.isArray(point) || point.length < 10) {
          console.warn(`Invalid track data at index ${index}:`, point);
          return null; // Skip invalid data
       }
-      let [indexWp, lat, lon, time, dist, sog, twd, tws, hdg, twa, g, w, stamina, sail, motor, id, father] = point;
+      let [indexWp, lat, lon, time, dist, sog, twd, tws, cog, twa, g, w, stamina, sail, motor, id, father] = point;
       let changeLow =  (stamina < oldStamina); 
       oldStamina = stamina;
       return {
@@ -487,10 +360,9 @@ function dumpRoute (routeData, locDMSType = DMSType) {
              : indexWp % 2 === 0 ? `<span style="color:red">${indexWp}</span>` 
              : `${indexWp}`,
          Coord: latLonToStr (lat, lon, locDMSType),
-         'Date Time': dateToStr ( new Date ((startTime + time) * 1000)),
-         //Sail: sail ?? '-',
+         DateTime: dateToStr ( new Date ((startTime + time) * 1000)),
          Sail: (() => {
-            let sailName, entry, bg;
+            let sailName, entry;
             if (motor) {
                sailName = 'Motor';
                entry = {bg: 'lightgray', luminance: 200};
@@ -508,7 +380,7 @@ function dumpRoute (routeData, locDMSType = DMSType) {
          SOG: sog !== undefined ? sog.toFixed(2) : '-',
          TWD: twd !== undefined ? `${Math.round(twd)}°` : '-',
          TWS: tws !== undefined ? tws.toFixed(2) : '-',
-         HDG: hdg !== undefined ? `${Math.round(hdg)}°` : '-',
+         COG: cog !== undefined ? `${Math.round(cog)}°` : '-',
          TWA: twa !== undefined
                ? `<span style="color:${twa >= 0 ? 'green' : 'red'}">${Math.round(twa)}°</span>`
                : '-',
@@ -522,35 +394,22 @@ function dumpRoute (routeData, locDMSType = DMSType) {
       };
    }).filter(row => row !== null); // Remove null values
    
-   let trackPoints = boat.track.length;
-   let { nSailChange, nAmureChange, sumDist } = statChanges(boat.track);
-   const durationFormatted = formatDuration (boat.duration);
+   let trackPoints = routeData.track.length;
+   const durationFormatted = formatDuration (routeData.duration);
    const startDate = new Date (startTime * 1000);
    const formattedStartDate = dateToStr (startDate);
    const formattedLastDate = dateToStr (lastDate);
    const isocTimeStepFormatted = formatDurationShort (isocTimeStep);
 
-   // Metadata information
-   let metadataHTML = `
-   <div style="font-size: 8px;line-height: 1.35;font-family: monospace; ">
-      <div style="margin-bottom: 15px; font-size: 11px;">
-      <strong>TotalDist:</strong> ${boat.totDist} NM, 
-      <strong>Motor:</strong> ${boat.motorDist} NM, 
-      <strong>Port:</strong> ${boat.portDist} NM, 
-      <strong>Starboard:</strong> ${boat.starboardDist} NM<br>
-      <strong>Average Speed:</strong> ${(3600 * boat.totDist / boat.duration).toFixed(2)} Kn
-      <strong>Sail Changes:</strong> ${nSailChange} &nbsp;
-      <strong>Amure Changes:</strong> ${nAmureChange}
-      </div>
-   `;
-
    // Create a table dynamically
    let tableContainer = document.createElement('div');
-   let tableHTML = metadataHTML + `<table border="1" style="width: calc(100% - 40px); margin: 0 20px; text-align: center; border-collapse: collapse;">
+   let tableHTML = `
+      <table border="1" style="width: calc(100% - 40px); margin: 0 20px; text-align: center; border-collapse: collapse;">
+      
       <thead>
          <tr>
             <th>Step</th><th>WP</th><th>Coord.</th><th>Date Time</th>
-            <th>Sail</th><th>Dist. (NM)</th><th>SOG (Kn)</th><th>HDG</th><th>TWD</th><th>TWA</th>
+            <th>Sail</th><th>Dist. (NM)</th><th>SOG (Kn)</th><th>COG</th><th>TWD</th><th>TWA</th>
             <th>TWS (Kn)</th><th>Gust (Kn)</th><th>Waves (m)</th><th>Stamina % </th>
             <th>ID</th><th>Father</th>
          </tr>
@@ -560,8 +419,8 @@ function dumpRoute (routeData, locDMSType = DMSType) {
    tableData.forEach(row => {
       tableHTML += `<tr>
          <td>${row.Step}</td><td>${row.WP}</td><td>${row.Coord}</td>
-         <td>${row['Date Time']}</td><td>${row.Sail}</td><td>${row.DIST}</td>
-         <td>${row.SOG}</td><td>${row.HDG}</td><td>${row.TWD}</td><td>${row.TWA}</td><td>${row.TWS}</td>
+         <td>${row.DateTime}</td><td>${row.Sail}</td><td>${row.DIST}</td>
+         <td>${row.SOG}</td><td>${row.COG}</td><td>${row.TWD}</td><td>${row.TWA}</td><td>${row.TWS}</td>
          <td>${row.Gust}</td><td>${row.Waves}</td><td>${row.Stamina}</td>
          <td>${row.Id}</td> <td>${row.Father}</td>
       </tr>`;
@@ -569,27 +428,56 @@ function dumpRoute (routeData, locDMSType = DMSType) {
 
    tableHTML += '</tbody></table></div>';
    tableContainer.innerHTML = tableHTML;
-   let reachable = (boat.destinationReached) 
+   let reachable = (routeData.destinationReached) 
       ? `🎯 Destination Reached after ${durationFormatted}` 
-      : `😩 Unreached: ${boat.distToDest} NM to destination.`;
+      : `😩 Unreached: ${routeData.distToDest} NM to destination.`;
    reachable += ` <br><i><small>Start Time: ${formattedStartDate}, &nbsp; ETA: ${formattedLastDate}</small></i>`;
 
-   if (boat.routingRet === -1) reachable += " ERROR in route"; 
-   const footer = `<strong>${boatName} </strong> Calculation Time: ${boat.calculationTime} s, \
+   if (routeData.routingRet === -1) reachable += " ERROR in route"; 
+
+   const mainContainer = document.createElement("div");
+   mainContainer.style.display = "flex";
+   mainContainer.style.flexDirection = "column";
+   mainContainer.style.gap = "12px";
+   
+   const plotWrap = document.createElement("div");
+   plotWrap.id = "plotWrap";
+   plotWrap.style.width = "100%";
+   plotWrap.style.height = "400px";
+   
+   const metaDataContainer = document.createElement("div");
+   metaDataContainer.className = "route-metadata";
+   metaDataContainer.innerHTML = buildMeta(routeData);
+
+   mainContainer.appendChild(plotWrap);
+   mainContainer.appendChild(metaDataContainer);
+   if (!mobile) mainContainer.appendChild(tableContainer);
+
+   const footer = `Calculation Time: ${routeData.calculationTime} s, \
                    Isoc Time Step: ${isocTimeStepFormatted}, Steps: ${trackPoints},\
-                   lastStepDuration: ${lastStepDurationFormatted (boat.lastStepDuration)},\
-                   Polar: ${boat.polar}, Wave Polar:</strong> ${boat.wavePolar}\
-                   Grib: ${boat.grib}, Current Grib: ${boat.currentGrib}`;
+                   lastStepDuration: ${lastStepDurationFormatted (routeData.lastStepDuration)},\
+                   Polar: ${routeData.polar}, Wave Polar:</strong> ${routeData.wavePolar}\
+                   Grib: ${routeData.grib}, Current Grib: ${routeData.currentGrib}`;
    // Display table in a Swal popup
    Swal.fire({
-      title: `${reachable}`,
-      html: tableContainer,
+      title: reachable,
+      html: mainContainer,
       background: '#fefefe',
+      confirmButtonText: "Stat",
       showCloseButton: true,
+      showCancelButton: true,
       width: '95vw', // Ensure full width
-      footer: footer,
-      heightAuto: false
-   });
+      customClass: { popup: "swal-fullscreen-plot", title: mobile ? "swal-title-mobile" : "" },      
+      footer: mobile ? null : footer,
+      heightAuto: false,
+      didOpen: () => {
+        // ✅ container is now in DOM → Plotly can size correctly
+         const plotDiv = Swal.getHtmlContainer().querySelector("#plotWrap");
+         buildRouteGraph(routeData, plotDiv);
+       }
+   }).then(res => {
+      if (res.isConfirmed) displayStatRoute(routeData, locDMSType);
+  });
 }
 
 /**
@@ -716,7 +604,7 @@ function dumpIsoc (route) {
    });
 }
 
-/** getch GPX server route 
+/** fetch GPX server route 
  */
 function showGpxRoute () {
    const formData = `type=${REQ.GPX_ROUTE} `;

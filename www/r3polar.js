@@ -6,7 +6,7 @@ const POL_TYPE = {WIND_POLAR: 0, WAVE_POLAR: 1};
  * Provide information about polar file 
  * @param {string} polarName - name of polar
  */
-function polarInfo (polType, polarName) {
+function polarInfo (polType, polarName, initialTws = 15) {
    const dir = (polType === POL_TYPE.WIND_POLAR) ? "pol" : "wavepol";
    let formData = "";
    if (polarName.startsWith("pol/") || polarName.startsWith("wavepol/")) {
@@ -27,7 +27,7 @@ function polarInfo (polType, polarName) {
    .then(response => response.ok ? response.json() : Promise.reject (`In polarInfo Error ${response.status}: ${response.statusText}`))
    .then (data => {
       if (Array.isArray(data.array)) {
-         generatePolarPlotly (polType, polarName, data); // polar and sailPolar and legend
+         generatePolarPlotly (polType, polarName, data, initialTws); // polar and sailPolar and legend
       } else {
          throw new Error ("Invalid format");
       }
@@ -136,7 +136,7 @@ function showPolarTable (polType, polarName, data) {
          nLine: ${data.nLine}, max: ${data.max}, nSail: ${data.nSail}, fromJson: ${data.fromJson}`,
    }).then((result) => {
       if (result.isConfirmed) {
-         generatePolarPlotly (polType, polarName, data);
+         generatePolarPlotly (polType, polarName, data, initialTws);
       }
       else if (moreButton && result.isDenied) {
          let content = data.report.replaceAll (";", "<br>");
@@ -145,7 +145,7 @@ function showPolarTable (polType, polarName, data) {
             html: `<div style="text-align:left; padding-left: 10px">${content}</div>`, 
             icon: "warning",
             width: "60%"
-         }).then (() => showPolarTable (polType, polarName, data));
+         }).then (() => showPolarTable (polType, polarName, data, initialTws));
       }
    })
 }
@@ -225,6 +225,52 @@ function bestVmgBack(twaValues, speeds) {
    return { angle: bestAngle, speed: bestSpeed };
 }
 
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+/**
+ * Interpolate boat speed at a given angle using linear interpolation.
+ * Assumes twaValues is sorted ascending and same length as speeds.
+ */
+function speedAtAngle(twaValues, speeds, angle) {
+  const n = twaValues.length;
+  if (n < 2) return NaN;
+  if (angle <= twaValues[0]) return speeds[0];
+  if (angle >= twaValues[n - 1]) return speeds[n - 1];
+
+  // Find the segment [i, i+1] containing angle
+  // (linear scan ok for small arrays; replace by binary search if large)
+  let i = 0;
+  while (i < n - 1 && twaValues[i + 1] < angle) i++;
+
+  const a0 = twaValues[i], a1 = twaValues[i + 1];
+  const s0 = speeds[i],    s1 = speeds[i + 1];
+  const t = (angle - a0) / (a1 - a0);
+  return lerp(s0, s1, t);
+}
+
+function bestVmgFine(twaValues, speeds, stepDeg = 0.1) {
+  let best = { angle: -1, speed: -1 };
+
+  for (let angle = 0; angle <= 90; angle += stepDeg) {
+    const spd = speedAtAngle(twaValues, speeds, angle);
+    const vmg = spd * Math.cos(angle * Math.PI / 180);
+    if (vmg > best.speed) best = { angle, speed: vmg };
+  }
+  return best;
+}
+
+function bestVmgBackFine(twaValues, speeds, stepDeg = 0.1) {
+  let best = { angle: -1, speed: -1 };
+
+  for (let angle = 90; angle <= 180; angle += stepDeg) {
+    const spd = speedAtAngle(twaValues, speeds, angle);
+    const vmg = Math.abs(spd * Math.cos(angle * Math.PI / 180));
+    if (vmg > best.speed) best = { angle, speed: vmg };
+  }
+  return best;
+}
+
+
 /*! provide raw informations in header if exist */
 function moreInfoAboutPol(polType, polarName, data) {
    const header = data?.header;
@@ -258,19 +304,40 @@ function moreInfoAboutPol(polType, polarName, data) {
 }
 
 /**
+ * Returns the initial True Wind Speed (TWS) at a given track index.
+ * Track entry layout example:
+ * [lat, lon, time, sog, cog, twa, twd, tws, ...]
+ *
+ * @param {Object<string, {track: number[][]}>} route
+ *        Route data indexed by boat name.
+ * @param {number} index
+ *        Track point index.
+ * @returns {number}
+ *        True Wind Speed (knots). Returns a default value if unavailable.
+ */
+function findInitialTws(route, index) {
+   const DEFAULT_TWS = 15;
+   const TRACK_TWS = 7;
+   if (! route) return DEFAULT_TWS;
+   const boatName = Object.keys(route ?? {})[0];
+   if (!boatName) return DEFAULT_TWS;
+   return route[boatName]?.track?.[index]?.[TRACK_TWS] ?? DEFAULT_TWS;
+}
+
+/**
  * draw with plotty information about polar 
  * @param {Object} data - polar information
  * @param {Object} sailData - sail polar information
  * @param {Object} legend - sail polar legend
  */
-function generatePolarPlotly (polType, polarName, data) {
+function generatePolarPlotly (polType, polarName, data, initialTws) {
    if (!data.array || data.array.length < 2) return;
 
    const maxMaxVal = Math.ceil (data.max);
    const windSpeeds = data.array[0].slice(1).map(v => parseFloat(v)).filter(v => !isNaN(v));
    const twaValues = data.array.slice(1).map(row => parseFloat(row[0])).filter(v => !isNaN(v));
    const maxTWS = Math.ceil(windSpeeds[windSpeeds.length - 1] * 1.1);
-   const initialTWS = (polType === POL_TYPE.WIND_POLAR) ? 15 : 0;
+   const initialTWS = (polType === POL_TYPE.WIND_POLAR) ? initialTws: 0;
    const what =  (polType === POL_TYPE.WIND_POLAR) ? "TWS" : "Height";
    // polType = POL_TYPE.WIND_POLAR;
 
@@ -372,8 +439,8 @@ function generatePolarPlotly (polType, polarName, data) {
       });
 
       let max = findMaxSpeed(fullTwa, fullSpeeds);
-      let vmg = bestVmg(fullTwa, fullSpeeds);
-      let vmgBack = bestVmgBack(fullTwa, fullSpeeds);
+      let vmg = bestVmgFine(fullTwa, fullSpeeds);
+      let vmgBack = bestVmgBackFine(fullTwa, fullSpeeds);
 
       document.getElementById("maxSpeed").innerText = max.speed.toFixed(2);
       document.getElementById("maxSpeedAngle").innerText = max.angle.toFixed(0);
@@ -439,9 +506,10 @@ async function choosePolar(dir, currentPolar) {
   if (!fileName) { console.log("No file."); return; }
 
   if (polType === POL_TYPE.WIND_POLAR) {
+    const initialTws = findInitialTws (route, index); 
     polarName = fileName;        // update global variable
     saveAppState();              // save in local context
-    polarInfo(polType, polarName); 
+    polarInfo(polType, polarName, initialTws); 
   } else {
     polWaveName = fileName;
     polarInfo(polType, polWaveName);

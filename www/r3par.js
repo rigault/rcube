@@ -17,21 +17,21 @@ function changeParam(routeParam) {
             </div>
             
             <div id="behavior" class="tab-content active">
-               <div class="form-group"><label>X Wind:</label><input type="number" id="xWind" min="0.50" max="1.50" step="0.01" value="${routeParam.xWind || ''}"></div>
-               <div class="form-group"><label>Max Wind:</label><input type="number" id="maxWind" min="10" max="150" value="${routeParam.maxWind || ''}"></div>
-               <div class="form-group"><label>Tack (sec):</label><input type="number" id="penalty0" value="${routeParam.penalty0 || ''}"></div>
-               <div class="form-group"><label>Gybe (sec):</label><input type="number" id="penalty1" value="${routeParam.penalty1 || ''}"></div>
-               <div class="form-group"><label>Sail Change (sec):</label><input type="number" id="penalty2" value="${routeParam.penalty2 || ''}"></div>
-               <div class="form-group"><label>Motor Speed:</label><input type="number" id="motorSpeed" step="0.1" value="${routeParam.motorSpeed || ''}"></div>
-               <div class="form-group"><label>Threshold Motor:</label><input type="number" id="threshold" step="0.1" value="${routeParam.threshold || ''}"></div>
-               <div class="form-group"><label>Day Efficiency:</label>
+               <div class="form-group"><label>X Wind</label><input type="number" id="xWind" min="0.50" max="1.50" step="0.01" value="${routeParam.xWind || ''}"></div>
+               <div class="form-group"><label>Max Wind</label><input type="number" id="maxWind" min="10" max="150" value="${routeParam.maxWind || ''}"></div>
+               <div class="form-group"><label>Tack (sec)</label><input type="number" id="penalty0" value="${routeParam.penalty0 || ''}"></div>
+               <div class="form-group"><label>Gybe (sec)</label><input type="number" id="penalty1" value="${routeParam.penalty1 || ''}"></div>
+               <div class="form-group"><label>Sail Change (sec)</label><input type="number" id="penalty2" value="${routeParam.penalty2 || ''}"></div>
+               <div class="form-group"><label>Motor Speed</label><input type="number" id="motorSpeed" step="0.1" value="${routeParam.motorSpeed || ''}"></div>
+               <div class="form-group"><label>Threshold Motor</label><input type="number" id="threshold" step="0.1" value="${routeParam.threshold || ''}"></div>
+               <div class="form-group"><label>Day Efficiency</label>
                   <input type="number" id="dayEfficiency" min="0.50" max="1.50" step="0.01" value="${routeParam.dayEfficiency || ''}">
                </div>
-               <div class="form-group"><label>Night Efficiency:</label>
+               <div class="form-group"><label>Night Efficiency</label>
                   <input type="number" id="nightEfficiency" min="0.50" max="1.50" step="0.01" value="${routeParam.nightEfficiency || ''}">
                </div>
-               <div class="form-group"><label>Stamina:</label><input type="number" min = "0" max = "110" id="staminaVR" value="${routeParam.staminaVR || ''}"></div>
-               <div class="form-group"><label>Initial:</label>
+               <div class="form-group"><label>Stamina</label><input type="number" min = "0" max = "110" id="staminaVR" value="${routeParam.staminaVR || ''}"></div>
+               <div class="form-group"><label>Initial</label>
                   <label class="radio-pill">
                      <input type="radio" id="amureTribord" name="initialAmure" value="0" ${Number(routeParam?.initialAmure ?? 0) === 0 ? 'checked' : ''}>
                      Tri.
@@ -44,26 +44,26 @@ function changeParam(routeParam) {
             </div>
 
             <div id="technical" class="tab-content">
-               <div class="form-group"><label>COG Step:</label><input type="number" id="cogStep" min="2" max="10" value="${routeParam.cogStep || ''}"></div>
-               <div class="form-group"><label>COG Range:</label><input type="number" id="cogRange" min="50" max="180" value="${routeParam.cogRange || ''}"></div>
-               <div class="form-group"><label>jFactor:</label><input type="number" id="jFactor" step="0.01" value="${routeParam.jFactor || ''}"></div>
-               <div class="form-group"><label>kFactor:</label><input type="number" id="kFactor" min="0" max="1" value="${routeParam.kFactor || ''}"></div>
-               <div class="form-group"><label>nSectors:</label><input type="number" id="nSectors" min="90" max="1080" value="${routeParam.nSectors || ''}"></div>
+               <div class="form-group"><label>COG Step</label><input type="number" id="cogStep" min="2" max="10" value="${routeParam.cogStep || ''}"></div>
+               <div class="form-group"><label>COG Range</label><input type="number" id="cogRange" min="50" max="180" value="${routeParam.cogRange || ''}"></div>
+               <div class="form-group"><label>jFactor</label><input type="number" id="jFactor" step="0.01" value="${routeParam.jFactor || ''}"></div>
+               <div class="form-group"><label>kFactor</label><input type="number" id="kFactor" min="0" max="1" value="${routeParam.kFactor || ''}"></div>
+               <div class="form-group"><label>nSectors</label><input type="number" id="nSectors" min="90" max="1080" value="${routeParam.nSectors || ''}"></div>
                <div class="form-group">
-                  <label for="isoDesc">IsoDesc Focal:</label>
+                  <label for="isoDesc">IsoDesc Focal</label>
                   <input type="checkbox" style="margin-left: 0" id="isoDesc" ${routeParam.isoDesc ? 'checked' : ''}>
                </div>
                <div class="form-group">
-                  <label for="lastPointInfo">Last Point Info:</label>
+                  <label for="lastPointInfo">Last Point Info</label>
                   <input type="checkbox" style="margin-left: 0" id="lastPointInfo" ${routeParam.lastPointInfo ? 'checked' : ''}>
                </div>
             </div>
             <div id="constFlows" class="tab-content">
-               <div class="form-group"><label>Const Wind TWS:</label><input type="number" id="constWindTws" min="0" max="100" value="${routeParam.constWindTws || ''}"></div>
-               <div class="form-group"><label>Const Wind TWD:</label><input type="number" id="constWindTwd" min="0" max="360" value="${routeParam.constWindTwd || ''}"></div>
-               <div class="form-group"><label>Const Wave Height:</label><input type="number" id="constWave" min="0" max="10" value="${routeParam.constWave || ''}"></div>
-               <div class="form-group"><label>Const Current Speed:</label><input type="number" id="constCurrentS" min="0" max="10" value="${routeParam.constCurrentS || ''}"></div>
-               <div class="form-group"><label>Const Current Dir:</label><input type="number" id="constCurrentD" min="0" max="360" value="${routeParam.constCurrentD || ''}"></div>
+               <div class="form-group"><label>Const Wind TWS</label><input type="number" id="constWindTws" min="0" max="100" value="${routeParam.constWindTws || ''}"></div>
+               <div class="form-group"><label>Const Wind TWD</label><input type="number" id="constWindTwd" min="0" max="360" value="${routeParam.constWindTwd || ''}"></div>
+               <div class="form-group"><label>Const Wave Height</label><input type="number" id="constWave" min="0" max="10" value="${routeParam.constWave || ''}"></div>
+               <div class="form-group"><label>Const Current Speed</label><input type="number" id="constCurrentS" min="0" max="10" value="${routeParam.constCurrentS || ''}"></div>
+               <div class="form-group"><label>Const Current Dir</label><input type="number" id="constCurrentD" min="0" max="360" value="${routeParam.constCurrentD || ''}"></div>
             </div>
          </div>
          </div>
@@ -100,6 +100,7 @@ function changeParam(routeParam) {
    }).then((result) => {
       if (result.isConfirmed) {
          Object.assign(routeParam, result.value);
+         saveAppState();     // Update storage 
          console.log('Updated route parameters:', routeParam);
       }
    });

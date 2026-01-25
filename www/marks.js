@@ -1,4 +1,102 @@
+const marksFile = "geo/rorcMarques.csv";
 let marks = []; // global; may be later replaced with a Promise
+
+/**
+ * Loads race marks from the server, parses the CSV file and displays them on the map.
+ *
+ * The file `geo/rorcMarques.csv` is fetched from the server. Each line describes
+ * one race mark using semicolon-separated fields and DMS coordinates:
+ *
+ *   what; name; id; "lat0 - lon0"; "lat1 - lon1" | "-"; status
+ *
+ * Coordinates are given in DMS format (degrees, minutes, seconds) and converted
+ * to decimal degrees before being passed to `displayMarks()`.
+ *
+ * The resulting `marks` array has the following structure:
+ *
+ * [
+ *   {
+ *     what:   string,   // e.g. "🚩 Start", "Gate", "Invisible", "🏁 End"
+ *     name:   string,   // Human readable name
+ *     id:     string,   // Mark identifier (e.g. "1.6", "Start", "4.8")
+ *     lat0:   number,   // Latitude of first point (decimal degrees)
+ *     lon0:   number,   // Longitude of first point (decimal degrees)
+ *     lat1:   number,   // Latitude of second point (0 if not defined)
+ *     lon1:   number,   // Longitude of second point (0 if not defined)
+ *     status: string    // Status or time information
+ *   },
+ *   ...
+ * ]
+ *
+ * Once loaded and parsed, the marks are passed to:
+ *
+ *   displayMarks(map, marks)
+ *
+ * @async
+ * @function getMarks
+ * @param {Object} map
+ *        Leaflet / Windy map instance on which the marks will be displayed.
+ * @returns {Promise<void>}
+ *        Resolves when the file has been loaded, parsed and displayMarks() has been called.
+ */
+async function getMarks(map) {
+   try {
+      const res = await fetch(marksFile, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status} while loading ${marksFile}`);
+
+      const text = await res.text();
+      marks = parseMarksFile(text); // global
+
+      displayMarks(map, marks);
+   }
+   catch (err) {
+      console.error("getMarks(): failed:", err);
+   }
+}
+
+/**
+ * Input line format (semicolon-separated):
+ * what;name;id; "lat0 DMS - lon0 DMS"; "lat1 DMS - lon1 DMS" (or "-"); status
+ */
+function parseMarksFile(text) {
+   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+
+   const marks = [];
+
+   for (const line of lines) {
+      // Keep empty fields if any (rare), but your data looks clean.
+      const parts = line.split(";").map(s => s.trim());
+
+      if (parts.length < 6) {
+         console.warn("Skipping malformed marks line:", line);
+         continue;
+      }
+
+      const what = parts[0];
+      const name = parts[1];
+      const id = parts[2];
+
+      const p0 = parts[3]; // "lat - lon" in DMS
+      const p1 = parts[4]; // "lat - lon" in DMS or "-"
+
+      const status = parts.slice(5).join(";").trim(); // in case status ever contains ';'
+
+      const bitsP0 =  p0.split(/\s*-\s*/);         
+      const lat0 =dmsToDecimal (bitsP0[0]);
+      const lon0 =dmsToDecimal (bitsP0[1]);
+
+      let lat1 = 0.0, lon1 = 0.0;
+      if (p1 !== "-" && p1 !== "") {
+         const bitsP1 = p1.split(/\s*-\s*/);         
+         lat1 =dmsToDecimal (bitsP1[0]);
+         lon1 =dmsToDecimal (bitsP1[1]);
+      }
+
+      marks.push({what, name, id, lat0, lon0, lat1, lon1, status});
+   }
+
+   return marks;
+}
 
 /**
  * Fetch marks from the API and initialize marks
@@ -8,7 +106,7 @@ let marks = []; // global; may be later replaced with a Promise
  *
  * @param {L.Map} map - Leaflet map instance.
  */
-async function getMarks (map) {
+async function oldgetMarks (map) {
    if (!map) throw new Error("Leaflet map instance is required.");
    let response;
    try {
