@@ -215,7 +215,8 @@
       <button class="btn" onclick="test('type=13')">13: Marks</button>
       <button class="btn" onclick="test('type=14&grib=grib/reference.grb2&currentGrib=currentgrib/referenceCurrent.grb2', true)">14: Consistency</button>
       <button class="btn" onclick="test('type=15', true)">15: GPX Route</button>      
-      <button class="btn" onclick="test('type=17&boat=bidon,47,-3&twa=90&nSteps=10&model=GFS')">17: TWA Route</button>
+      <button class="btn" onclick="test('type=17&boat=bidon,47,-3&cmd=90,36000,1&model=GFS')">17: TWA Route Simple</button>      
+      <button class="btn" onclick="test('type=17&boat=bidon,47,-3&cmd=90,20000,1;120,10000,0&model=GFS')">17: TWA Route Complex</button>
     </div>
     <div class="toolbar">
       <button class="routeBtn"
